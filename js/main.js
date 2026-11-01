@@ -1,13 +1,13 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=9";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=9";
-import * as R from "./records.js?v=9";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=9";
-import copy from "./games/copy.js?v=9";
-import math, { LEVELS } from "./games/math.js?v=9";
-import ice from "./games/ice.js?v=9";
-import star from "./games/star.js?v=9";
-import { DIFFS, diffOf } from "./difficulty.js?v=9";
+import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=11";
+import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=11";
+import * as R from "./records.js?v=11";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=11";
+import copy from "./games/copy.js?v=11";
+import math, { LEVELS } from "./games/math.js?v=11";
+import ice from "./games/ice.js?v=11";
+import star from "./games/star.js?v=11";
+import { DIFFS, diffOf } from "./difficulty.js?v=11";
 
 const GAMES = { copy, math, ice, star };
 const GAME_ORDER = ["copy", "math", "ice", "star"];
@@ -151,7 +151,7 @@ function renderSlots() {
     // 난이도: 쉬움 · 보통 · 어려움
     const dbox = row.querySelector(".diffs");
     for (const d of Object.values(DIFFS)) {
-      const b = document.createElement("button"); b.type = "button"; b.textContent = d.label;
+      const b = document.createElement("button"); b.type = "button"; b.innerHTML = `${d.label} <small>×${d.points}</small>`;
       b.className = "dbtn " + d.id + (diffIdOf(id) === d.id ? " on" : "");
       b.onclick = () => { if (g) g.diff = d.id; else R.setDiff(id, d.id); renderSlots(); };
       dbox.appendChild(b);
@@ -274,12 +274,12 @@ function makeEnv(i) {
   };
 }
 function award(i, base, x, y) {
-  const p = players[i], pts = base * (fever ? 2 : 1);
+  const p = players[i], k = diffOf(p.diff).points, pts = base * k * (fever ? 2 : 1);   // 난이도 배점 × 피버 2배
   p.combo++; p.maxCombo = Math.max(p.maxCombo, p.combo);
   let bonus = 0;
   if (p.combo >= 5 && p.combo % 5 === 0) {
-    bonus = 1;
-    popup(x, y - view.U * 0.08, `${p.combo} 콤보! +1`, { size: view.U * 0.05, color: "#ffe14d", stroke: "#7a4a00" });
+    bonus = k;
+    popup(x, y - view.U * 0.08, `${p.combo} 콤보! +${bonus}`, { size: view.U * 0.05, color: "#ffe14d", stroke: "#7a4a00" });
   }
   p.score += pts + bonus;
   popup(x, y, `+${pts}`, { size: view.U * (fever ? 0.085 : 0.065), color: "#fff", stroke: p.color });
@@ -291,8 +291,8 @@ function miss(i, x, y, label) {
   if (label) popup(x, y, label, { size: view.U * 0.04, color: "#eee", stroke: "#555" });
 }
 function penalty(i, n, x, y, label) {
-  const p = players[i]; p.combo = 0; p.score = Math.max(0, p.score - n);
-  popup(x, y, label, { size: view.U * 0.06, color: "#fff", stroke: "#d02020" });
+  const p = players[i], amt = n * diffOf(p.diff).points; p.combo = 0; p.score = Math.max(0, p.score - amt);
+  popup(x, y, `${label} -${amt}`, { size: view.U * 0.06, color: "#fff", stroke: "#d02020" });
   bump(i);
 }
 function enterFever() {

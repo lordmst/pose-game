@@ -1,6 +1,6 @@
 // 별 따기: 떨어지는 별을 손으로 잡기. 위쪽 금별은 3점, 폭탄은 피하기(-1점)
-import { burst, shake, outlinedText, starPath } from "../fx.js?v=9";
-import { sfx } from "../audio.js?v=9";
+import { burst, shake, outlinedText, starPath } from "../fx.js?v=11";
+import { sfx } from "../audio.js?v=11";
 
 export default {
   id: "star", title: "별 따기", icon: "⭐", sec: 45, cursor: "✋",
@@ -21,7 +21,7 @@ export default {
     return {
       update(dt) {
         t += dt; spawnT -= dt;
-        const p = env.progress(), interval = (1.0 - 0.45 * p) / widthK / env.diff.speed * (env.fever() ? 0.75 : 1);
+        const p = env.progress(), interval = (1.0 - 0.45 * p) / widthK * (env.fever() ? 0.75 : 1);
         if (spawnT <= 0 && stars.length < Math.ceil(3.5 * widthK)) { spawn(); spawnT = interval; }
         const hands = env.tracker.hands.filter(h => h.vis), R0 = R();
         for (const s of stars) {
@@ -33,7 +33,7 @@ export default {
           if (hands.some(h => Math.hypot(h.x - s.x, h.y - s.y) < r * 1.4 * env.diff.reach)) {
             s.dead = true;
             if (s.kind === "bomb") {
-              bombs++; env.penalty(1, s.x, s.y - r, "펑! -1"); sfx.bomb(); shake(v.U * 0.02, 0.35);
+              bombs++; env.penalty(1, s.x, s.y - r, "펑!"); sfx.bomb(); shake(v.U * 0.02, 0.35);
               burst(s.x, s.y, { n: 16, colors: ["#555", "#888", "#333"], shape: "smoke", speed: v.U * 0.4, gravity: -v.U * 0.3, size: r * 0.8, life: 0.8 });
               burst(s.x, s.y, { n: 14, colors: ["#ffb000", "#ff5a00", "#fff27a"], shape: "dot", speed: v.U * 0.9, gravity: v.U, size: v.U * 0.014, life: 0.5 });
             } else {
