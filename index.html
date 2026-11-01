@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body>
 <video id="video" playsinline muted autoplay></video>
@@ -118,6 +118,14 @@
 
 <div id="cursors"></div>
 <div id="toast" hidden></div>
-<script type="module" src="js/main.js"></script>
+<script>
+  // 스크립트가 실패하면 화면이 멈춘 듯 보이지 않도록 첫 화면에 안내 표시
+  (function () {
+    function show(t) { var m = document.getElementById("setupMsg"); if (m) { m.textContent = t; m.className = "msg err"; } }
+    window.addEventListener("error", function (e) { if (!window.__appReady) show("게임을 불러오다 오류가 났습니다. 새로고침해 주세요. (" + (e.message || "") + ")"); });
+    setTimeout(function () { if (!window.__appReady) show("게임을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요."); }, 8000);
+  })();
+</script>
+<script type="module" src="js/main.js?v=5"></script>
 </body>
 </html>

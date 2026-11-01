@@ -1,12 +1,12 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, createDetector, assign, SIM } from "./pose.js";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js";
-import * as R from "./records.js";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js";
-import copy from "./games/copy.js";
-import math, { LEVELS } from "./games/math.js";
-import ice from "./games/ice.js";
-import star from "./games/star.js";
+import { Camera, Tracker, createDetector, assign, SIM } from "./pose.js?v=5";
+import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=5";
+import * as R from "./records.js?v=5";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=5";
+import copy from "./games/copy.js?v=5";
+import math, { LEVELS } from "./games/math.js?v=5";
+import ice from "./games/ice.js?v=5";
+import star from "./games/star.js?v=5";
 
 const GAMES = { copy, math, ice, star };
 const GAME_ORDER = ["copy", "math", "ice", "star"];
@@ -527,3 +527,5 @@ if (SIM) window.__dbg = { get state() { return state; }, setTime: s => { timeLef
 renderSetup();
 setState("setup");
 if (detector) setMsg("준비 완료! 선수를 고르고 시작하세요"); else setMsg("게임 엔진 불러오는 중...");
+
+window.__appReady = true;
