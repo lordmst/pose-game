@@ -1,11 +1,11 @@
 // 지휘자: 오케스트라 지휘하기 (VR 지휘 게임 방식)
 // 화면 가운데로 금색 삼각형(왼손·오른손 한 쌍)이 위에서 내려옴. 가로 지휘선에 닿는 순간
 // 삼각형이 가리키는 방향으로 그 손을 휘두르기 (4박: 아래 ▼▼ → 안쪽 → 바깥쪽 → 위 ▲▲)
-// 지휘가 잘 맞을수록 오케스트라 소리가 커지고 연주자들이 신나게 움직임, 놓치면 작아짐
+// 음악은 맞히든 못 맞히든 처음부터 끝까지 똑같이 나옴. 잘 맞을수록 관객 호응 게이지가 차고 연주자들이 신나게 움직임
 // 중간중간 왼손 동작: ✋ '왼손 올리기'(크레셴도: 왼손을 머리 위로 쭉 올려 게이지 채우기),
 //                     ⊙ '왼손 터치'(왼쪽 위에 나온 동그라미를 왼손으로 짚어 악기 파트 불러내기). 그동안 화살표는 오른손만
-import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=26";
-import { rhythm, clock, CLASSICS, songOf } from "../audio.js?v=26";
+import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=27";
+import { rhythm, clock, CLASSICS, songOf } from "../audio.js?v=27";
 
 const PERFECT = 0.1, GOOD = 0.22;   // 판정 시간 폭(초, 보통)
 const SWING = 1.8;                  // 휘두르기로 인정하는 손 속도(어깨너비/초)
@@ -31,7 +31,7 @@ export default {
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, id = D.id || "normal", wide = D.reach;
     const song = songOf(env.song || "ode"), pat = PATTERN[id === "easy" ? 2 : 4], travel = TRAVEL / D.speed;
-    let t0 = null, spb = 0.6, nextJ = 8, notes = [], now = 0, lastT = null, energy = 0.7, lastLevel = -1, flare = 0, events = [], raiseLv = 0;
+    let t0 = null, spb = 0.6, nextJ = 8, notes = [], now = 0, lastT = null, energy = 0.7, flare = 0, events = [], raiseLv = 0;
     const cnt = { PERFECT: 0, GOOD: 0, MISS: 0 }, ev = { ok: 0, all: 0 }, trail = [[], []];
     // 화살표 칸 크기: 한 박 간격보다 크면 겹치므로 빠른 곡은 조금 작게
     const lay = () => {
@@ -130,7 +130,6 @@ export default {
           } else if (now > e.end) { e.done = "miss"; e.doneAt = now; energy = Math.max(0, energy - 0.1); const at = e.type === "raise" ? gaugePos() : e.pos; env.miss(at.x, at.y, "놓쳤어요"); }
         }
         events = events.filter(e => !e.done || now - e.doneAt < 1);
-        if (Math.abs(energy - lastLevel) > 0.02) { rhythm.level(env.slot, energy); lastLevel = energy; }
       },
       draw(ctx) {
         if (t0 === null) now = clock();
@@ -145,11 +144,11 @@ export default {
           ctx.globalAlpha = 0.45 + 0.55 * energy; ctx.fillText(SECTIONS[i % SECTIONS.length], x, stY - (i % 2) * U * 0.035 - amp * U * 0.014);
         }
         ctx.globalAlpha = 1;
-        // 오케스트라 소리 크기
+        // 관객 호응 (음악 크기와는 상관없음)
         const gw = Math.min(z.w * 0.6, U * 0.5), gx = z.cx - gw / 2, gy = v.H * 0.125, gh = Math.max(8, U * 0.016);
         ctx.fillStyle = "rgba(0,0,0,.45)"; rr(ctx, gx, gy, gw, gh, gh / 2); ctx.fill();
         ctx.fillStyle = energy > 0.6 ? "#37d67a" : energy > 0.3 ? "#ffd400" : "#ff5a5a"; rr(ctx, gx, gy, Math.max(gh, gw * energy), gh, gh / 2); ctx.fill();
-        outlinedText(ctx, "🎵", gx - U * 0.025, gy + gh / 2, U * 0.03, "#fff", "#333", 2);
+        outlinedText(ctx, "👏", gx - U * 0.025, gy + gh / 2, U * 0.03, "#fff", "#333", 2);
         // 지휘선 (맞히면 금빛으로 번쩍)
         const lx0 = Math.max(z.x0, z.cx - Lo.L * 1.6), lx1 = Math.min(z.x1, z.cx + Lo.L * 1.6), y = Lo.lineY;
         const lg = ctx.createLinearGradient(lx0, 0, lx1, 0);

@@ -1,6 +1,6 @@
 // 두더지 잡기: 구멍에서 튀어나온 두더지를 주먹으로 콩! 헬멧 두더지는 두 번 쳐야 함(2점), 토끼는 치면 안 됨
-import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=26";
-import { sfx } from "../audio.js?v=26";
+import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=27";
+import { sfx } from "../audio.js?v=27";
 
 const PUNCH = 3.0;          // 타격 인정 속도 (얼음 깨기와 같음)
 const POP = 0.15;           // 올라오고 내려가는 시간

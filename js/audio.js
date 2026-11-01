@@ -267,6 +267,7 @@ export const rhythm = {
     rGain.gain.setTargetAtTime(0.6 * (0.3 + 0.7 * avg), ac.currentTime, 0.15);
   },
   tick() { rSchedule(); },
+  get gain() { return rGain ? +rGain.gain.value.toFixed(3) : null; },   // 점검용: 음악 크기
   get ahead() { return ac && rTimer ? rNext - ac.currentTime : null; },   // 점검용: 미리 예약된 시간(초)                     // 게임 화면이 그릴 때마다 한 번 더 예약 (타이머가 밀려도 끊기지 않게)
   accent(steps) { rAccentUntil = Math.max(rAccentUntil, rStep + steps); },   // 금관 강조 (반 박 단위)
   stop() {
