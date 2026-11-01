@@ -416,14 +416,19 @@ function draw(t) {
   drawFx(ctx);
   ctx.restore();
 }
+// 몸 위의 뼈대 선은 기본으로 숨김 (인식은 그대로 함). 주소 끝에 ?bones=1 을 붙이면 점검용으로 보임
+const SHOW_BONES = /bones=1/.test(location.search);
 function drawSkeletons() {
   trackers.forEach((tr, i) => {
     if (!tr.pts) return;
     const p = tr.pts, c = slots[i].color;
-    ctx.save(); ctx.globalAlpha = 0.55; ctx.strokeStyle = c; ctx.lineWidth = Math.max(3, view.U * 0.008); ctx.lineCap = "round";
-    ctx.beginPath();
-    for (const [a, b] of BONES) if (p[a].v && p[b].v) { ctx.moveTo(p[a].x, p[a].y); ctx.lineTo(p[b].x, p[b].y); }
-    ctx.stroke(); ctx.restore();
+    if (SHOW_BONES) {
+      ctx.save(); ctx.globalAlpha = 0.55; ctx.strokeStyle = c; ctx.lineWidth = Math.max(3, view.U * 0.008); ctx.lineCap = "round";
+      ctx.beginPath();
+      for (const [a, b] of BONES) if (p[a].v && p[b].v) { ctx.moveTo(p[a].x, p[a].y); ctx.lineTo(p[b].x, p[b].y); }
+      ctx.stroke(); ctx.restore();
+    }
+    // 2인일 때만 머리 위에 1P/2P 표시
     if (p[0].v && slots.length === 2) outlinedText(ctx, `${i + 1}P`, p[0].x, p[0].y - tr.scale * 0.6, view.U * 0.04, "#fff", c);
   });
 }
