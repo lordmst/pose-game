@@ -2,6 +2,8 @@
 // 화면 가운데로 금색 삼각형(왼손·오른손 한 쌍)이 위에서 내려옴. 가로 지휘선에 닿는 순간
 // 삼각형이 가리키는 방향으로 그 손을 휘두르기 (4박: 아래 ▼▼ → 안쪽 → 바깥쪽 → 위 ▲▲)
 // 지휘가 잘 맞을수록 오케스트라 소리가 커지고 연주자들이 신나게 움직임, 놓치면 작아짐
+// 중간중간 왼손 동작: ✋ '왼손 올리기'(크레셴도: 왼손을 머리 위로 쭉 올려 게이지 채우기),
+//                     ⊙ '왼손 터치'(왼쪽 위에 나온 동그라미를 왼손으로 짚어 악기 파트 불러내기). 그동안 화살표는 오른손만
 import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=23";
 import { sfx, rhythm, clock, CLASSICS, songOf } from "../audio.js?v=23";
 
@@ -18,16 +20,19 @@ const DIR = {
 const LABEL = { down: "↓ 아래로 ↓", up: "↑ 위로 ↑", in: "→ 안쪽으로 모으기 ←", out: "← 바깥으로 벌리기 →" };
 const PATTERN = { 4: ["down", "in", "out", "up"], 2: ["down", null, "up", null] };   // 쉬움은 2박 지휘
 const SECTIONS = ["🎻", "🎺", "🎷", "🥁", "🎻", "🎺"];
+const SINGLE = { down: "↓ 아래로", up: "↑ 위로", in: "← 안쪽으로", out: "→ 바깥으로" };   // 오른손만 휘두를 때
+const EVENT_EVERY = 16, EVENT_LEN = 8;      // 왼손 동작: 16박(4마디)마다 8박(2마디) 동안
+const RAISE_HOLD = 0.6, TOUCH_HOLD = 0.25;   // 성공으로 치는 유지 시간(초)
 
 export default {
   id: "conductor", title: "지휘자", icon: "🎼", sec: 50, cursor: "🪄", cat: "move", bg: "#e8a87c", desc: "오케스트라 지휘하기", music: false,
   songs: CLASSICS.map(({ id, title, by, icon, bpm }) => ({ id, title, by, icon, bpm })), demoSong: "ode",
-  how: "화살표가 내려와 가로선의 칸에 겹치는 순간, 화살표 방향으로 손을 휘둘러요. 왼쪽 화살표는 왼손, 오른쪽은 오른손! 클래식 명곡 6곡",
+  how: "화살표가 가로선 칸에 겹치는 순간 그 방향으로 손을 휘둘러요(왼쪽 화살표는 왼손). ✋가 나오면 왼손을 머리 위로 쭉, ⊙가 나오면 왼손으로 터치! 클래식 명곡 6곡",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, id = D.id || "normal", wide = D.reach;
     const song = songOf(env.song || "ode"), pat = PATTERN[id === "easy" ? 2 : 4], travel = TRAVEL / D.speed;
-    let t0 = null, spb = 0.6, nextJ = 8, notes = [], now = 0, lastT = null, energy = 0.7, lastLevel = -1, flare = 0;
-    const cnt = { PERFECT: 0, GOOD: 0, MISS: 0 }, trail = [[], []];
+    let t0 = null, spb = 0.6, nextJ = 8, notes = [], now = 0, lastT = null, energy = 0.7, lastLevel = -1, flare = 0, events = [], raiseLv = 0;
+    const cnt = { PERFECT: 0, GOOD: 0, MISS: 0 }, ev = { ok: 0, all: 0 }, trail = [[], []];
     // 화살표 칸 크기: 한 박 간격보다 크면 겹치므로 빠른 곡은 조금 작게
     const lay = () => {
       const L = Math.min(z.w * 0.4, v.U * 0.32), lineY = v.H * 0.52, topY = v.H * 0.1, gap = (lineY - topY) / travel * spb;
@@ -39,8 +44,14 @@ export default {
       const time = t0 + j * spb / 2;
       if (j % 2 === 0) {
         const b = j / 2, key = pat[b % 4];
+        // 왼손 동작 시작: 셋째 마디부터 16박마다, 올리기와 터치를 번갈아
+        if (b >= 8 && (b - 8) % EVENT_EVERY === 0) {
+          const type = ((b - 8) / EVENT_EVERY) % 2 ? "touch" : "raise";
+          events.push({ type, start: time - 0.3, end: t0 + (b + EVENT_LEN) * spb, hold: 0, done: null, sec: events.length % 6, pos: null }); ev.all++;
+        }
         if (!key || b < 4) return;                        // 첫 마디는 준비
-        notes.push({ time, key, hands: [0, 1], parts: [null, null], done: false });
+        const left = events.some(e => time >= e.start + 0.3 && time < e.end);   // 왼손 동작 중엔 오른손만
+        notes.push({ time, key, hands: left ? [1] : [0, 1], parts: [null, null], done: false });
       }
     }
     function judgePart(n, k, name) {
@@ -52,6 +63,14 @@ export default {
       sfx.catch(env.player.combo);
       burst(x, y, { n: name === "PERFECT" ? 14 : 8, colors: ["#fff6a0", "#ffd400", "#ffffff"], shape: "star", speed: v.U * 0.5, gravity: v.U * 0.3, size: v.U * 0.014, life: 0.5 });
     }
+    // 왼손 터치 자리: 왼쪽 어깨에서 바깥 위로 팔이 닿는 곳 (화살표 길과 겹치지 않게)
+    function touchPos(P, sw) {
+      const Lo = lay(), r = Math.max(v.U * 0.045, Math.min(sw * 0.4, v.U * 0.07));
+      let x = z.cx - Lo.L * 1.1, y = v.H * 0.35;
+      if (P && P[11].v) { x = P[11].x - sw * 1.1; y = P[11].y - sw * 0.6; }
+      return { x: Math.max(z.x0 + r * 1.3, Math.min(z.cx - Lo.L * 0.7 - r, x)), y: Math.max(v.H * 0.2, Math.min(v.H * 0.6, y)), r };
+    }
+    const gaugePos = () => ({ x: z.x0 + Math.max(v.U * 0.07, z.w * 0.08), y: v.H * 0.3 });
     // 화살표 칸: 어두운 네모 + 굵은 금색 화살표 (방향 벡터 쪽을 가리킴). kind: note | frame(지휘선의 빈 칸)
     function tile(ctx, x, y, s, dir, alpha, kind, hot) {
       const T = s * 2.3;
@@ -92,6 +111,26 @@ export default {
           if (n.hands.every(k => n.parts[k])) { n.done = true; n.doneAt = now; }
         }
         notes = notes.filter(n => !n.done || now - n.doneAt < 0.4);
+        // 왼손 동작
+        const P = env.tracker.pts, sw = P && P[11].v && P[12].v ? Math.hypot(P[11].x - P[12].x, P[11].y - P[12].y) : v.U * 0.13;
+        raiseLv = P && P[11].v && P[15].v ? Math.max(0, Math.min(1, (P[11].y + sw * 0.4 - P[15].y) / (sw * 1.8))) : 0;
+        for (const e of events) {
+          if (e.done || now < e.start) continue;
+          if (e.type === "touch" && !e.pos) e.pos = touchPos(P, sw);
+          let on = false;
+          if (e.type === "raise") on = raiseLv >= 0.75;
+          else { const h = hands[0]; on = h.vis && Math.hypot(h.x - e.pos.x, h.y - e.pos.y) < e.pos.r * 1.3 * wide; }
+          e.hold = on ? e.hold + dt : Math.max(0, e.hold - dt * 0.5);
+          if (e.hold >= (e.type === "raise" ? RAISE_HOLD : TOUCH_HOLD)) {
+            e.done = "ok"; e.doneAt = now; ev.ok++; energy = Math.min(1, energy + 0.2); flare = 1;
+            rhythm.accent(16); sfx.fever();
+            const at = e.type === "raise" ? gaugePos() : e.pos;
+            env.award(3, at.x, at.y - v.U * 0.08);
+            popup(at.x + (e.type === "raise" ? v.U * 0.12 : 0), at.y + v.U * 0.06, e.type === "raise" ? "크레셴도!" : "브라보!", { size: v.U * 0.045, color: "#fff", stroke: "#e08a00", life: 1.0 });
+            burst(at.x, at.y, { n: 24, colors: ["#fff6a0", "#ffd400", "#ffffff", "#ff9ae0"], shape: "star", speed: v.U * 0.7, gravity: v.U * 0.4, size: v.U * 0.018, life: 0.8 });
+          } else if (now > e.end) { e.done = "miss"; e.doneAt = now; energy = Math.max(0, energy - 0.1); const at = e.type === "raise" ? gaugePos() : e.pos; env.miss(at.x, at.y, "놓쳤어요"); }
+        }
+        events = events.filter(e => !e.done || now - e.doneAt < 1);
         if (Math.abs(energy - lastLevel) > 0.02) { rhythm.level(env.slot, energy); lastLevel = energy; }
       },
       draw(ctx) {
@@ -142,19 +181,60 @@ export default {
         }
         // 다음에 할 동작을 글자로 (지휘선 바로 아래)
         if (nextN && nextN.time - now < 1.2) {
-          const txt = LABEL[nextN.key];
+          const txt = nextN.hands.length === 2 ? LABEL[nextN.key] : `오른손 ${SINGLE[nextN.key]}`;
           outlinedText(ctx, txt, z.cx, y + Lo.s * 2.3, Math.min(U * 0.045, z.w / 12), "#fff", "#8a5a00", 4);
+        }
+        // 왼손 동작
+        for (const e of events) {
+          if (now < e.start - 1.0) continue;
+          const a = e.done ? Math.max(0, 1 - (now - e.doneAt)) : Math.min(1, (now - e.start + 1.0) / 0.5);
+          const left = Math.max(0, Math.min(1, (e.end - now) / (e.end - e.start)));
+          ctx.save(); ctx.globalAlpha = a;
+          if (e.type === "raise") {
+            // ✋ + 세로 게이지: 왼손을 올린 만큼 차오름, 위쪽 금색 칸까지
+            const g = gaugePos(), gh = v.H * 0.38, gw = Math.max(14, U * 0.03), gx = g.x - gw / 2, gy = v.H * 0.24;
+            ctx.fillStyle = "rgba(0,0,0,.5)"; rr(ctx, gx, gy, gw, gh, gw / 2); ctx.fill();
+            ctx.fillStyle = "rgba(255,212,0,.35)"; rr(ctx, gx, gy, gw, gh * 0.25, gw / 2); ctx.fill();
+            const lv = e.done === "ok" ? 1 : raiseLv, gr = ctx.createLinearGradient(0, gy + gh, 0, gy);
+            gr.addColorStop(0, "#ff5a5a"); gr.addColorStop(0.5, "#ffd400"); gr.addColorStop(1, "#37d67a");
+            ctx.fillStyle = gr; rr(ctx, gx, gy + gh * (1 - lv), gw, gh * lv, gw / 2); ctx.fill();
+            ctx.lineWidth = 3; ctx.strokeStyle = "#ffd400"; rr(ctx, gx, gy, gw, gh, gw / 2); ctx.stroke();
+            const bob = Math.sin(now * 8) * U * 0.01;
+            ctx.shadowColor = "#ffb400"; ctx.shadowBlur = U * 0.03;
+            outlinedText(ctx, "✋", g.x, gy - U * 0.05 + bob, U * 0.075, "#fff", "#c07a00", 3); ctx.shadowBlur = 0;
+            if (!e.done) {
+              const fs = Math.min(U * 0.034, z.w / 14); outlinedText(ctx, "왼손 위로 쭉!", Math.max(g.x, z.x0 + fs * 3.4), gy + gh + U * 0.04, fs, "#fff", "#c07a00", 3);   // 화면 밖으로 잘리지 않게
+              ctx.strokeStyle = "#fff"; ctx.lineWidth = U * 0.008; ctx.beginPath(); ctx.arc(g.x, gy - U * 0.05, U * 0.055, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, e.hold / RAISE_HOLD)); ctx.stroke();
+            }
+          } else if (e.pos || !e.done) {
+            // ⊙ 터치 동그라미 + 그 악기에 조명
+            const Pp = e.pos || touchPos(env.tracker.pts, v.U * 0.13), sec = e.sec % n, sx = z.x0 + z.w * (sec + 0.5) / n;
+            if (!e.done || e.done === "ok") {
+              const cg = ctx.createLinearGradient(0, v.H * 0.12, 0, stY);
+              cg.addColorStop(0, "rgba(255,240,170,0)"); cg.addColorStop(1, `rgba(255,240,170,${e.done ? 0.45 : 0.28})`);
+              ctx.fillStyle = cg; ctx.beginPath(); ctx.moveTo(sx - U * 0.015, v.H * 0.12); ctx.lineTo(sx + U * 0.015, v.H * 0.12); ctx.lineTo(sx + z.w * 0.09, stY + U * 0.04); ctx.lineTo(sx - z.w * 0.09, stY + U * 0.04); ctx.closePath(); ctx.fill();
+            }
+            ctx.fillStyle = e.done === "ok" ? "rgba(255,220,80,.7)" : "rgba(255,255,255,.18)"; ctx.beginPath(); ctx.arc(Pp.x, Pp.y, Pp.r, 0, Math.PI * 2); ctx.fill();
+            ctx.lineWidth = U * 0.01; ctx.strokeStyle = "#ffffff"; ctx.stroke();
+            ctx.beginPath(); ctx.arc(Pp.x, Pp.y, Pp.r * 0.35, 0, Math.PI * 2); ctx.stroke();
+            if (!e.done) {
+              ctx.strokeStyle = "#ffd400"; ctx.lineWidth = U * 0.008; ctx.beginPath(); ctx.arc(Pp.x, Pp.y, Pp.r * 1.25, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left); ctx.stroke();
+              outlinedText(ctx, "왼손 터치!", Pp.x, Pp.y - Pp.r * 1.7, Math.min(U * 0.034, z.w / 14), "#fff", "#c07a00", 3);
+            }
+          }
+          ctx.restore();
         }
         // 첫 마디: 준비 숫자
         if (t0 !== null && now >= t0 && now < t0 + 4 * spb) outlinedText(ctx, String(Math.floor((now - t0) / spb) + 1), z.cx, v.H * 0.3, U * 0.1 * (1 + pulse * 0.2), "#fff", "#8a5a00");
         outlinedText(ctx, `♪ ${song.title}`, z.cx, v.H * 0.965, U * 0.028, "#fff", "rgba(0,0,0,.6)", 3);
       },
       stop() { rhythm.stop(); },
-      result: () => `${song.title} · 완벽 ${cnt.PERFECT} · 좋아요 ${cnt.GOOD} · 놓침 ${cnt.MISS}`,
+      result: () => `${song.title} · 완벽 ${cnt.PERFECT} · 좋아요 ${cnt.GOOD} · 놓침 ${cnt.MISS} · 왼손 동작 ${ev.ok}/${ev.all}`,
       // 설명 시연용
       get notes() { return notes.filter(n => !n.done).map(n => ({ time: n.time, key: n.key, hands: n.hands, parts: n.parts })); },
       get now() { return now; },
       dir: (key, k) => DIR[key][k],
+      get event() { const e = events.find(e => !e.done && now >= e.start); return e ? { type: e.type, pos: e.pos } : null; },
     };
   },
 };

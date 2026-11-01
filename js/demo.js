@@ -295,15 +295,20 @@ const SCRIPTS = {
     },
   },
   conductor: {
-    dur: 16,
+    dur: 26,
     run(T, g, p, S, say) {
       p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
       if (T < 4.5) say("지휘자! 클래식에 맞춰 화살표가 내려와요");
       else if (T < 9.5) say("화살표가 가로선 칸에 겹치는 순간, 그 방향으로 손을 휘둘러요");
-      else if (T < 14) say("아래, 안쪽, 바깥쪽, 위! 박자에 맞춰 지휘해요");
+      else if (T < 24) say("아래, 안쪽, 바깥쪽, 위! 박자에 맞춰 지휘해요");
       else say("이제 직접 해 봐요!");
-      const u = p.u, now = g.now;
+      const u = p.u, now = g.now, e = g.event;
+      if (e) {   // 왼손 동작: 올리기는 머리 위로, 터치는 동그라미로
+        if (e.type === "raise") p.rest(0, "up", 2.5); else if (e.pos) p.reach(0, e.pos.x, e.pos.y, 2.5);
+        say(e.type === "raise" ? "✋가 나오면 왼손을 머리 위로 쭉! 크레셴도" : "⊙가 나오면 왼손으로 터치! 악기를 불러요");
+      }
       [0, 1].forEach(k => {
+        if (k === 0 && e) return;
         const sh = p.pts[11 + k], side = k ? 1 : -1, cx = sh.x + side * 0.9 * u, cy = sh.y + 0.5 * u, A = 0.85 * u;
         const n = g.notes.filter(n => n.hands.includes(k) && !n.parts[k] && n.time - now > -0.1).sort((a, b) => a.time - b.time)[0];
         if (!n) return;
