@@ -69,12 +69,12 @@
 <!-- ===== 메뉴 ===== -->
 <div id="menu">
   <h1>어떤 게임을 할까요?</h1>
-  <p>카드를 눌러 시작해요 (카메라 허용 필요)</p>
+  <p>카드를 눌러 시작해요 (카메라 허용 필요) · 얼음은 손을 빠르게 휘둘러 3번, 별은 손으로 잡아요</p>
   <div class="cards">
     <div class="card" data-game="copy" style="background:#b39ddb"><div class="top">🙆</div><div class="label">따라쟁이</div></div>
     <div class="card" data-game="math" style="background:#ff7675"><div class="top">🎈</div><div class="label">수학 풍선</div></div>
-    <div class="card disabled" style="background:#74b9ff"><div class="top">🧊</div><div class="label">얼음 깨기</div></div>
-    <div class="card disabled" style="background:#55efc4"><div class="top">⭐</div><div class="label">별 따기</div></div>
+    <div class="card" data-game="ice" style="background:#74b9ff"><div class="top">🧊</div><div class="label">얼음 깨기</div></div>
+    <div class="card" data-game="star" style="background:#55efc4"><div class="top">⭐</div><div class="label">별 따기</div></div>
   </div>
   <div class="levels">
     <span>수학 풍선 난이도</span>
@@ -125,6 +125,7 @@ const STAR_STEP = 2;                 // 성공 N개당 별 1개
 const $ = id => document.getElementById(id);
 const video = $("video"), canvas = $("canvas"), ctx = canvas.getContext("2d");
 const drawer = new DrawingUtils(ctx);
+if (!ctx.roundRect) ctx.roundRect = function (x, y, w, h, r) { this.moveTo(x + r, y); this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r); this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r); this.closePath(); };  // 구형 브라우저 대비
 
 /* ================= 모델 로드 ================= */
 let landmarker = null;
@@ -298,8 +299,109 @@ const mathGame = {
   resultText() { return `${G.score}문제 정답 · 실수 ${this.miss}번`; }
 };
 
+/* ================= 공통: 손 위치·속도 추적 ================= */
+const hands = { prev: null, list: [] };
+function trackHands(lm, W, H, dt) {
+  if (!lm) { hands.prev = null; hands.list = []; return; }
+  const cur = [15, 16].map(i => ({ x: (1 - lm[i].x) * W, y: lm[i].y * H }));     // 손목 좌우
+  const idx = [19, 20].map(i => ({ x: (1 - lm[i].x) * W, y: lm[i].y * H }));     // 검지
+  cur.forEach((h, k) => { h.speed = hands.prev && dt > 0 ? Math.hypot(h.x - hands.prev[k].x, h.y - hands.prev[k].y) / dt / H : 0; });  // 화면높이/초
+  hands.prev = cur;
+  hands.list = [...cur, ...idx.map((h, k) => ({ ...h, speed: cur[k].speed }))];
+}
+
+/* ================= 게임 3: 얼음 깨기 ================= */
+const ICE_HITS = 3;            // 깨는 데 필요한 타격 수
+const PUNCH_SPEED = 1.2;       // 타격으로 인정하는 손 속도 (화면높이/초)
+const ICE_SLOTS = [[0.2, 0.35], [0.5, 0.28], [0.8, 0.35], [0.2, 0.68], [0.5, 0.75], [0.8, 0.68]];
+const iceGame = {
+  sec: 45, blocks: [],
+  start() { this.blocks = ICE_SLOTS.map(([x, y]) => this.make(x, y)); },
+  stop() {},
+  make(x, y) { return { x, y, w: 0.16, hits: 0, cool: 0, dead: false, pop: 0, respawn: 0, shake: 0 }; },
+  update(dt, lm, W, H) {
+    trackHands(lm, W, H, dt);
+    for (const b of this.blocks) {
+      b.cool = Math.max(0, b.cool - dt); b.shake = Math.max(0, b.shake - dt);
+      if (b.dead) { b.pop += dt; b.respawn -= dt; if (b.respawn <= 0) Object.assign(b, this.make(b.x, b.y)); continue; }
+      const bx = b.x * W, by = b.y * H, hw = b.w * H;
+      const hit = b.cool === 0 && hands.list.some(h => Math.abs(h.x - bx) < hw && Math.abs(h.y - by) < hw && h.speed > PUNCH_SPEED);
+      if (hit) {
+        b.hits++; b.cool = 0.35; b.shake = 0.2; beep(300 + b.hits * 150, .08, "triangle", .25);
+        if (b.hits >= ICE_HITS) { b.dead = true; b.pop = 0; b.respawn = 1.2 + Math.random(); G.score++; sfxGood(); flash(); }
+      }
+    }
+    this.draw(W, H);
+  },
+  draw(W, H) {
+    for (const b of this.blocks) {
+      const hw = b.w * H, bx = b.x * W + (b.shake > 0 ? (Math.random() - .5) * 12 : 0), by = b.y * H;
+      if (b.dead) {                                                 // 파편 흩어짐
+        if (b.pop > .5) continue;
+        ctx.globalAlpha = 1 - b.pop * 2; ctx.fillStyle = "#cfefff";
+        for (let k = 0; k < 10; k++) { const a = k * Math.PI / 5, d = hw * (0.3 + b.pop * 3); ctx.beginPath(); ctx.arc(bx + Math.cos(a) * d, by + Math.sin(a) * d + b.pop * b.pop * 400, hw * .12, 0, Math.PI * 2); ctx.fill(); }
+        ctx.globalAlpha = 1; continue;
+      }
+      ctx.fillStyle = "rgba(190,230,255,.85)"; ctx.strokeStyle = "#2a7bb5"; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.roundRect(bx - hw, by - hw, hw * 2, hw * 2, 14); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.roundRect(bx - hw * .8, by - hw * .8, hw * .5, hw * .25, 6); ctx.fill();
+      ctx.strokeStyle = "#1b5b8a"; ctx.lineWidth = 4; ctx.lineCap = "round";                     // 금 (타격 수만큼)
+      const cracks = [[[-.3, -.9], [-.1, -.2], [-.5, .3]], [[.9, -.4], [.2, 0], [.6, .8]], [[-.9, .6], [-.2, .4], [.3, .9]]];
+      for (let i = 0; i < b.hits; i++) { ctx.beginPath(); cracks[i].forEach(([px, py], j) => j ? ctx.lineTo(bx + px * hw, by + py * hw) : ctx.moveTo(bx + px * hw, by + py * hw)); ctx.stroke(); }
+      ctx.fillStyle = "#1b5b8a"; ctx.font = `900 ${Math.round(hw * .5)}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(ICE_HITS - b.hits, bx, by + hw * .55);
+    }
+  },
+  resultText: () => `얼음 ${G.score}개 깨뜨림`
+};
+
+/* ================= 게임 4: 별 따기 ================= */
+const STAR_FALL = 0.12;        // 낙하 속도 (화면높이/초)
+const STAR_EVERY = 1.1;        // 별 생성 간격(초)
+const starGame = {
+  sec: 45, stars: [], timer: 0, missed: 0,
+  start() { this.stars = []; this.timer = 0; this.missed = 0; $("missbox").style.display = "flex"; $("miss").textContent = 0; },
+  stop() { $("missbox").style.display = "none"; },
+  spawn() {
+    const gold = Math.random() < 0.25;
+    this.stars.push({ x: 0.12 + Math.random() * 0.76, y: gold ? -0.05 : 0.05, r: 0.06, gold, spin: Math.random() * 6, dead: false, pop: 0, hold: gold ? 1.2 : 0 });
+  },
+  update(dt, lm, W, H) {
+    trackHands(lm, W, H, dt);
+    this.timer += dt; if (this.timer >= STAR_EVERY && this.stars.filter(s => !s.dead).length < 4) { this.timer = 0; this.spawn(); }
+    for (const s of this.stars) {
+      if (s.dead) { s.pop += dt; continue; }
+      if (s.hold > 0) s.hold -= dt; else s.y += STAR_FALL * dt * (s.gold ? 0.7 : 1);   // 금별은 위에서 잠시 머문 뒤 천천히 낙하
+      s.spin += dt * 2;
+      if (s.y > 0.95) { s.dead = true; s.pop = 9; this.missed++; $("miss").textContent = this.missed; sfxBad(); continue; }
+      const sx = s.x * W, sy = s.y * H, sr = s.r * H;
+      if (hands.list.some(h => Math.hypot(h.x - sx, h.y - sy) < sr * 1.3)) {
+        s.dead = true; s.pop = 0; G.score += s.gold ? 3 : 1; sfxGood(); if (s.gold) flash();
+      }
+    }
+    this.stars = this.stars.filter(s => !s.dead || s.pop < .4);
+    this.draw(W, H);
+  },
+  draw(W, H) {
+    for (const s of this.stars) {
+      const sx = s.x * W, sy = s.y * H, sr = s.r * H;
+      if (s.dead) { if (s.pop > .4) continue; ctx.globalAlpha = 1 - s.pop * 2.5; ctx.strokeStyle = "#fff"; ctx.lineWidth = 4;
+        for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3, d = sr * (1 + s.pop * 4); ctx.beginPath(); ctx.moveTo(sx + Math.cos(a) * sr, sy + Math.sin(a) * sr); ctx.lineTo(sx + Math.cos(a) * d, sy + Math.sin(a) * d); ctx.stroke(); }
+        ctx.globalAlpha = 1; continue; }
+      ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.sin(s.spin) * 0.25);
+      ctx.fillStyle = s.gold ? "#ffb400" : "#ffe35c"; ctx.strokeStyle = "#8a5a00"; ctx.lineWidth = 5; ctx.lineJoin = "round";
+      ctx.beginPath();
+      for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, d = k % 2 ? sr * .45 : sr; k ? ctx.lineTo(Math.cos(a) * d, Math.sin(a) * d) : ctx.moveTo(Math.cos(a) * d, Math.sin(a) * d); }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      if (s.gold) { ctx.fillStyle = "#fff"; ctx.font = `900 ${Math.round(sr * .7)}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("3", 0, sr * .1); }
+      ctx.restore();
+    }
+  },
+  resultText() { return `별 ${G.score}점 · 놓침 ${this.missed}개`; }
+};
+
 /* ================= 공통 게임 루프 ================= */
-const GAMES = { copy: copyGame, math: mathGame };
+const GAMES = { copy: copyGame, math: mathGame, ice: iceGame, star: starGame };
 const G = { game: null, running: false, score: 0, timeLeft: 0, lastT: 0, raf: 0 };
 
 document.querySelectorAll(".card[data-game]").forEach(c => c.onclick = () => startGame(GAMES[c.dataset.game]));
