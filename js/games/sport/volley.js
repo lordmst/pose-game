@@ -1,7 +1,7 @@
 // 배구: 상대가 넘긴 공을 두 손 모아 받고(리시브) → 같은 편이 올려 주면(토스) → 손을 높이 들었다 세게 내려쳐서(스파이크) 득점
 // 리시브: 공이 올 때 두 손목을 붙여 가슴 아래로 / 스파이크: 높이 뜬 공 근처에서 손을 위에서 아래로 빠르게
-import { burst, popup, shake, outlinedText, rr, FONT, clamp } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
+import { burst, popup, shake, outlinedText, rr, FONT, clamp } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
 
 const SERVE = 1.6;     // 상대 공이 나에게 오는 시간(초, 보통)
 const SPIKE = 3.0;     // 스파이크로 인정하는 손 속도(어깨너비/초, 아래 방향)

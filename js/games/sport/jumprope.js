@@ -1,7 +1,7 @@
 // 줄넘기 (스포츠 리조트의 몸풀기): 양쪽에서 줄을 돌려 주고, 줄이 발밑을 지나는 순간 점프!
 // 점프 판정: 두 발목이 서 있을 때보다 함께 올라가면 (발목이 안 보이면 어깨가 확 올라가면) 공중에 있는 것으로 봄
-import { burst, popup, outlinedText, FONT } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
+import { burst, popup, outlinedText, FONT } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
 
 const PERIOD0 = 1.5, PERIOD_MIN = 0.85;   // 줄 한 바퀴 시간(초): 처음 → 가장 빠를 때
 const WIN = 0.16;                          // 줄이 발밑을 지날 때 앞뒤로 이만큼(초) 안에 공중이면 성공

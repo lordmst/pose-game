@@ -1,7 +1,7 @@
 // 농구 (3점 슛 대회): 두 손을 머리 위로 올리면 슛 준비 → 힘 막대가 오르내림 → 초록 칸일 때 손을 위로 '휙' 튕기면 슛
 // 랙 5개 × 공 5개, 랙의 마지막 공(무지개 공)은 2배. 깨끗하게 들어가면 보너스
-import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
+import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
 
 const FLICK = 1.6;                  // 튕기기로 인정하는 손 속도(어깨너비/초)
 const SWEET = 0.8;                  // 힘 막대의 가장 좋은 자리 (0~1)

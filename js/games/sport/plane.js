@@ -1,8 +1,8 @@
 // 비행기 (섬 투어): 두 팔을 날개처럼 벌리고 날기
 // 기울이기 = 두 손 높이 차이(오른손이 낮으면 오른쪽으로), 날갯짓(두 손을 함께 아래로 휘두르기) = 위로 올라감
 // 팔을 벌리고 있으면 천천히 내려가고(활공), 팔을 내리면 빨리 내려감. 풍선·링을 모으고 섬 산에 부딪히지 않기
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
 
 const ZRATE = 0.33;          // 물체가 멀리서 다가오는 속도(1/초, 보통)
 const FLAP = 2.0;            // 날갯짓으로 인정하는 손 아래 방향 속도(어깨너비/초)

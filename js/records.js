@@ -1,7 +1,7 @@
 // 선수 목록 · 게임 기록 · 순위 (이 기기의 브라우저에 저장)
 const KEY = "posegame.v2";
 const MAX_RECORDS = 3000;
-let db = { players: [], records: [], settings: {} };
+let db = { players: [], records: [], settings: {}, items: {} };
 try { const s = localStorage.getItem(KEY); if (s) db = Object.assign(db, JSON.parse(s)); } catch (e) {}
 
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) {} }
@@ -23,6 +23,13 @@ export function setDiff(id, diff) { const p = db.players.find(x => x.id === id);
 
 export const getSettings = () => db.settings || {};
 export function setSettings(s) { db.settings = s; persist(); }
+
+// 모은 아이템: 선수(프로필)별 아이템 id 목록
+export const items = pid => (db.items && db.items[pid]) || [];
+export function addItem(pid, id) {
+  db.items = db.items || {}; const a = db.items[pid] = db.items[pid] || [];
+  const isNew = !a.includes(id); if (isNew) a.push(id); persist(); return isNew;
+}
 
 export const gameKey = (game, level) => level ? `${game}:${level}` : game;
 

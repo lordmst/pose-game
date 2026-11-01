@@ -1,7 +1,7 @@
 // 골프 (니어핀): 두 손을 모아 머리 위로 들어 올렸다가(백스윙) 빠르게 아래로 휘두르면 샷
 // 손을 높이 들수록 멀리 날아감 → 깃발까지 거리에 맞게 높이를 조절. 휘두를 때 손이 옆으로 쏠리면 공이 휨, 바람도 있음
-import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
+import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
 
 const SWING = 2.2;                         // 다운스윙으로 인정하는 손 속도(어깨너비/초)
 const MAX_DIST = 170;                      // 끝까지 들었을 때 날아가는 거리(m)

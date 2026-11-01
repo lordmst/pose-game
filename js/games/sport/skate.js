@@ -1,9 +1,9 @@
 // 스케이트보드: 내리막길을 달리며 동전 모으기
 // 방향 = 몸을 왼쪽·오른쪽으로 기울이기(또는 몸을 옆으로 옮기기), 속도 = 제자리에서 무릎 들기(발 구르기)
 // 점프 = 두 손을 머리 위로 번쩍(또는 제자리 점프). 고깔·울타리는 피하거나 점프, 점프대에서 점프하면 트릭 보너스
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
-import { makeStepCounter } from "../run.js?v=28";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
+import { makeStepCounter } from "../run.js?v=29";
 
 const S0 = 1 / 0.25, s = z => 1 / (0.25 + z * 3.5);   // 원근 배율 (z: 0 가까움 ~ 1 멂)
 const AIR = 0.8;                                       // 점프 시간(초)

@@ -1,7 +1,7 @@
 // 깡통 맞추기: 탁구대 끝에 쌓인 깡통 피라미드를 탁구공으로 무너뜨리기
 // 날아오는 공을 휘둘러 받아치면 손을 휘두른 쪽(옆)과 높이(위·아래)로 공이 날아감. 깡통 하나에 1점, 다 쓰러뜨리면 보너스
-import { burst, popup, shake, outlinedText, rr, FONT, clamp } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
+import { burst, popup, shake, outlinedText, rr, FONT, clamp } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
 
 const FLIGHT = 1.2;    // 공이 나에게 오는 시간(초, 보통)
 const SHOT = 0.55;     // 받아친 공이 깡통까지 가는 시간(초)

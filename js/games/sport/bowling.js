@@ -1,7 +1,7 @@
 // 볼링: 공 든 손을 허리 아래로 내렸다가 앞(위)으로 빠르게 휘두르면 공이 굴러감
 // 조준 = 내 몸의 좌우 위치(옆으로 걸어서 맞춤), 휘두를 때 손이 옆으로 쏠리면 공이 휘어짐(커브)
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
 
 const LANE_LEN = 18;            // 레인 길이(레인 좌표, 레인 폭 = 2)
 const PIN_R = 0.12, BALL_R = 0.21;

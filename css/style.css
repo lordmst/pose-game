@@ -233,3 +233,21 @@ body:not(.live) .overlay { background: var(--y); }
 .readybar.compact h2 { font-size: clamp(18px, 3vmin, 30px); }
 .readybar.compact .how, .readybar.compact #readyHint, .readybar.compact .opnote, .readybar.compact .tut-row, .readybar.compact .tut-try { display: none; }
 .readybar.compact .pill { padding-top: .8vmin; padding-bottom: .8vmin; }
+/* 아이템 획득 · 모은 아이템 */
+.ritem { display: flex; align-items: center; gap: 1.2vmin; margin-top: .8vmin; padding: .8vmin 1.6vmin; border-radius: 2vmin; background: #fff3c4; border: max(2px, .4vmin) solid #ffcf3a; animation: itempop .5s ease-out; }
+.ritem .ico { font-size: clamp(28px, 6vmin, 56px); }
+.ritem span { display: flex; flex-direction: column; font-size: clamp(13px, 2.2vmin, 20px); }
+.ritem small { opacity: .7; font-size: .8em; }
+@keyframes itempop { 0% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+.rankitems { margin-top: 1vmin; }
+.rankitems p { display: flex; justify-content: space-between; gap: 1vmin; }
+.rankitems .its { font-weight: 400; letter-spacing: .1em; text-align: right; word-break: break-all; }
+#rankItems { flex: 1 1 200px; background: #fff; border-radius: 2vmin; padding: 1.6vmin 2vmin; display: flex; flex-direction: column; gap: .6vmin; font-size: clamp(14px, 2.2vmin, 20px); align-self: flex-start; }
+#rankItems h4 { font-weight: 400; opacity: .7; margin-bottom: .4vmin; }
+/* 카드 13개 이상(스포츠): 한 줄 7개, 작은 카드 */
+.cards.tons { grid-template-columns: repeat(7, auto); gap: 1.4vmin; max-width: 98vw; }
+.cards.tons .card { width: clamp(92px, min(12.6vw, 19vh), 180px); border-radius: 2.2vmin; }
+.cards.tons .card .ico { aspect-ratio: 1.35; font-size: clamp(30px, min(5vw, 7.5vh), 70px); }
+.cards.tons .card .lbl { font-size: clamp(14px, min(1.9vw, 2.8vh), 24px); }
+.cards.tons .card .desc { font-size: clamp(11px, min(1.2vw, 1.8vh), 14px); }
+@media (max-width: 760px) { .cards.tons { grid-template-columns: repeat(4, auto); } }

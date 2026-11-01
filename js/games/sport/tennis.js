@@ -1,7 +1,7 @@
 // 테니스: 상대(위쪽)가 보낸 공이 내 쪽으로 오면, 공이 오는 쪽 팔을 크게 휘둘러 받아치기
 // 오른쪽 공 = 오른손 포핸드, 왼쪽 공 = 왼손 백핸드. 상대가 못 받으면 내 점수(위너). 점수는 테니스식(15·30·40·게임)
-import { burst, popup, shake, outlinedText, rr, FONT, clamp } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
+import { burst, popup, shake, outlinedText, rr, FONT, clamp } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
 
 const FLIGHT = 1.45;   // 공이 상대에게서 나에게 오는 시간(초, 보통)
 const BACK = 0.95;     // 받아친 공이 상대에게 가는 시간(초)

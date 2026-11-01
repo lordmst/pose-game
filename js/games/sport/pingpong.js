@@ -1,7 +1,7 @@
 // 탁구: 탁구대 너머 상대가 보낸 공이 내 쪽 탁구대에 한 번 튀고 오면, 그 근처에서 손을 휘둘러 받아치기
 // 아주 세게 휘두르면 스매시(보너스, 상대가 잘 못 받음). 11점 먼저 내면 게임(2점 차)
-import { burst, popup, shake, outlinedText, rr, FONT, clamp } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
+import { burst, popup, shake, outlinedText, rr, FONT, clamp } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
 
 const FLIGHT = 1.1;    // 공이 상대에게서 나에게 오는 시간(초, 보통)
 const BACK = 0.75;     // 받아친 공이 상대에게 가는 시간(초)

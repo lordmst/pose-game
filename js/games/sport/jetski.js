@@ -1,8 +1,8 @@
 // 수상오토바이: 두 손을 앞으로 내밀어 손잡이를 잡은 것처럼
 // 방향 = 손잡이 돌리기(오른쪽으로 가려면 오른손을 내리고 왼손을 올림), 속도 = 두 손을 가슴 높이로 들고 있으면 출발, 내리면 멈춤
 // 빨강·노랑 부표 사이로 통과하면 점수, 별도 모으고 바위는 피하기
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=28";
-import { sfx } from "../../audio.js?v=28";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=29";
+import { sfx } from "../../audio.js?v=29";
 
 const S0 = 1 / 0.25, s = z => 1 / (0.25 + z * 3.5);   // 원근 배율 (z: 0 가까움 ~ 1 멂)
 const TOP = 60;                                        // 최고 속도(km/h, 보통)

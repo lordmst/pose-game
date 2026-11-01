@@ -1,25 +1,26 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=28";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=28";
-import * as R from "./records.js?v=28";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=28";
-import copy from "./games/copy.js?v=28";
-import math from "./games/math.js?v=28";
-import ice from "./games/ice.js?v=28";
-import star from "./games/star.js?v=28";
-import fruit from "./games/fruit.js?v=28";
-import mole from "./games/mole.js?v=28";
-import wall from "./games/wall.js?v=28";
-import rhythm from "./games/rhythm.js?v=28";
-import goalie from "./games/goalie.js?v=28";
-import { hangul, english } from "./games/word.js?v=28";
-import clockGame from "./games/clock.js?v=28";
-import run from "./games/run.js?v=28";
-import simon from "./games/simon.js?v=28";
-import conductor from "./games/conductor.js?v=28";
-import SPORTS from "./games/sports.js?v=28";
-import { DIFFS, diffOf } from "./difficulty.js?v=28";
-import { startDemo } from "./demo.js?v=28";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=29";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=29";
+import * as R from "./records.js?v=29";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=29";
+import copy from "./games/copy.js?v=29";
+import math from "./games/math.js?v=29";
+import ice from "./games/ice.js?v=29";
+import star from "./games/star.js?v=29";
+import fruit from "./games/fruit.js?v=29";
+import mole from "./games/mole.js?v=29";
+import wall from "./games/wall.js?v=29";
+import rhythm from "./games/rhythm.js?v=29";
+import goalie from "./games/goalie.js?v=29";
+import { hangul, english } from "./games/word.js?v=29";
+import clockGame from "./games/clock.js?v=29";
+import run from "./games/run.js?v=29";
+import simon from "./games/simon.js?v=29";
+import conductor from "./games/conductor.js?v=29";
+import SPORTS from "./games/sports.js?v=29";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=29";
+import { DIFFS, diffOf } from "./difficulty.js?v=29";
+import { startDemo } from "./demo.js?v=29";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -308,6 +309,7 @@ function renderCards() {
   const ids = cardIds(catTab);
   box.classList.toggle("many", ids.length > 4);
   box.classList.toggle("lots", ids.length > 8 || ids.length === 5);   // 5개나 9개 이상이면 한 줄에 5개
+  box.classList.toggle("tons", ids.length > 12);                         // 13개 이상이면 한 줄에 7개, 작게
   for (const id of ids) {
     const grp = GROUPS.find(g => g.id === id), G = grp || GAMES[id], b = document.createElement("button");
     b.type = "button"; b.className = "card"; b.setAttribute("data-hand", ""); b.dataset.game = id; b.style.setProperty("--bg", G.bg);
@@ -524,7 +526,10 @@ function endGame() {
       rec = R.addRecord({ key: R.gameKey(GAMES[gameId].recId || gameId, lvl), game: gameId, level: lvl, playerId: p.profileId, name: p.name, score: p.score, mode: players.length, meters, diff: p.diff });
       justSaved.add(rec.record.id);
     }
-    return { p, meters, rec, extra: (insts[i].result && insts[i].result()) || "" };
+    // 아이템 획득: 점수를 낸 선수(이름 있는 선수)는 아이템 하나를 받음
+    let item = null;
+    if (p.profileId && p.score > 0) { const it = pickItem(R.items(p.profileId)); item = { ...it, isNew: R.addItem(p.profileId, it.id), count: R.items(p.profileId).length }; }
+    return { p, meters, rec, item, extra: (insts[i].result && insts[i].result()) || "" };
   });
   renderResult(results);
   rankView = { game: gameId, level: recLevel(players[0]) };
@@ -541,7 +546,7 @@ function renderResult(results) {
   const box = $("#resCols"); box.innerHTML = "";
   const decided = results.length === 2 && results[0].p.score !== results[1].p.score;
   const top = Math.max(...results.map(r => r.p.score));
-  results.forEach(({ p, meters, rec, extra }, i) => {
+  results.forEach(({ p, meters, rec, extra, item }, i) => {
     let badge = "";
     if (rec) badge = rec.rank === 1 && rec.total > 1 ? "전체 1위!" : rec.best ? "개인 최고 기록!" : rec.first ? "첫 기록!" : "";
     const col = document.createElement("div");
@@ -552,7 +557,8 @@ function renderResult(results) {
       (badge ? `<div class="rbadge">${badge}</div>` : "") +
       `<div class="rmeta">${rec ? `전체 ${rec.rank}위 (기록 ${rec.total}개 중)` : "손님 이름을 적으면 다음부터 기록이 저장돼요"}</div>` +
       `<div class="rmeta">난이도 ${diffOf(p.diff).label} · ${esc(extra)}${extra ? " · " : ""}최대 콤보 ${p.maxCombo}</div>` +
-      `<div class="rmeta">손이 움직인 거리 약 ${meters}m</div>`;
+      `<div class="rmeta">손이 움직인 거리 약 ${meters}m</div>` +
+      (item ? `<div class="ritem"><span class="ico">${item.icon}</span><span>아이템 획득! <b>${esc(item.name)}</b>${item.isNew ? "" : " (또 받았어요)"}<small>모은 아이템 ${item.count}/${ITEMS.length}</small></span></div>` : "");
     box.appendChild(col);
   });
 }
@@ -587,6 +593,11 @@ function renderRanking() {
     li.innerHTML = `<b class="rk">${i + 1}</b><span class="nm">${esc(r.name)}</span><span class="sc">${r.score}점</span><span class="df ${r.diff || "normal"}">${diffOf(r.diff).label}</span><span class="dt">${d.getMonth() + 1}/${d.getDate()}${r.mode === 2 ? " · 대결" : ""}</span>`;
     ol.appendChild(li);
   });
+  // 선수별 모은 아이템
+  const ib = $("#rankItems"); ib.innerHTML = "<h4>모은 아이템</h4>";
+  const owners = R.players().filter(pl => R.items(pl.id).length);
+  if (!owners.length) ib.insertAdjacentHTML("beforeend", '<p class="empty">게임을 끝내면 아이템을 받아요</p>');
+  owners.forEach(pl => ib.insertAdjacentHTML("beforeend", `<p><span>${esc(pl.name)} ${R.items(pl.id).length}/${ITEMS.length}</span><b class="its">${R.items(pl.id).map(id => (itemOf(id) || {}).icon || "").join("")}</b></p>`));
   const bx = $("#rankBests"); bx.innerHTML = "<h4>선수별 최고 기록</h4>";
   const bs = R.bests(key);
   if (!bs.length) bx.insertAdjacentHTML("beforeend", '<p class="empty">-</p>');
