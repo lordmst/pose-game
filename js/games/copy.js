@@ -1,6 +1,6 @@
 // 따라쟁이: 카드 속 자세를 0.6초 유지하면 성공, 2초 안에 해내면 2점
-import { burst, popup, rr, outlinedText } from "../fx.js?v=14";
-import { sfx } from "../audio.js?v=14";
+import { burst, popup, rr, outlinedText } from "../fx.js?v=15";
+import { sfx } from "../audio.js?v=15";
 
 const HOLD = 0.6;
 const ang = (a, b, c) => {
@@ -9,7 +9,7 @@ const ang = (a, b, c) => {
   return Math.acos(Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / m))) * 180 / Math.PI;
 };
 const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-function measure(p) {
+export function measure(p) {
   return {
     p, sw: d(p[11], p[12]) || 1,
     lsh: ang(p[13], p[11], p[23]), rsh: ang(p[14], p[12], p[24]),   // 어깨 각도: 0 내림 · 90 수평 · 180 만세
@@ -28,7 +28,13 @@ const HIP_L = [[64, 100], [86, 126]], HIP_R = [[136, 100], [114, 126]];
 const HEART_L = [[64, 46], [94, 6]], HEART_R = [[136, 46], [106, 6]];
 const LEG_L = [[88, 168], [84, 208]], LEG_R = [[112, 168], [116, 208]];
 
-function fig({ la = DOWN_L, ra = DOWN_R, ll = LEG_L, rl = LEG_R, hip = [100, 130] } = {}) {
+// 그림 좌표(200×220 상자): 머리 (100,40), 어깨 (100,76), 엉덩이 hip
+export function figData({ la = DOWN_L, ra = DOWN_R, ll = LEG_L, rl = LEG_R, hip = [100, 130] } = {}) {
+  const sh = [100, 76];
+  return { head: [100, 40], neck: [100, 62], hip, lines: [[[100, 62], hip], [sh, ...la], [sh, ...ra], [hip, ...ll], [hip, ...rl]] };
+}
+function fig(o) {
+  const { hip, la = DOWN_L, ra = DOWN_R, ll = LEG_L, rl = LEG_R } = { hip: [100, 130], ...o };
   const pl = pts => pts.map(p => p.join(",")).join(" "), sh = [100, 76];
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220" width="200" height="220">` +
     `<g fill="none" stroke="#2b2b2b" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">` +
@@ -38,21 +44,23 @@ function fig({ la = DOWN_L, ra = DOWN_R, ll = LEG_L, rl = LEG_R, hip = [100, 130
     `<circle cx="100" cy="40" r="22" fill="#ffd27f" stroke="#2b2b2b" stroke-width="10"/></svg>`;
 }
 // 화면은 거울처럼 보이므로 '왼손'은 그림에서도 왼쪽 팔
-const POSES = [
-  { id: "up", name: "만세!", need: ARMS, svg: fig({ la: UP_L, ra: UP_R }), ok: m => m.lsh > 140 && m.rsh > 140 },
-  { id: "wide", name: "양팔 벌리기", need: ARMS, svg: fig({ la: SIDE_L, ra: SIDE_R }), ok: m => m.lsh > 65 && m.lsh < 120 && m.rsh > 65 && m.rsh < 120 && m.lel > 140 && m.rel > 140 },
-  { id: "left", name: "왼손 들기", need: ARMS, svg: fig({ la: UP_L }), ok: m => m.lsh > 140 && m.rsh < 55 },
-  { id: "right", name: "오른손 들기", need: ARMS, svg: fig({ ra: UP_R }), ok: m => m.rsh > 140 && m.lsh < 55 },
-  { id: "hips", name: "허리에 손", need: ARMS, svg: fig({ la: HIP_L, ra: HIP_R }), ok: m => m.lsh > 15 && m.lsh < 75 && m.rsh > 15 && m.rsh < 75 && m.lel < 125 && m.rel < 125 && d(m.p[15], m.p[23]) < m.sw * 1.1 && d(m.p[16], m.p[24]) < m.sw * 1.1 },
-  { id: "heart", name: "머리 위 하트", need: [0, ...ARMS], svg: fig({ la: HEART_L, ra: HEART_R }), ok: m => m.p[15].y < m.p[0].y && m.p[16].y < m.p[0].y && d(m.p[15], m.p[16]) < m.sw * 0.9 && m.lel < 155 && m.rel < 155 },
-  { id: "squat", name: "스쿼트!", lower: true, need: [23, 24, 25, 26, 27, 28], svg: fig({ la: SIDE_L, ra: SIDE_R, hip: [100, 140], ll: [[68, 164], [78, 208]], rl: [[132, 164], [122, 208]] }), ok: m => squatLeg(m, 23, 25, 27, m.lkn) && squatLeg(m, 24, 26, 28, m.rkn) },
-  { id: "lknee", name: "왼무릎 들기", lower: true, need: [11, 12, 23, 24, 25, 26], svg: fig({ la: SIDE_L, ra: SIDE_R, ll: [[70, 140], [78, 178]] }), ok: m => m.p[25].y < m.p[26].y - m.sw * 0.5 },
-  { id: "rknee", name: "오른무릎 들기", lower: true, need: [11, 12, 23, 24, 25, 26], svg: fig({ la: SIDE_L, ra: SIDE_R, rl: [[130, 140], [122, 178]] }), ok: m => m.p[26].y < m.p[25].y - m.sw * 0.5 },
+export const POSES = [
+  { id: "up", name: "만세!", need: ARMS, f: ({ la: UP_L, ra: UP_R }), ok: m => m.lsh > 140 && m.rsh > 140 },
+  { id: "wide", name: "양팔 벌리기", need: ARMS, f: ({ la: SIDE_L, ra: SIDE_R }), ok: m => m.lsh > 65 && m.lsh < 120 && m.rsh > 65 && m.rsh < 120 && m.lel > 140 && m.rel > 140 },
+  { id: "left", name: "왼손 들기", need: ARMS, f: ({ la: UP_L }), ok: m => m.lsh > 140 && m.rsh < 55 },
+  { id: "right", name: "오른손 들기", need: ARMS, f: ({ ra: UP_R }), ok: m => m.rsh > 140 && m.lsh < 55 },
+  { id: "hips", name: "허리에 손", need: ARMS, f: ({ la: HIP_L, ra: HIP_R }), ok: m => m.lsh > 15 && m.lsh < 75 && m.rsh > 15 && m.rsh < 75 && m.lel < 125 && m.rel < 125 && d(m.p[15], m.p[23]) < m.sw * 1.1 && d(m.p[16], m.p[24]) < m.sw * 1.1 },
+  { id: "heart", name: "머리 위 하트", need: [0, ...ARMS], f: ({ la: HEART_L, ra: HEART_R }), ok: m => m.p[15].y < m.p[0].y && m.p[16].y < m.p[0].y && d(m.p[15], m.p[16]) < m.sw * 0.9 && m.lel < 155 && m.rel < 155 },
+  { id: "squat", name: "스쿼트!", lower: true, need: [23, 24, 25, 26, 27, 28], f: ({ la: SIDE_L, ra: SIDE_R, hip: [100, 140], ll: [[68, 164], [78, 208]], rl: [[132, 164], [122, 208]] }), ok: m => squatLeg(m, 23, 25, 27, m.lkn) && squatLeg(m, 24, 26, 28, m.rkn) },
+  { id: "lknee", name: "왼무릎 들기", lower: true, need: [11, 12, 23, 24, 25, 26], f: ({ la: SIDE_L, ra: SIDE_R, ll: [[70, 140], [78, 178]] }), ok: m => m.p[25].y < m.p[26].y - m.sw * 0.5 },
+  { id: "rknee", name: "오른무릎 들기", lower: true, need: [11, 12, 23, 24, 25, 26], f: ({ la: SIDE_L, ra: SIDE_R, rl: [[130, 140], [122, 178]] }), ok: m => m.p[26].y < m.p[25].y - m.sw * 0.5 },
 ];
-for (const p of POSES) { p.img = new Image(); p.img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(p.svg); }
+for (const p of POSES) { p.svg = fig(p.f); p.img = new Image(); p.img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(p.svg); }
+// 사람 관절 좌표가 이 자세와 맞는지
+export const poseMatches = (pose, pts) => !!(pts && pose.need.every(i => pts[i].v) && pose.ok(measure(pts)));
 
 export default {
-  id: "copy", title: "따라쟁이", icon: "🙆", sec: 40, cursor: "",
+  id: "copy", title: "따라쟁이", icon: "🙆", sec: 40, cursor: "", cat: "move", bg: "#b39ddb", desc: "그림 자세 따라하기",
   how: "카드 그림과 똑같은 자세를 잠깐 유지하면 성공! 2초 안에 하면 2점",
   create(env) {
     const z = env.zone, v = env.view;
@@ -71,7 +79,7 @@ export default {
       update(dt) {
         shown += dt; flashT = Math.max(0, flashT - dt);
         const pts = env.tracker.pts;
-        matched = !!(pts && cur.need.every(i => pts[i].v) && cur.ok(measure(pts)));
+        matched = poseMatches(cur, pts);
         hold = matched ? hold + dt : Math.max(0, hold - dt * 1.5);
         const c = card(), cx = c.x + c.w / 2;
         if (hold >= HOLD * env.diff.hold) {

@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=14">
+<link rel="stylesheet" href="css/style.css?v=15">
 </head>
 <body>
 <video id="video" playsinline muted autoplay></video>
@@ -49,12 +49,8 @@
   <div class="sel">
     <h2>어떤 게임을 할까요?</h2>
     <p class="sub">선수는 먼저 만세로 인식! 그다음 손바닥을 펴서 카드 위에 1초 대거나 화면을 눌러요</p>
-    <div class="cards">
-      <button class="card" type="button" data-hand data-game="copy" style="--bg:#b39ddb"><span class="ico">🙆</span><span class="lbl">따라쟁이</span><span class="desc">그림 자세 따라하기</span></button>
-      <button class="card" type="button" data-hand data-game="math" style="--bg:#ff7675"><span class="ico">🎈</span><span class="lbl">수학 풍선</span><span class="desc">정답 풍선 터뜨리기</span></button>
-      <button class="card" type="button" data-hand data-game="ice" style="--bg:#74b9ff"><span class="ico">🧊</span><span class="lbl">얼음 깨기</span><span class="desc">빠르게 쳐서 깨기</span></button>
-      <button class="card" type="button" data-hand data-game="star" style="--bg:#55efc4"><span class="ico">⭐</span><span class="lbl">별 따기</span><span class="desc">별 잡고 폭탄 피하기</span></button>
-    </div>
+    <div id="catTabs" class="tabs cat-tabs"></div>
+    <div id="cards" class="cards"></div>
     <div id="selPlayers" class="selplayers"></div>
     <div class="row">
       <button class="pill" type="button" data-hand id="btnRank">순위 보기</button>
@@ -147,6 +143,6 @@
     setTimeout(function () { if (!window.__appReady) show("게임을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요."); }, 8000);
   })();
 </script>
-<script type="module" src="js/main.js?v=14"></script>
+<script type="module" src="js/main.js?v=15"></script>
 </body>
 </html>

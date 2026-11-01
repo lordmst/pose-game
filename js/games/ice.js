@@ -1,6 +1,6 @@
 // 얼음 깨기: 손을 빠르게 휘둘러 얼음을 치면 맞은 자리에서 금이 가고, 다 깨면 안에 든 물건이 튀어나옴
-import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=14";
-import { sfx } from "../audio.js?v=14";
+import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=15";
+import { sfx } from "../audio.js?v=15";
 
 const PUNCH = 3.0;      // 타격으로 인정하는 손 속도 (어깨너비/초). 낮출수록 쉬움
 const STRONG = 7.5;     // 이 이상이면 강펀치(2타)
@@ -8,7 +8,7 @@ const ITEMS = ["🐟", "💎", "🍓", "🐧", "🍬", "🦀", "🎁", "🍩", "
 const easeOutBack = t => { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
 
 export default {
-  id: "ice", title: "얼음 깨기", icon: "🧊", sec: 45, cursor: "🥊",
+  id: "ice", title: "얼음 깨기", icon: "🧊", sec: 45, cursor: "🥊", cat: "move", bg: "#74b9ff", desc: "빠르게 쳐서 깨기",
   how: "얼음을 빠르게 쳐서 깨요. 세게 치면 강펀치로 2번! 금색 얼음은 3점",
   create(env) {
     const z = env.zone, v = env.view;

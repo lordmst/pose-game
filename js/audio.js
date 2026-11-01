@@ -50,6 +50,11 @@ export const sfx = {
   go: () => play(t => { tone(1320, t, 0.4, { type: "square", vol: 0.13 }); tone(660, t, 0.4, { type: "triangle", vol: 0.22 }); }),
   select: () => play(t => { tone(660, t, 0.08, { type: "triangle", vol: 0.22 }); tone(990, t + 0.07, 0.12, { type: "triangle", vol: 0.22 }); }),
   fever: () => play(t => [0, 4, 7, 12, 16, 19].forEach((s, i) => tone(523.25 * Math.pow(2, s / 12), t + i * 0.06, 0.2, { type: "square", vol: 0.09 }))),
+  slice: () => play(t => { noise(t, 0.14, { vol: 0.5, type: "highpass", freq: 3000 }); tone(900, t, 0.1, { type: "triangle", vol: 0.12, slide: 0.5 }); }),
+  squish: () => play(t => { noise(t, 0.18, { vol: 0.45, freq: 700, q: 1.5 }); tone(260, t, 0.12, { vol: 0.25, slide: 0.6 }); }),
+  bonk: () => play(t => { tone(420, t, 0.12, { type: "square", vol: 0.16, slide: 0.45 }); noise(t, 0.06, { vol: 0.4, freq: 1800, q: 3 }); }),
+  thud: () => play(t => { tone(70, t, 0.35, { vol: 0.7, slide: 0.5 }); noise(t, 0.3, { vol: 0.5, type: "lowpass", freq: 400 }); }),
+  whoosh: () => play(t => { noise(t, 0.35, { vol: 0.35, freq: 900, q: 0.8 }); }),
   fanfare: () => play(t => {
     [[0, 0], [4, 0.13], [7, 0.26], [12, 0.39]].forEach(([s, d]) => tone(523.25 * Math.pow(2, s / 12), t + d, 0.3, { type: "triangle", vol: 0.25 }));
     tone(1046.5, t + 0.52, 0.7, { type: "triangle", vol: 0.22 }); tone(1318.5, t + 0.52, 0.7, { vol: 0.12 });
@@ -85,12 +90,53 @@ export const bgm = {
   setTempo(m) { tempo = m; },
 };
 
-export function speak(text, queue = false) {
+export function speak(text, queue = false, lang = "ko-KR") {
   if (!settings.tts || !("speechSynthesis" in window)) return;
   try {
     if (!queue) speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.lang = "ko-KR"; u.rate = 1.0;
+    const u = new SpeechSynthesisUtterance(text); u.lang = lang; u.rate = lang === "ko-KR" ? 1.0 : 0.8;
     speechSynthesis.speak(u);
   } catch (e) {}
 }
 export function stopSpeak() { try { speechSynthesis.cancel(); } catch (e) {} }
+
+/* ---------- 공용 시계 · 리듬 게임 반주 ----------
+   리듬 게임은 소리와 음표가 정확히 맞아야 하므로 오디오 시계를 기준으로 함.
+   두 선수가 같은 반주·같은 음표 패턴을 쓰도록 시작 시각과 씨앗값을 공유 */
+export const clock = () => (ac ? ac.currentTime : performance.now() / 1000);
+let rTimer = null, rStart = 0, rSpb = 0.6, rStep = 0, rNext = 0, rGain = null, rSeed = 1;
+const R_BASS = [36, 0, 36, 0, 43, 0, 41, 0];
+const R_LEAD = [72, 0, 76, 0, 79, 0, 76, 74, 72, 0, 76, 0, 79, 81, 79, 0];
+function rSchedule() {
+  if (!ac || !rGain) return;
+  const half = rSpb / 2;
+  while (rNext < ac.currentTime + 0.12) {
+    const i = rStep, beat = i % 2 === 0, inBar = (i / 2) % 4;
+    if (beat) tone(140, rNext, 0.12, { vol: 0.5, slide: 0.35, dest: rGain });                       // 쿵 (매 박)
+    if (beat && (inBar === 1 || inBar === 3)) noise(rNext, 0.12, { vol: 0.35, freq: 1800, q: 0.7, dest: rGain });   // 짝 (2·4박)
+    noise(rNext, 0.03, { vol: 0.08, type: "highpass", freq: 7000, dest: rGain });                   // 칙 (반 박)
+    const b = R_BASS[i % 8]; if (b && i >= 8) tone(midi(b), rNext, half * 1.6, { type: "triangle", vol: 0.18, dest: rGain });
+    const l = R_LEAD[i % 16]; if (l && i >= 16) tone(midi(l), rNext, half * 0.9, { type: "square", vol: 0.035, dest: rGain });
+    rNext += half; rStep++;
+  }
+}
+export const rhythm = {
+  // 이미 시작했으면 같은 시작 시각을 돌려줌 (2인 공유)
+  start(bpm) {
+    if (rTimer || rStart > 0) return rStart;
+    rSpb = 60 / bpm; rSeed = 1 + Math.floor(Math.random() * 1e6);
+    rStart = clock() + 0.15;
+    if (ac && (settings.bgm || settings.sfx)) {
+      rGain = ac.createGain(); rGain.gain.value = 0.6; rGain.connect(master);
+      rStep = 0; rNext = rStart; rTimer = setInterval(rSchedule, 25);
+    }
+    return rStart;
+  },
+  stop() {
+    clearInterval(rTimer); rTimer = null; rStart = 0;
+    if (rGain && ac) { const g = rGain; g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.05); setTimeout(() => { try { g.disconnect(); } catch (e) {} }, 400); }
+    rGain = null;
+  },
+  get spb() { return rSpb; },
+  get seed() { return rSeed; },
+};

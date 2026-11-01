@@ -18,12 +18,13 @@ export function addPlayer(name) {
 }
 export function removePlayer(id) { db.players = db.players.filter(p => p.id !== id); persist(); }
 export function setLevel(id, level) { const p = db.players.find(x => x.id === id); if (p) { p.level = level; persist(); } }
+export function setProp(id, key, val) { const p = db.players.find(x => x.id === id); if (p) { p[key] = val; persist(); } }
 export function setDiff(id, diff) { const p = db.players.find(x => x.id === id); if (p) { p.diff = diff; persist(); } }
 
 export const getSettings = () => db.settings || {};
 export function setSettings(s) { db.settings = s; persist(); }
 
-export const gameKey = (game, level) => game === "math" ? `math:${level}` : game;
+export const gameKey = (game, level) => level ? `${game}:${level}` : game;
 
 export function addRecord(r) {
   const rec = { id: uid(), at: Date.now(), ...r };

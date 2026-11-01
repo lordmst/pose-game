@@ -1,17 +1,27 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=14";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=14";
-import * as R from "./records.js?v=14";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=14";
-import copy from "./games/copy.js?v=14";
-import math, { LEVELS } from "./games/math.js?v=14";
-import ice from "./games/ice.js?v=14";
-import star from "./games/star.js?v=14";
-import { DIFFS, diffOf } from "./difficulty.js?v=14";
-import { startDemo } from "./demo.js?v=14";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=15";
+import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=15";
+import * as R from "./records.js?v=15";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=15";
+import copy from "./games/copy.js?v=15";
+import math from "./games/math.js?v=15";
+import ice from "./games/ice.js?v=15";
+import star from "./games/star.js?v=15";
+import fruit from "./games/fruit.js?v=15";
+import mole from "./games/mole.js?v=15";
+import wall from "./games/wall.js?v=15";
+import rhythm from "./games/rhythm.js?v=15";
+import goalie from "./games/goalie.js?v=15";
+import word from "./games/word.js?v=15";
+import clockGame from "./games/clock.js?v=15";
+import { DIFFS, diffOf } from "./difficulty.js?v=15";
+import { startDemo } from "./demo.js?v=15";
 
-const GAMES = { copy, math, ice, star };
-const GAME_ORDER = ["copy", "math", "ice", "star"];
+const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, word, clock: clockGame };
+const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "goalie", "math", "word", "clock"];
+const CATS = [{ id: "move", label: "🏃 운동" }, { id: "learn", label: "📚 학습" }];
+const LEVEL_GAMES = GAME_ORDER.filter(id => GAMES[id].levels);   // 선수별로 단계를 고르는 게임 (수학 풍선, 글자 풍선)
+const firstLevel = g => Object.keys(g.levels)[0];
 const SLOT_COLORS = [P1C, P2C];
 const UI_DWELL = 1.0;                 // 손을 버튼 위에 이만큼 대고 있으면 선택
 const FEVER_SEC = 10;                 // 마지막 N초는 점수 2배
@@ -40,7 +50,7 @@ let sel = [];
 // 고정 선수(지울 수 없음)와 손님 자리. 손님 이름은 이번 접속 동안만 유지
 const FIXED = ["아빠", "엄마", "우영", "연제"];
 const MAX_GUESTS = 6;
-const guests = [{ id: "guest1", n: 1, name: "", level: "add10", diff: "normal" }, { id: "guest2", n: 2, name: "", level: "add10", diff: "normal" }];
+const guests = [{ id: "guest1", n: 1, name: "", level: "add10", wordLevel: "ko2", diff: "normal" }, { id: "guest2", n: 2, name: "", level: "add10", wordLevel: "ko2", diff: "normal" }];
 const guestOf = id => guests.find(g => g.id === id);
 const guestName = g => g.name.trim() || `손님 ${g.n}`;
 FIXED.forEach(n => R.addPlayer(n));
@@ -48,7 +58,7 @@ let slots = [], trackers = [], players = [], insts = [];
 let gameId = "copy";
 let timeLeft = 0, fever = false, readyT = 0, cdT = 0, goT = 0;
 let visSupported = false, loopOn = false, lastT = 0, uiCool = 0, assigner = null;
-let rankView = { game: "copy", level: "add10" }, rankBackTo = "setup", justSaved = new Set();
+let rankView = { game: "copy", level: null }, rankBackTo = "setup", justSaved = new Set();
 
 /* ---------- 설정 불러오기 ---------- */
 const saved = R.getSettings();
@@ -98,7 +108,8 @@ function allChoices() {
   return [...fixed, ...others, ...guests.map(g => ({ id: g.id, name: guestName(g), kind: "guest" }))];
 }
 function nameOf(id) { const g = guestOf(id); if (g) return guestName(g); return (R.players().find(p => p.id === id) || { name: "?" }).name; }
-function levelOf(id) { const g = guestOf(id); if (g) return g.level; return (R.players().find(p => p.id === id) || {}).level || "add10"; }
+// 선수별 게임 단계 (수학 풍선 level, 글자 풍선 wordLevel)
+function propOf(id, field, def) { const g = guestOf(id); const v = g ? g[field] : (R.players().find(p => p.id === id) || {})[field]; return v || def; }
 function diffIdOf(id) { const g = guestOf(id); if (g) return g.diff; return (R.players().find(p => p.id === id) || {}).diff || "normal"; }
 // 손님은 이름을 적었을 때만 그 이름으로 기록 저장
 function profileOf(id) { const g = guestOf(id); if (!g) return id; return g.name.trim() ? "guest:" + g.name.trim() : null; }
@@ -127,7 +138,7 @@ function renderChips() {
   if (guests.length < MAX_GUESTS) {
     const add = document.createElement("button");
     add.type = "button"; add.className = "chip addguest"; add.textContent = "+ 손님";
-    add.onclick = () => { const n = Math.max(...guests.map(g => g.n)) + 1; guests.push({ id: "guest" + n, n, name: "", level: "add10", diff: "normal" }); renderChips(); };
+    add.onclick = () => { const n = Math.max(...guests.map(g => g.n)) + 1; guests.push({ id: "guest" + n, n, name: "", level: "add10", wordLevel: "ko2", diff: "normal" }); renderChips(); };
     chips.appendChild(add);
   }
 }
@@ -141,17 +152,22 @@ function renderSlots() {
     const nameEl = g
       ? `<input class="gname" data-guest="${id}" maxlength="8" placeholder="손님 ${g.n} 이름 입력" value="${esc(g.name)}">`
       : `<b class="nm">${esc(nameOf(id))}</b>`;
-    row.innerHTML = `<span class="badge">${i + 1}P</span>${nameEl}<span class="pos">${pos}</span><span class="diffs"></span><label>수학 풍선 <select></select></label>` +
+    row.innerHTML = `<span class="badge">${i + 1}P</span>${nameEl}<span class="pos">${pos}</span><span class="diffs"></span><span class="lvls"></span>` +
       (g ? `<span class="gnote">이름을 적으면 기록이 저장돼요</span>` : "");
     if (g) {
       const inp = row.querySelector("input");
       inp.oninput = () => { g.name = inp.value.slice(0, 8); renderChips(); };
       inp.onkeydown = e => { if (e.key === "Enter") inp.blur(); };
     }
-    const s = row.querySelector("select");
-    for (const [k, v] of Object.entries(LEVELS)) s.add(new Option(v, k));
-    s.value = levelOf(id);
-    s.onchange = () => { if (g) g.level = s.value; else R.setLevel(id, s.value); };
+    const lv = row.querySelector(".lvls");
+    for (const gid of LEVEL_GAMES) {
+      const G = GAMES[gid], lab = document.createElement("label"), s = document.createElement("select");
+      lab.textContent = G.levelLabel + " ";
+      for (const [k, v] of Object.entries(G.levels)) s.add(new Option(v, k));
+      s.value = propOf(id, G.levelField, firstLevel(G));
+      s.onchange = () => { if (g) g[G.levelField] = s.value; else R.setProp(id, G.levelField, s.value); };
+      lab.appendChild(s); lv.appendChild(lab);
+    }
     // 난이도: 쉬움 · 보통 · 어려움
     const dbox = row.querySelector(".diffs");
     for (const d of Object.values(DIFFS)) {
@@ -176,7 +192,11 @@ $("#btnReset").onclick = () => { if (confirm("모든 순위 기록을 지울까�
 $("#btnStart").onclick = async () => {
   if (!sel.length) return;
   unlock(); goFullscreen();
-  slots = sel.map((id, i) => ({ id, profileId: profileOf(id), name: nameOf(id), level: levelOf(id), diff: diffIdOf(id), color: SLOT_COLORS[i] }));
+  slots = sel.map((id, i) => {
+    const s = { id, profileId: profileOf(id), name: nameOf(id), diff: diffIdOf(id), color: SLOT_COLORS[i] };
+    for (const gid of LEVEL_GAMES) { const G = GAMES[gid]; s[G.levelField] = propOf(id, G.levelField, firstLevel(G)); }
+    return s;
+  });
   setMsg("카메라를 켜는 중...");
   try { await cam.open(); }
   catch (e) { setMsg(cameraErrorText(e), true); return; }
@@ -199,8 +219,9 @@ function cameraErrorText(e) {
   if (e && e.name === "NotReadableError") return "다른 앱이 카메라를 쓰고 있습니다. 다른 앱을 닫고 다시 시도해 주세요.";
   return "카메라를 열 수 없습니다: " + ((e && e.message) || e);
 }
+function stopInsts() { insts.forEach(g => { try { if (g.stop) g.stop(); } catch (e) {} }); }   // 리듬 반주 등 게임이 켠 소리 끄기
 function backToSetup() {
-  stopLoop(); bgm.stop(); stopSpeak(); cam.close(); trackers = [];
+  stopInsts(); stopLoop(); bgm.stop(); stopSpeak(); cam.close(); trackers = [];
   document.body.classList.remove("live"); hideCursors();
   setState("setup"); renderSetup();
 }
@@ -223,7 +244,27 @@ function updateSelBadges() {
     b.textContent = `${i + 1}P ${slots[i].name} · ${on ? "인식됨" : "만세 해 주세요"}`;
   });
 }
-$$(".card[data-game]").forEach(c => { c.onclick = () => { unlock(); chooseGame(c.dataset.game); }; });
+// 게임 카드: 운동 / 학습 탭
+let catTab = "move";
+function renderCards() {
+  const tabs = $("#catTabs"); tabs.innerHTML = "";
+  for (const c of CATS) {
+    const n = GAME_ORDER.filter(id => GAMES[id].cat === c.id).length;
+    const b = document.createElement("button"); b.type = "button"; b.className = "tab" + (catTab === c.id ? " on" : ""); b.setAttribute("data-hand", "");
+    b.textContent = `${c.label} ${n}`; b.onclick = () => { catTab = c.id; renderCards(); }; tabs.appendChild(b);
+  }
+  const box = $("#cards"); box.innerHTML = "";
+  const ids = GAME_ORDER.filter(id => GAMES[id].cat === catTab);
+  box.classList.toggle("many", ids.length > 4);
+  for (const id of ids) {
+    const G = GAMES[id], b = document.createElement("button");
+    b.type = "button"; b.className = "card"; b.setAttribute("data-hand", ""); b.dataset.game = id; b.style.setProperty("--bg", G.bg);
+    b.innerHTML = `<span class="ico">${G.icon}</span><span class="lbl">${esc(G.title)}</span><span class="desc">${esc(G.desc)}</span>`;
+    b.onclick = () => { unlock(); chooseGame(id); };
+    box.appendChild(b);
+  }
+}
+renderCards();
 $("#btnRank").onclick = () => openRanking("select");
 $("#btnSetup").onclick = backToSetup;
 
@@ -279,6 +320,7 @@ function markDemo(id) {
 }
 function openDemo() {
   const g = GAMES[gameId];
+  if (demo) try { demo.stop(); } catch (e) {}
   clearFx(); stopSpeak();
   demo = startDemo(gameId, g, view); demoCap = "";
   $("#demoTitle").textContent = `${g.icon} ${g.title}`;
@@ -287,6 +329,7 @@ function openDemo() {
 }
 function finishDemo() {
   if (!demo) return;
+  try { demo.stop(); } catch (e) {}
   demo = null; markDemo(gameId); clearFx(); stopSpeak();
   goReady();
 }
@@ -303,20 +346,20 @@ function beginCountdown(sec = 3) {
   setupHud();
   cdT = sec; setState("countdown"); showCd(String(sec)); sfx.tick();
 }
-function beginPlay() { setState("play"); showCd("시작!"); goT = 0.7; sfx.go(); bgm.start(); }
+function beginPlay() { setState("play"); showCd("시작!"); goT = 0.7; sfx.go(); if (GAMES[gameId].music !== false) bgm.start(); }
 function showCd(txt) { const el = $("#cd"); el.hidden = false; el.textContent = txt; el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop"); }
 
 function makeEnv(i) {
   const p = players[i];
   return {
     slot: i, player: p, tracker: trackers[i], zone: zones[i], view, mode: slots.length,
-    level: p.level, diff: diffOf(p.diff), color: p.color, name: p.name,
+    level: GAMES[gameId].levelField ? p[GAMES[gameId].levelField] : null, diff: diffOf(p.diff), color: p.color, name: p.name,
     progress: () => 1 - Math.max(0, timeLeft) / GAMES[gameId].sec,
     fever: () => fever,
     award: (base, x, y) => award(i, base, x, y),
     miss: (x, y, label) => miss(i, x, y, label),
     penalty: (n, x, y, label) => penalty(i, n, x, y, label),
-    speak: text => speak(slots.length === 2 ? `${p.name}, ${text}` : text, slots.length === 2),
+    speak: (text, lang) => speak(slots.length === 2 && !lang ? `${p.name}, ${text}` : text, slots.length === 2, lang),
   };
 }
 function award(i, base, x, y) {
@@ -368,24 +411,25 @@ function renderHud() {
   $("#ttxt").textContent = Math.max(0, Math.ceil(timeLeft));
 }
 function bump(i) { const el = $(`#pb${i} .ps`); el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
-$("#btnQuit").onclick = () => { bgm.stop(); stopSpeak(); setState("select"); };
+$("#btnQuit").onclick = () => { stopInsts(); bgm.stop(); stopSpeak(); setState("select"); };
 
 /* ---------- 5. 결과 ---------- */
 function endGame() {
-  bgm.stop(); stopSpeak(); sfx.fanfare();
+  stopInsts(); bgm.stop(); stopSpeak(); sfx.fanfare();
   $("#hud").classList.remove("fever");
   justSaved = new Set();
   const results = players.map((p, i) => {
     const meters = Math.round(trackers[i].meters * 10) / 10;
     let rec = null;
     if (p.profileId) {
-      rec = R.addRecord({ key: R.gameKey(gameId, p.level), game: gameId, level: gameId === "math" ? p.level : null, playerId: p.profileId, name: p.name, score: p.score, mode: players.length, meters, diff: p.diff });
+      const lvl = GAMES[gameId].levelField ? p[GAMES[gameId].levelField] : null;
+      rec = R.addRecord({ key: R.gameKey(gameId, lvl), game: gameId, level: lvl, playerId: p.profileId, name: p.name, score: p.score, mode: players.length, meters, diff: p.diff });
       justSaved.add(rec.record.id);
     }
     return { p, meters, rec, extra: (insts[i].result && insts[i].result()) || "" };
   });
   renderResult(results);
-  rankView = { game: gameId, level: players[0].level };
+  rankView = { game: gameId, level: GAMES[gameId].levelField ? players[0][GAMES[gameId].levelField] : null };
   setState("result");
 }
 function renderResult(results) {
@@ -427,8 +471,13 @@ function tabBtn(text, on, fn) {
 function renderRanking() {
   const tabs = $("#rankTabs"); tabs.innerHTML = "";
   for (const id of GAME_ORDER) tabs.appendChild(tabBtn(`${GAMES[id].icon} ${GAMES[id].title}`, rankView.game === id, () => { rankView.game = id; renderRanking(); }));
-  const sub = $("#rankSub"); sub.innerHTML = ""; sub.hidden = rankView.game !== "math";
-  if (rankView.game === "math") for (const [k, v] of Object.entries(LEVELS)) sub.appendChild(tabBtn(v, rankView.level === k, () => { rankView.level = k; renderRanking(); }));
+  const sub = $("#rankSub"); sub.innerHTML = "";
+  const RG = GAMES[rankView.game];
+  sub.hidden = !RG.levels;
+  if (RG.levels) {
+    if (!RG.levels[rankView.level]) rankView.level = firstLevel(RG);
+    for (const [k, v] of Object.entries(RG.levels)) sub.appendChild(tabBtn(v, rankView.level === k, () => { rankView.level = k; renderRanking(); }));
+  } else rankView.level = null;
   const key = R.gameKey(rankView.game, rankView.level);
   const ol = $("#rankList"); ol.innerHTML = "";
   const list = R.ranking(key, 10);

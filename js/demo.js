@@ -1,8 +1,8 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=14";
-import { DIFFS } from "./difficulty.js?v=14";
-import { speak } from "./audio.js?v=14";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=15";
+import { DIFFS } from "./difficulty.js?v=15";
+import { speak } from "./audio.js?v=15";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
@@ -114,19 +114,22 @@ function ik(s, w, u, side, cx) {
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /* ---------- 게임별 시연 대본 ---------- */
-const SCRIPTS = {
-  math: {
-    dur: 22,
+// 정한 시각에 한 번만 실행
+const once = (S, T, t, fn) => { S.done = S.done || {}; if (T >= t && !S.done[t]) { S.done[t] = 1; fn(); } };
+// 풍선 게임 공용: 편 손으로 정답 → 주먹은 무시되는 장면 → 다시 정답
+function balloonScript(tx) {
+  return {
+    dur: 24,
     run(T, g, p, S, say) {
       const bal = g.balloons.filter(b => b.alive), ok = bal.find(b => b.val === g.answer), u = p.u;
       const reachOk = b => { p.tcx = b.x - 0.7 * u; if (Math.abs(p.cx - p.tcx) < 0.3 * u) { p.active = 1; p.reach(1, b.x, b.y, 0.6); } else { p.active = -1; p.rest(1, "down"); } };
       switch (S.step) {
-        case 0: say("수학 풍선! 문제의 정답이 적힌 풍선을 터뜨려요"); p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.rest(0); p.rest(1);
-          if (T > 2.4) S.step = 1; break;
-        case 1: say("고르는 손은 활짝 펴서 정답 풍선에 대요"); p.hands[1].shape = "open"; p.hands[0].shape = "closed"; p.active = 1; p.rest(0, "guard");
+        case 0: say(tx.intro); p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.rest(0); p.rest(1);
+          if (T > 2.6) S.step = 1; break;
+        case 1: say(tx.pick); p.hands[1].shape = "open"; p.hands[0].shape = "closed"; p.rest(0, "guard");
           if (ok) reachOk(ok);
           if (g.phase === "done") { S.step = 2; S.t0 = T; } break;
-        case 2: say("정답! 점수를 얻어요"); p.rest(1, "cheer"); p.rest(0, "cheer");
+        case 2: say(tx.good); p.rest(1, "cheer"); p.rest(0, "cheer");
           if (g.phase === "ask" && T - S.t0 > 1.4) { S.step = 3; S.t0 = T; } break;
         case 3: {   // 주먹 쥔 손은 풍선에 닿아도 무시되는 장면
           say("다른 손은 주먹! 주먹은 풍선에 닿아도 안 터져요"); p.active = -1; p.hands[1].shape = "open"; p.rest(1, "down");
@@ -134,12 +137,16 @@ const SCRIPTS = {
           if (wrong) { p.tcx = wrong.x + 0.7 * u; if (Math.abs(p.cx - p.tcx) < 0.3 * u) p.reach(0, wrong.x, wrong.y, 0.6); else p.rest(0, "down"); }
           if (T - S.t0 > 3.4) { S.step = 4; S.t0 = T; } break;
         }
-        case 4: say("편 손으로 정답을 골라요!"); p.active = 1; p.rest(0, "guard"); if (ok) reachOk(ok);
+        case 4: say(tx.again); p.rest(0, "guard"); if (ok) reachOk(ok);
           if (g.phase === "done") { S.step = 5; S.t0 = T; } break;
         case 5: say("이제 직접 해 봐요!"); p.rest(0, "cheer"); p.rest(1, "cheer"); if (T - S.t0 > 2) S.end = true; break;
       }
     },
-  },
+  };
+}
+const SCRIPTS = {
+  math: balloonScript({ intro: "수학 풍선! 문제의 정답이 적힌 풍선을 터뜨려요", pick: "고르는 손은 활짝 펴서 정답 풍선에 대요", good: "정답! 점수를 얻어요", again: "편 손으로 정답을 골라요!" }),
+  word: balloonScript({ intro: "글자 풍선! 그림 낱말의 글자를 앞에서부터 순서대로 터뜨려요", pick: "고르는 손은 활짝 펴서 첫 글자 풍선에 대요", good: "맞았어요! 다음 글자도 순서대로", again: "편 손으로 다음 글자를 골라요!" }),
   ice: {
     dur: 18,
     run(T, g, p, S, say) {
@@ -203,6 +210,109 @@ const SCRIPTS = {
       p.setPose(T - S.t0 > 0.9 ? id : "rest");
     },
   },
+  fruit: {
+    dur: 14,
+    run(T, g, p, S, say) {
+      const u = p.u; p.hands.forEach(h => { h.shape = "open"; }); p.active = -1;
+      once(S, T, 0, () => say("과일 자르기! 손을 빠르게 휘둘러 과일을 잘라요"));
+      once(S, T, 0.2, () => g.forceLaunch("fruit", 0.42)); once(S, T, 1.8, () => g.forceLaunch("fruit", 0.6));
+      once(S, T, 4.4, () => { say("나란히 오면 한 번에 휘둘러 둘 다! 보너스예요"); g.forceLaunch("fruit", 0.47); g.forceLaunch("fruit", 0.53); });
+      once(S, T, 8.4, () => { say("폭탄은 자르면 안 돼요!"); g.forceLaunch("bomb", 0.5); });
+      once(S, T, 11.8, () => say("이제 직접 해 봐요!"));
+      const bomb = g.items.find(i => i.kind === "bomb" && i.y < p.v.H);
+      if (bomb && Math.abs(bomb.x - p.cx) < 4 * u) {   // 폭탄이 가까우면 손 내리고 비킴
+        p.tcx = bomb.x + (p.cx <= bomb.x ? -4.5 * u : 4.5 * u); p.rest(0, "down", 0.4); p.rest(1, "down", 0.4); return;
+      }
+      const fr = g.items.filter(i => i.kind === "fruit" && i.y > p.v.H * 0.15 && i.y < p.v.H * 0.75).sort((a, b) => Math.abs(a.x - p.cx) - Math.abs(b.x - p.cx))[0];
+      if (!fr) { p.rest(0, "guard", 0.5); p.rest(1, "guard", 0.5); return; }
+      const k = fr.x < p.cx ? 0 : 1, h = p.hands[k];
+      p.tcx = fr.x + (k ? -0.9 : 0.9) * u;
+      const dx = fr.x - h.x, dy = fr.y - h.y, d = Math.hypot(dx, dy) || 1;
+      p.reach(k, fr.x + dx / d * u, fr.y + dy / d * u, 1.6);           // 과일을 지나가도록 휘두름
+      p.rest(1 - k, "guard", 0.5);
+    },
+  },
+  mole: {
+    dur: 14,
+    run(T, g, p, S, say) {
+      const u = p.u, W = p.v.W; p.hands.forEach(h => { h.shape = "closed"; }); p.active = -1; p.walk = 0.3; p.tcx = W / 2;
+      if (S.A == null) {   // 캐릭터 손이 닿는 윗줄 가운데 구멍 두 개
+        const idx = [...Array(g.holeCount).keys()].filter(i => g.holePos(i).y < p.v.H * 0.6).sort((a, b) => Math.abs(g.holePos(a).x - W / 2) - Math.abs(g.holePos(b).x - W / 2));
+        S.A = idx[0]; S.B = idx[1];
+      }
+      once(S, T, 0, () => say("두더지 잡기! 튀어나온 두더지를 주먹으로 콩!"));
+      once(S, T, 0.6, () => g.forcePop(S.A)); once(S, T, 3.0, () => g.forcePop(S.B));
+      once(S, T, 5.4, () => { g.forcePop(S.A, "gold"); say("금두더지는 3점!"); });
+      once(S, T, 8.2, () => { g.forcePop(S.B, "rabbit"); say("토끼는 치면 안 돼요!"); });
+      once(S, T, 11.6, () => say("이제 직접 해 봐요!"));
+      const t = g.targets.filter(x => x.kind !== "rabbit" && Math.abs(x.x - p.cx) < 2.6 * u).sort((a, b) => Math.abs(a.x - p.cx) - Math.abs(b.x - p.cx))[0];
+      if (!t) { p.rest(0, "guard", 0.3); p.rest(1, "guard", 0.3); S.ph = "back"; S.t0 = T; return; }
+      const k = t.x < p.cx ? 0 : 1, h = p.hands[k];
+      p.rest(1 - k, "guard", 0.3);
+      if (S.ph !== "hit") {          // 두더지 위로 천천히 손 올리기
+        p.reach(k, t.x, t.y - t.r * 2.4, 0.45);
+        if (T - S.t0 > 0.55) { S.ph = "hit"; S.t0 = T; }
+      } else {                       // 아래로 콩!
+        p.reach(k, t.x, t.y + t.r * 0.2, 0.9);
+        if (dist(h, t) < t.r * 0.4 || T - S.t0 > 0.5) { S.ph = "back"; S.t0 = T; }
+      }
+    },
+  },
+  wall: {
+    dur: 20,
+    run(T, g, p, S, say) {
+      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
+      const i = g.index, id = g.current, k = g.progressK;
+      if (i <= 1) { if (k >= 0.45) S.c1 = true; say(S.c1 ? "구멍 모양대로 자세를 잡으면 통과!" : "벽 통과! 다가오는 벽의 구멍 모양을 잘 봐요"); }
+      else if (i === 2) say("자세가 다르면 쿵! 부딪혀요");
+      else if (i === 3) say("다시 한 번! 모양을 맞춰요");
+      else { say("이제 직접 해 봐요!"); S.endAt = S.endAt || T + 1.2; if (T > S.endAt) S.end = true; }
+      p.setPose(i !== 2 && id && k > 0.4 ? id : "rest");                 // 두 번째 벽은 일부러 못 맞춤
+    },
+  },
+  rhythm: {
+    dur: 13,
+    run(T, g, p, S, say) {
+      p.hands.forEach(h => { h.shape = "open"; }); p.active = -1; p.tcx = p.v.W / 2;
+      if (T < 4.5) say("리듬 박자! 음표가 동그라미에 닿을 때 손을 쏙!"); else if (T < 8.5) say("박자에 딱 맞으면 '완벽!'"); else if (T < 11.3) say("손을 뺐다가 다시 넣어야 다음 음표를 쳐요"); else say("이제 직접 해 봐요!");
+      const L = g.lanes, now = g.now;
+      [0, 1].forEach(li => {
+        const ln = L[li], nx = g.notes.filter(n => !n.done && n.lane === li).sort((a, b) => a.time - b.time)[0];
+        if (nx && nx.time - now < 0.16 && nx.time - now > -0.1) p.reach(li, ln.x, ln.y, 2.2);
+        else p.reach(li, ln.x + (li ? 1 : -1) * ln.r * 0.5, ln.y + ln.r * 2.4, 1.2);
+      });
+    },
+  },
+  goalie: {
+    dur: 13,
+    run(T, g, p, S, say) {
+      const u = p.u, cx = p.v.W / 2, sy = p.shoulderY; p.hands.forEach(h => { h.shape = "open"; }); p.active = -1; p.tcx = cx;
+      once(S, T, 0, () => say("골키퍼! 날아오는 공을 손으로 막아요"));
+      once(S, T, 0.4, () => g.forceShot(cx - 2.0 * u, sy - 0.6 * u)); once(S, T, 3.0, () => g.forceShot(cx + 2.1 * u, sy + 0.9 * u));
+      once(S, T, 4.6, () => say("동그라미가 공이 올 자리예요. 미리 손을 대요!"));
+      once(S, T, 5.8, () => g.forceShot(cx - 1.3 * u, sy - 1.6 * u)); once(S, T, 8.4, () => g.forceShot(cx + 1.6 * u, sy + 0.2 * u));
+      once(S, T, 11.2, () => say("이제 직접 해 봐요!"));
+      const s = g.shots.filter(x => x.k > 0.25).sort((a, b) => b.k - a.k)[0];
+      if (!s) { p.rest(0, "guard", 0.6); p.rest(1, "guard", 0.6); return; }
+      const k = s.dx < cx ? 0 : 1;
+      p.reach(k, s.dx, s.dy, 1.0); p.rest(1 - k, "guard", 0.6);
+    },
+  },
+  clock: {
+    dur: 16,
+    run(T, g, p, S, say) {
+      const u = p.u; p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
+      const { H, M, h, m } = g.target, key = `${h}:${m}`;
+      if (key !== S.key) { if (S.key) S.solved = (S.solved || 0) + 1; S.key = key; S.t0 = T; }
+      if (S.solved >= 2) { say("이제 직접 해 봐요!"); p.rest(0, "cheer"); p.rest(1, "cheer"); S.endAt = S.endAt || T + 1.8; if (T > S.endAt) S.end = true; return; }
+      if (T < 3.4) say("시계 만들기! 몸이 시계의 가운데, 두 팔이 시곗바늘이에요");
+      else say(`${h}시${m ? " " + m + "분" : ""}: 짧은바늘은 ${m === 30 ? h + "와 " + (h % 12 + 1) + " 사이" : h}, 긴바늘은 ${m === 0 ? 12 : m / 5}`);
+      if (T < 3.4 || T - S.t0 < 1.2) { p.rest(0, "down", 0.8); p.rest(1, "down", 0.8); return; }
+      const dir = a => ({ x: Math.sin(a * Math.PI / 180), y: -Math.cos(a * Math.PI / 180) });
+      const [aL, aR] = Math.sin(H * Math.PI / 180) <= Math.sin(M * Math.PI / 180) ? [H, M] : [M, H];   // 왼쪽을 가리키는 바늘은 왼팔로
+      [[0, aL], [1, aR]].forEach(([k, a]) => { const s = p.pts[11 + k], d = dir(a); p.reach(k, s.x + d.x * 1.9 * u, s.y + d.y * 1.9 * u, 0.7); });
+    },
+  },
 };
 
 export function startDemo(id, game, view) {
@@ -223,6 +333,7 @@ export function startDemo(id, game, view) {
     get stats() { return stats; },     // 점검용
     get time() { return T; },
     get inst() { return inst; }, get puppet() { return p; },
+    stop() { if (inst.stop) inst.stop(); },
     get progress() { return Math.min(1, T / sc.dur); },
     get done() { return S.end || T >= sc.dur; },
     update(dt) {

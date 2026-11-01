@@ -193,3 +193,17 @@ body:not(.live) .overlay { background: var(--y); }
 .demo-bar { width: 60%; height: max(6px, 1vmin); background: rgba(0, 0, 0, .15); border-radius: 1vmin; overflow: hidden; }
 #demoProg { display: block; height: 100%; width: 0; background: var(--hot); }
 #scr-demo .pill { pointer-events: auto; }
+
+/* 게임 고르기: 운동 / 학습 탭, 카드가 많을 때 작게 */
+.cat-tabs .tab { font-size: clamp(16px, 3vmin, 28px); padding: 1vmin 3vmin; }
+.cards.many { max-width: min(96vw, 1100px); gap: 1.8vmin; }
+.cards.many .card { width: clamp(110px, min(20vw, 23vh), 240px); }
+.cards.many .card .ico { aspect-ratio: 1.45; font-size: clamp(40px, min(7vw, 9.5vh), 96px); }
+.cards.many .card .lbl { font-size: clamp(17px, min(2.5vw, 3.6vh), 30px); }
+.cards.many .card .desc { font-size: clamp(12px, min(1.4vw, 2vh), 16px); padding-bottom: 1.2vmin; }
+.slotrow .lvls { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-left: auto; }
+.slotrow .lvls label { display: flex; align-items: center; gap: 6px; font-size: 15px; }
+.slotrow .lvls select { padding: 5px 6px; border-radius: 10px; border: 2px solid var(--b); background: #fff; font-size: 15px; }
+.slotrow .lvls label { margin-left: 0; }
+.cards.many { display: grid; grid-template-columns: repeat(4, auto); justify-content: center; }
+@media (max-width: 640px) { .cards.many { grid-template-columns: repeat(3, auto); } }

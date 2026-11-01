@@ -1,9 +1,9 @@
 // 별 따기: 떨어지는 별을 손으로 잡기. 위쪽 금별은 3점, 폭탄은 피하기(-1점)
-import { burst, shake, outlinedText, starPath } from "../fx.js?v=14";
-import { sfx } from "../audio.js?v=14";
+import { burst, shake, outlinedText, starPath } from "../fx.js?v=15";
+import { sfx } from "../audio.js?v=15";
 
 export default {
-  id: "star", title: "별 따기", icon: "⭐", sec: 45, cursor: "✋",
+  id: "star", title: "별 따기", icon: "⭐", sec: 45, cursor: "✋", cat: "move", bg: "#55efc4", desc: "별 잡고 폭탄 피하기",
   how: "떨어지는 별을 손으로 잡아요. 높이 뜬 금별은 3점, 폭탄은 피하기!",
   create(env) {
     const z = env.zone, v = env.view, widthK = Math.max(0.6, z.w / v.U);
