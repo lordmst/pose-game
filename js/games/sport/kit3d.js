@@ -64,7 +64,9 @@ export function stage(env, opts = {}) {
     },
     // 선수 카메라 작은 화면: 내 몸이 어떻게 움직이는지 보이게 (구석에)
     pip(ctx, where = "br") {
-      const pw = Math.min(z.w * 0.24, v.U * 0.3), ph = pw * 1.25, m = v.U * 0.02;
+      const two = env.mode === 2;
+      if (two && where === "br" && env.slot === 0) where = "bl";      // 2인: 각자 바깥쪽 구석 (가운데 캐릭터를 가리지 않게)
+      const pw = Math.min(z.w * (two ? 0.2 : 0.24), v.U * 0.3), ph = pw * 1.25, m = v.U * 0.02;
       const x = where.includes("l") ? z.x0 + m : z.x1 - pw - m, y = where.includes("t") ? v.H * 0.12 : v.H - ph - v.U * 0.085;   // 아래 버튼(음성 크게 등)을 가리지 않게
       if (env.pip) env.pip(ctx, x, y, pw, ph, api.pipMark);   // pipMark: 몸을 옮길 자리(화면 x) 점선 표시
     },
@@ -216,3 +218,39 @@ export function racket(color = "#ff6b6b", paddle = false) {
   return g;
 }
 
+/* ---------- 몸으로 좌우 이동 (테니스·배구 등) ----------
+   선수 몸(어깨 가운데)의 좌우 위치 → 코트 위 x. 화면은 거울이라 내가 오른쪽으로 가면 캐릭터도 오른쪽
+   range: 캐릭터가 갈 수 있는 좌우 끝(m), span: 몸을 구역 가운데에서 너비의 이 비율만큼 옮기면 끝까지 감 */
+export function bodyMover(env, range, span = 0.33) {
+  const z = env.zone;
+  return {
+    bodyX() { const P = env.tracker.pts; return P && P[11].v && P[12].v ? (P[11].x + P[12].x) / 2 : null; },
+    toCourt(sx) { return Math.max(-1, Math.min(1, (((sx - z.x0) / z.w) - 0.5) / span)) * range; },
+    toScreenX(cx) { return z.x0 + z.w * (0.5 + cx / range * span); },
+    // 몸 위치를 따라 x를 부드럽게 옮김 (몸이 안 보이면 그대로)
+    follow(x, dt) { const b = this.bodyX(); return b == null ? x : x + (this.toCourt(b) - x) * Math.min(1, dt * 8); },
+  };
+}
+// 이동 안내: 발밑에서 가야 할 자리까지 바닥 점선 + 가야 할 자리에 점선 원 (도착하면 초록)
+export function moveGuide(scene, color = 0xffe14d) {
+  const dashMat = new THREE.MeshBasicMaterial({ color }), spotMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
+  const dashes = Array.from({ length: 30 }, () => { const d = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.09), dashMat); d.visible = false; scene.add(d); return d; });
+  const spot = new THREE.Group(); spot.visible = false; scene.add(spot);
+  for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2; const seg = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.76, 6, 1, a, Math.PI / 14 * 1.1), spotMat); seg.rotation.x = -Math.PI / 2; spot.add(seg); }
+  const feet = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), spotMat); feet.rotation.x = -Math.PI / 2; feet.position.y = 0.002; spot.add(feet);
+  return {
+    show(fromX, toX, zz, ok, t) {
+      spot.visible = true; spot.position.set(toX, 0.06, zz); spot.scale.setScalar(ok ? 1 : 1 + Math.sin(t * 9) * 0.06);
+      const c = ok ? 0x37d67a : color; spotMat.color.set(c); dashMat.color.set(c);
+      const n = ok ? 0 : Math.min(dashes.length, Math.floor(Math.abs(toX - fromX) / 0.4));
+      dashes.forEach((d, i) => { d.visible = i < n; if (i < n) d.position.set(fromX + Math.sign(toX - fromX) * (0.35 + i * 0.4), 0.07, zz); });
+    },
+    hide() { spot.visible = false; dashes.forEach(d => { d.visible = false; }); },
+  };
+}
+// 방향·거리 글자: "◀◀ 왼쪽으로" / "오른쪽으로 ▶▶▶" / 도착하면 okText
+export function moveText(d, ok, okText = "좋아요! 그 자리", per = 1.2) {
+  if (ok) return okText;
+  const n = Math.min(4, Math.max(1, Math.round(Math.abs(d) / per)));
+  return d > 0 ? `오른쪽으로 ${"▶".repeat(n)}` : `${"◀".repeat(n)} 왼쪽으로`;
+}

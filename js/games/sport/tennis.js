@@ -1,8 +1,8 @@
 // 테니스 (스포츠 리조트처럼 3D 복식): 내 캐릭터 뒤에서 코트를 봄. 상대가 친 공이 바운드되어 오면 타이밍 맞춰 팔을 휘둘러 받아치기
 // 캐릭터는 공 쪽으로 저절로 움직임. 휘두른 순간이 좋을수록 세고 코너로 감. 상대가 못 받으면 내 점수. 점수는 테니스식(15·30·40·게임)
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=31";
-import { sfx } from "../../audio.js?v=31";
-import { stage, THREE, ground, box, ball as sphere, mesh, mat, tree, cloud, playerAvatar, randomAvatar, racket } from "./kit3d.js?v=31";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=32";
+import { sfx } from "../../audio.js?v=32";
+import { stage, THREE, ground, box, ball as sphere, mesh, mat, tree, cloud, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=32";
 
 const FLIGHT = 1.7;    // 상대 → 나 공 시간(초, 보통)
 const BACK = 1.2;      // 나 → 상대
@@ -63,20 +63,10 @@ export default {
     const shadow = mesh(new THREE.CircleGeometry(0.16, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 }), { cast: false }); shadow.rotation.x = -Math.PI / 2; scene.add(shadow);
     const ring = mesh(new THREE.RingGeometry(0.45, 0.6, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }), { cast: false }); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; scene.add(ring);
     tball.visible = shadow.visible = ring.visible = false;
-    // 이동 안내: 발밑에서 가야 할 자리까지 점선, 가야 할 자리에 점선 원
-    const dashMat = new THREE.MeshBasicMaterial({ color: 0xffe14d }), spotMat = new THREE.MeshBasicMaterial({ color: 0xffe14d, side: THREE.DoubleSide });
-    const dashes = Array.from({ length: 30 }, () => { const d = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.09), dashMat); d.visible = false; scene.add(d); return d; });
-    const spot = new THREE.Group(); scene.add(spot); spot.visible = false;
-    for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2; const seg = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.76, 6, 1, a, Math.PI / 14 * 1.1), spotMat); seg.rotation.x = -Math.PI / 2; spot.add(seg); }
-    const feet = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), spotMat); feet.rotation.x = -Math.PI / 2; feet.position.y = 0.002; spot.add(feet);
-    spot.position.y = 0.06;
-    // 선수 몸(어깨 가운데)의 좌우 위치 → 코트 위 x. 화면은 거울이라 내가 오른쪽으로 가면 캐릭터도 오른쪽
-    const bodyX = () => { const P = env.tracker.pts; return P && P[11].v && P[12].v ? (P[11].x + P[12].x) / 2 : null; };
-    const toCourt = sx => clamp((((sx - z.x0) / z.w) - 0.5) / SPAN, -1, 1) * COURT_X;
-    const toScreenX = cx => z.x0 + z.w * (0.5 + cx / COURT_X * SPAN);
+    const mover = bodyMover(env, COURT_X, SPAN), guideM = moveGuide(scene), toScreenX = x => mover.toScreenX(x);
     const near = () => B && B.dir === 1 && Math.abs(myX - B.spot) <= REACH * D.reach;
 
-    let B = null, wait = 1.4, sMe = 0, sCpu = 0, gMe = 0, gCpu = 0, returns = 0, winners = 0, t = 0, swingT = 9, swingDir = 1, oppSwing = [9, 9], myX = 0, cheer = 0;
+    let B = null, wait = 1.4, sMe = 0, sCpu = 0, gMe = 0, gCpu = 0, returns = 0, winners = 0, t = 0, swingT = 9, swingDir = 1, oppSwing = [9, 9], myX = 0, cheer = 0, camX = 0;
     // 상대가 공을 보냄
     function send(from) {
       // 공은 지금 자리에서 조금~많이 떨어진 곳으로: 몸을 옮겨야 칠 수 있음
@@ -117,19 +107,10 @@ export default {
         const hands = env.tracker.hands, fast = hands.find(h => h.vis && h.bodySpeed >= SWING * D.punch);
         if (fast && swingT > 0.5) { swingT = 0; swingDir = fast.vx > 0 ? 1 : -1; }
         // 내 캐릭터: 내 몸이 좌우로 움직인 만큼 따라 움직임
-        const bx = bodyX();
-        if (bx != null) myX += (toCourt(bx) - myX) * Math.min(1, dt * 8);
-        me.position.x = myX;
+        myX = mover.follow(myX, dt); me.position.x = myX;
         // 이동 안내 표시
         const guide = B && B.dir === 1 && !B.swung;
-        spot.visible = guide;
-        if (guide) {
-          const ok = near(), z0 = L + 0.5;
-          spot.position.set(B.spot, 0.06, z0); spot.scale.setScalar(ok ? 1 : 1 + Math.sin(t * 9) * 0.06);
-          spotMat.color.set(ok ? 0x37d67a : 0xffe14d); dashMat.color.set(ok ? 0x37d67a : 0xffe14d);
-          const from = myX, to = B.spot, len = Math.abs(to - from), n = ok ? 0 : Math.min(dashes.length, Math.floor(len / 0.4));
-          dashes.forEach((d, i) => { d.visible = i < n; if (i < n) d.position.set(from + Math.sign(to - from) * (0.35 + i * 0.4), 0.07, z0); });
-        } else dashes.forEach(d => { d.visible = false; });
+        if (guide) guideM.show(myX, B.spot, L + 0.5, near(), t); else guideM.hide();
         st.pipMark = guide ? { x: toScreenX(B.spot), ok: near(), label: "여기로" } : null;
         if (!swingPose(me, swingT, swingDir)) { me.body.rotation.y *= 0.8; me.mimic(env.tracker.pts, true); }
         opp.forEach((o, i) => { if (!swingPose(o, oppSwing[i], 1)) { o.body.rotation.y *= 0.8; o.arm(1, 0.5, 0.6, 0.6); o.arm(0, 0.3, 0.3, 0.5); } o.idle(t + i); });
@@ -174,7 +155,9 @@ export default {
       },
       draw(ctx) {
         // 카메라: 내 캐릭터 뒤 위쪽에서 상대 코트를 봄
-        camera.position.set(myX * 0.55, 4.3, L + 7.2); camera.lookAt(myX * 0.35, 0, 4);   // 발밑 점선 자리까지 보이게
+        const cx = B && B.dir === 1 && !B.swung ? (myX + B.spot) / 2 : myX;   // 내 캐릭터와 가야 할 자리가 함께 보이게
+        camX += (cx - camX) * 0.12;
+        camera.position.set(camX * 0.75, 4.3, L + 7.2); camera.lookAt(camX * 0.55, 0, 4);   // 발밑 점선 자리까지 보이게
         st.draw(ctx);
         const U = v.U;
         // 점수판 (위쪽 가운데)
@@ -184,8 +167,7 @@ export default {
         if (B && B.dir === 1 && !B.swung) {
           // 어디로 얼마나: 가야 할 자리 위에 방향·거리 표시
           const d = B.spot - myX, ok = near();
-          const steps = Math.max(1, Math.round(Math.abs(d) / 1.2));
-          const txt = ok ? "좋아요! 그 자리" : d > 0 ? `오른쪽으로 ${"▶".repeat(Math.min(4, steps))}` : `${"◀".repeat(Math.min(4, steps))} 왼쪽으로`;
+          const txt = moveText(d, ok);
           outlinedText(ctx, txt, z.cx, v.H * 0.25, Math.min(U * 0.05, z.w / 12), "#fff", ok ? "#2f8f2f" : "#c07800", 4);   // 점수판 바로 아래
           if (ok && B.t / B.T > 0.45) outlinedText(ctx, "휘둘러요!", z.cx, v.H * 0.86, U * 0.05, "#fff", "#2f8f2f", 4);
         }
