@@ -1,29 +1,33 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=17";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes } from "./audio.js?v=17";
-import * as R from "./records.js?v=17";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=17";
-import copy from "./games/copy.js?v=17";
-import math from "./games/math.js?v=17";
-import ice from "./games/ice.js?v=17";
-import star from "./games/star.js?v=17";
-import fruit from "./games/fruit.js?v=17";
-import mole from "./games/mole.js?v=17";
-import wall from "./games/wall.js?v=17";
-import rhythm from "./games/rhythm.js?v=17";
-import goalie from "./games/goalie.js?v=17";
-import word from "./games/word.js?v=17";
-import clockGame from "./games/clock.js?v=17";
-import run from "./games/run.js?v=17";
-import simon from "./games/simon.js?v=17";
-import { DIFFS, diffOf } from "./difficulty.js?v=17";
-import { startDemo } from "./demo.js?v=17";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=18";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=18";
+import * as R from "./records.js?v=18";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=18";
+import copy from "./games/copy.js?v=18";
+import math from "./games/math.js?v=18";
+import ice from "./games/ice.js?v=18";
+import star from "./games/star.js?v=18";
+import fruit from "./games/fruit.js?v=18";
+import mole from "./games/mole.js?v=18";
+import wall from "./games/wall.js?v=18";
+import rhythm from "./games/rhythm.js?v=18";
+import goalie from "./games/goalie.js?v=18";
+import word from "./games/word.js?v=18";
+import clockGame from "./games/clock.js?v=18";
+import run from "./games/run.js?v=18";
+import simon from "./games/simon.js?v=18";
+import { DIFFS, diffOf } from "./difficulty.js?v=18";
+import { startDemo } from "./demo.js?v=18";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, word, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "goalie", "run", "math", "word", "clock", "simon"];
 const CATS = [{ id: "move", label: "🏃 운동" }, { id: "learn", label: "📚 학습" }];
 const LEVEL_GAMES = GAME_ORDER.filter(id => GAMES[id].levels);   // 선수별로 단계를 고르는 게임 (수학 풍선, 글자 풍선)
-const firstLevel = g => Object.keys(g.levels)[0];
+const firstLevel = g => Object.keys(subOf(g))[0];
+// 순위 세부 탭: 선수별 단계(수학·글자) 또는 노래(리듬)
+const subOf = g => g.levels || (g.songs ? Object.fromEntries(g.songs.map(s => [s.id, `${s.icon} ${s.title}`])) : null);
+// 기록을 나누는 기준: 선수별 단계, 또는 이번 판 노래
+const recLevel = p => GAMES[gameId].levelField ? p[GAMES[gameId].levelField] : GAMES[gameId].songs ? curSong : null;
 const SLOT_COLORS = [P1C, P2C];
 const UI_DWELL = 1.0;                 // 손을 버튼 위에 이만큼 대고 있으면 선택
 const FEVER_SEC = 10;                 // 마지막 N초는 점수 2배
@@ -67,6 +71,7 @@ const saved = R.getSettings();
 for (const k of ["sfx", "bgm", "tts"]) if (typeof saved[k] === "boolean") settings[k] = saved[k];
 if (saved.vol) for (const k of ["sfx", "bgm", "voice"]) if (typeof saved.vol[k] === "number") settings.vol[k] = saved.vol[k];
 sel = (saved.lastSel || []).filter(id => !id.startsWith("guest") && R.players().some(p => p.id === id)).slice(0, 2);
+let songSel = saved.lastSong || "basic", curSong = "basic";   // 리듬 박자 노래 ("random" = 아무거나)
 function saveSettings() { R.setSettings({ ...R.getSettings(), sfx: settings.sfx, bgm: settings.bgm, tts: settings.tts, vol: { ...settings.vol }, lastSel: sel }); }
 
 /* ---------- 화면 크기 ---------- */
@@ -315,10 +320,32 @@ function goReady() {
     : "화면 가운데에 서서 두 손을 머리 위로 올려(만세) 주세요";
   readyT = 0; readyCache = ""; tutOk = slots.map(() => false); tutT = slots.map(() => 0); readyStartT = lastT;
   $("#tutorial").hidden = !g.oneHand;
+  renderSongPick();
   setState("ready");
 }
+// 노래 고르기 (리듬 박자): 손바닥으로 1초 대거나 화면을 눌러 고름. 고르면 앞부분을 들려줌
+function renderSongPick() {
+  const g = GAMES[gameId], box = $("#songPick");
+  box.hidden = !g.songs; box.innerHTML = "";
+  if (!g.songs) return;
+  const list = [...g.songs, { id: "random", icon: "🎲", title: "아무거나" }];
+  if (!list.some(s => s.id === songSel)) songSel = "basic";
+  for (const S of list) {
+    const b = document.createElement("button"); b.type = "button"; b.setAttribute("data-hand", "");
+    b.className = "tab song" + (songSel === S.id ? " on" : "");
+    b.innerHTML = `${S.icon} ${esc(S.title)}${S.bpm ? `<small>${S.bpm >= 120 ? "빠름" : S.bpm >= 100 ? "보통" : "느림"}</small>` : ""}`;
+    b.onclick = () => {
+      unlock(); songSel = S.id; R.setSettings({ ...R.getSettings(), lastSong: songSel });
+      readyStartT = lastT; readyT = 0;            // 고른 뒤 바로 시작되지 않게 잠깐 기다림
+      sfx.select(); if (S.id !== "random") rhythmAudio.preview(S.id); else rhythmAudio.stopPreview();
+      renderSongPick();
+    };
+    box.appendChild(b);
+  }
+}
 let tutOk = [], tutT = [], readyStartT = 0;
-const TUT_HOLD = 0.8;      // 연습: 들어 올린 손을 펴서 이만큼 유지하면 통과
+const TUT_HOLD = 0.8;
+const SONG_PICK_SEC = 4;   // 노래 고르는 게임은 자리 잡기 화면을 최소 4초 보여줌(자동 시작 기준)      // 연습: 들어 올린 손을 펴서 이만큼 유지하면 통과
 const TUT_MIN_SHOW = 3;    // 한 손 게임은 안내를 읽을 수 있게 자리 잡기 화면을 최소 3초 보여줌(자동 시작 기준)
 // 손 모양을 3초 넘게 한 번도 판정 못 했으면(너무 멀거나 손 인식 모델이 없으면) 튜토리얼 확인을 건너뜀
 const shapeUnavailable = () => !handShape || (lastT - shapeSeenAt > 3 && lastT - readyStartT > 3);
@@ -332,7 +359,7 @@ function renderReadyStat(ok) {
 }
 $("#btnGo").onclick = () => beginCountdown(3);
 $("#btnGo5").onclick = () => beginCountdown(5);      // 태블릿을 누른 사람이 자리로 갈 시간
-$("#btnReadyBack").onclick = () => setState("select");
+$("#btnReadyBack").onclick = () => { rhythmAudio.stopPreview(); setState("select"); };
 $("#btnDemo").onclick = () => openDemo();
 
 /* ---------- 게임 설명 시연 (선수별로 게임마다 처음 한 번, 이후엔 '설명 보기') ---------- */
@@ -370,6 +397,8 @@ $("#btnSkip").onclick = finishDemo;
 /* ---------- 4. 카운트다운 · 게임 ---------- */
 function beginCountdown(sec = 3) {
   const g = GAMES[gameId];
+  rhythmAudio.stopPreview();
+  if (g.songs) curSong = songSel === "random" ? g.songs[Math.floor(Math.random() * g.songs.length)].id : songSel;
   clearFx(); fever = false; timeLeft = g.sec;
   $("#hud").classList.remove("fever"); bgm.setTempo(1);
   players = slots.map(s => ({ ...s, score: 0, combo: 0, maxCombo: 0, misses: 0 }));
@@ -385,7 +414,7 @@ function makeEnv(i) {
   const p = players[i];
   return {
     slot: i, player: p, tracker: trackers[i], zone: zones[i], view, mode: slots.length,
-    level: GAMES[gameId].levelField ? p[GAMES[gameId].levelField] : null, diff: diffOf(p.diff), color: p.color, name: p.name,
+    level: GAMES[gameId].levelField ? p[GAMES[gameId].levelField] : null, song: curSong, diff: diffOf(p.diff), color: p.color, name: p.name,
     progress: () => 1 - Math.max(0, timeLeft) / GAMES[gameId].sec,
     fever: () => fever,
     award: (base, x, y) => award(i, base, x, y),
@@ -454,14 +483,14 @@ function endGame() {
     const meters = Math.round(trackers[i].meters * 10) / 10;
     let rec = null;
     if (p.profileId) {
-      const lvl = GAMES[gameId].levelField ? p[GAMES[gameId].levelField] : null;
+      const lvl = recLevel(p);
       rec = R.addRecord({ key: R.gameKey(gameId, lvl), game: gameId, level: lvl, playerId: p.profileId, name: p.name, score: p.score, mode: players.length, meters, diff: p.diff });
       justSaved.add(rec.record.id);
     }
     return { p, meters, rec, extra: (insts[i].result && insts[i].result()) || "" };
   });
   renderResult(results);
-  rankView = { game: gameId, level: GAMES[gameId].levelField ? players[0][GAMES[gameId].levelField] : null };
+  rankView = { game: gameId, level: recLevel(players[0]) };
   setState("result");
 }
 function renderResult(results) {
@@ -505,10 +534,11 @@ function renderRanking() {
   for (const id of GAME_ORDER) tabs.appendChild(tabBtn(`${GAMES[id].icon} ${GAMES[id].title}`, rankView.game === id, () => { rankView.game = id; renderRanking(); }));
   const sub = $("#rankSub"); sub.innerHTML = "";
   const RG = GAMES[rankView.game];
-  sub.hidden = !RG.levels;
-  if (RG.levels) {
-    if (!RG.levels[rankView.level]) rankView.level = firstLevel(RG);
-    for (const [k, v] of Object.entries(RG.levels)) sub.appendChild(tabBtn(v, rankView.level === k, () => { rankView.level = k; renderRanking(); }));
+  const SUB = subOf(RG);
+  sub.hidden = !SUB;
+  if (SUB) {
+    if (!SUB[rankView.level]) rankView.level = firstLevel(RG);
+    for (const [k, v] of Object.entries(SUB)) sub.appendChild(tabBtn(v, rankView.level === k, () => { rankView.level = k; renderRanking(); }));
   } else rankView.level = null;
   const key = R.gameKey(rankView.game, rankView.level);
   const ol = $("#rankList"); ol.innerHTML = "";
@@ -570,7 +600,7 @@ function tick(dt) {
       if (tutT[i] >= TUT_HOLD && !tutOk[i]) { tutOk[i] = true; sfx.catch(3); }
     });
     const ok = trackers.map((tr, i) => tr.present && tr.fullBody && (!g.oneHand || tutOk[i] || noShape));
-    const minShown = !g.oneHand || lastT - readyStartT >= TUT_MIN_SHOW;
+    const minShown = (!g.oneHand || lastT - readyStartT >= TUT_MIN_SHOW) && (!g.songs || lastT - readyStartT >= SONG_PICK_SEC);
     if (g.oneHand) {
       const note = noShape ? "멀어서 손 모양이 잘 안 보여요. 이럴 땐 허리 위로 들어 올린 손으로 골라요" : "";
       const el = $("#tutNote"); if (el.textContent !== note) el.textContent = note;

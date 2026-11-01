@@ -116,27 +116,97 @@ export function stopSpeak() { try { speechSynthesis.cancel(); } catch (e) {} }
    리듬 게임은 소리와 음표가 정확히 맞아야 하므로 오디오 시계를 기준으로 함.
    두 선수가 같은 반주·같은 음표 패턴을 쓰도록 시작 시각과 씨앗값을 공유 */
 export const clock = () => (ac ? ac.currentTime : performance.now() / 1000);
-let rTimer = null, rStart = 0, rSpb = 0.6, rStep = 0, rNext = 0, rGain = null, rSeed = 1;
-const R_BASS = [36, 0, 36, 0, 43, 0, 41, 0];
-const R_LEAD = [72, 0, 76, 0, 79, 0, 76, 74, 72, 0, 76, 0, 79, 81, 79, 0];
+let rTimer = null, rStart = 0, rSpb = 0.6, rStep = 0, rNext = 0, rGain = null, rSeed = 1, rSong = null, pGain = null;
+
+/* ---------- 리듬 게임 곡 ----------
+   멜로디 표기: "음이름옥타브:길이" (길이는 반 박 단위, 2 = 한 박), "-:2"는 쉼표
+   bass: 반 마디(두 박)마다 바뀌는 근음, 공백으로 구분
+   곡은 저작권이 끝난 옛 노래(작은별·런던 다리·환희의 송가·징글벨)와 직접 만든 곡만 씀 */
+const NOTE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const noteNum = n => { const m = n.match(/^([A-G])(#|b)?(\d)$/); return 12 * (+m[3] + 1) + NOTE[m[1]] + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0); };
+const mel = str => str.replace(/\|/g, " ").trim().split(/\s+/).map(t => { const [n, l] = t.split(":"); return [n === "-" ? 0 : noteNum(n), +l || 2]; });
+const INTRO = 16;    // 반 박 16개(2마디): 1마디는 북만, 2마디는 베이스까지, 그다음 멜로디
+export const SONGS = [
+  { id: "basic", title: "신나는 박자", icon: "🥁", bpm: 100, drums: "pop", bassStyle: "beat", lead: ["square", 0.035],
+    bass: "C C G F C F G G",
+    melody: mel("C5:2 E5:2 G5:2 E5:1 D5:1 C5:2 E5:2 G5:1 A5:1 G5:2 | A5:2 G5:2 E5:2 G5:1 A5:1 G5:2 E5:2 D5:2 -:2") },
+  { id: "twinkle", title: "반짝반짝 작은별", icon: "⭐", bpm: 92, drums: "soft", bassStyle: "half", lead: ["triangle", 0.13],
+    bass: "C C F C F C G C C F C G C F C G C C F C F C G C",
+    melody: mel(`C5:2 C5:2 G5:2 G5:2 A5:2 A5:2 G5:4 F5:2 F5:2 E5:2 E5:2 D5:2 D5:2 C5:4
+                 G5:2 G5:2 F5:2 F5:2 E5:2 E5:2 D5:4 G5:2 G5:2 F5:2 F5:2 E5:2 E5:2 D5:4
+                 C5:2 C5:2 G5:2 G5:2 A5:2 A5:2 G5:4 F5:2 F5:2 E5:2 E5:2 D5:2 D5:2 C5:4`) },
+  { id: "london", title: "런던 다리", icon: "🌉", bpm: 104, drums: "pop", bassStyle: "beat", lead: ["square", 0.045],
+    bass: "C C C C G G C C C C C C G G C C",
+    melody: mel(`G5:2 A5:2 G5:2 F5:2 E5:2 F5:2 G5:4 D5:2 E5:2 F5:4 E5:2 F5:2 G5:4
+                 G5:2 A5:2 G5:2 F5:2 E5:2 F5:2 G5:4 D5:4 G5:4 E5:2 C5:6`) },
+  { id: "ode", title: "환희의 송가", icon: "🎻", bpm: 112, drums: "pop", bassStyle: "beat", lead: ["triangle", 0.12],
+    bass: "C C G G C C G G C C G G C C G C G G G C G C C G C C G G C C G C",
+    melody: mel(`E5:2 E5:2 F5:2 G5:2 G5:2 F5:2 E5:2 D5:2 C5:2 C5:2 D5:2 E5:2 E5:3 D5:1 D5:4
+                 E5:2 E5:2 F5:2 G5:2 G5:2 F5:2 E5:2 D5:2 C5:2 C5:2 D5:2 E5:2 D5:3 C5:1 C5:4
+                 D5:2 D5:2 E5:2 C5:2 D5:2 E5:1 F5:1 E5:2 C5:2 D5:2 E5:1 F5:1 E5:2 D5:2 C5:2 D5:2 G4:4
+                 E5:2 E5:2 F5:2 G5:2 G5:2 F5:2 E5:2 D5:2 C5:2 C5:2 D5:2 E5:2 D5:3 C5:1 C5:4`) },
+  { id: "jingle", title: "징글벨", icon: "🔔", bpm: 120, drums: "jingle", bassStyle: "beat", lead: ["square", 0.045],
+    bass: "C C C C C C C C F F C C D D G G C C C C C C C C F F C C G G C C",
+    melody: mel(`E5:2 E5:2 E5:4 E5:2 E5:2 E5:4 E5:2 G5:2 C5:3 D5:1 E5:8
+                 F5:2 F5:2 F5:3 F5:1 F5:2 E5:2 E5:2 E5:1 E5:1 E5:2 D5:2 D5:2 E5:2 D5:4 G5:4
+                 E5:2 E5:2 E5:4 E5:2 E5:2 E5:4 E5:2 G5:2 C5:3 D5:1 E5:8
+                 F5:2 F5:2 F5:2 F5:2 F5:2 E5:2 E5:2 E5:1 E5:1 G5:2 G5:2 F5:2 D5:2 C5:8`) },
+  { id: "dance", title: "댄스 파티", icon: "🪩", bpm: 128, drums: "dance", bassStyle: "pump", lead: ["square", 0.04],
+    bass: "A A C C A A G G F F C C F F E E",
+    melody: mel(`A4:1 C5:1 E5:2 D5:1 C5:1 D5:2 E5:2 G5:1 E5:1 D5:2 C5:2 A4:1 C5:1 E5:2 D5:1 C5:1 A4:2 G4:2 A4:2 C5:2 -:2
+                 A5:2 G5:1 E5:1 G5:2 A5:2 G5:1 E5:1 D5:2 E5:2 -:2 C5:1 D5:1 E5:2 G5:1 E5:1 D5:2 C5:2 B4:2 A4:4`) },
+];
+// 곡을 반 박 단위 칸으로 펼침: 칸마다 [음, 길이] 또는 null
+for (const S of SONGS) {
+  S.steps = []; for (const [n, l] of S.melody) { S.steps.push(n ? [n, l] : null); for (let i = 1; i < l; i++) S.steps.push(null); }
+  S.roots = S.bass.split(/\s+/).map(c => 36 + NOTE[c]);
+}
+export const songOf = id => SONGS.find(s => s.id === id) || SONGS[0];
+// 반 박 번호 j에 시작하는 멜로디 음 (게임의 음표 위치로 씀)
+export function onsetAt(song, j) { const k = j - INTRO; return k < 0 ? null : song.steps[k % song.steps.length]; }
+
+function drum(style, i, t, half, dest) {
+  const beat = i % 2 === 0, inBar = (i / 2) % 4, back = beat && (inBar === 1 || inBar === 3);
+  const kick = v => tone(140, t, 0.12, { vol: v, slide: 0.35, dest });
+  const hat = (v, d = 0.03) => noise(t, d, { vol: v, type: "highpass", freq: 7000, dest });
+  if (style === "soft") {
+    if (beat && (inBar === 0 || inBar === 2)) kick(0.35);
+    if (back) tone(900, t, 0.04, { type: "triangle", vol: 0.08, dest });
+    if (beat) hat(0.05);
+  } else if (style === "dance") {
+    if (beat) kick(0.6);
+    if (back) { noise(t, 0.14, { vol: 0.32, freq: 1500, q: 0.8, dest }); noise(t + 0.012, 0.12, { vol: 0.25, freq: 1300, q: 0.8, dest }); }
+    if (!beat) hat(0.13, 0.09);
+  } else {
+    if (beat) kick(0.5);
+    if (back) noise(t, 0.12, { vol: 0.35, freq: 1800, q: 0.7, dest });
+    hat(0.08);
+    if (style === "jingle") noise(t, 0.09, { vol: 0.12, type: "highpass", freq: 5500, dest });   // 방울 소리
+  }
+}
 function rSchedule() {
-  if (!ac || !rGain) return;
-  const half = rSpb / 2;
+  if (!ac || !rGain || !rSong) return;
+  const half = rSpb / 2, S = rSong;
   while (rNext < ac.currentTime + 0.12) {
-    const i = rStep, beat = i % 2 === 0, inBar = (i / 2) % 4;
-    if (beat) tone(140, rNext, 0.12, { vol: 0.5, slide: 0.35, dest: rGain });                       // 쿵 (매 박)
-    if (beat && (inBar === 1 || inBar === 3)) noise(rNext, 0.12, { vol: 0.35, freq: 1800, q: 0.7, dest: rGain });   // 짝 (2·4박)
-    noise(rNext, 0.03, { vol: 0.08, type: "highpass", freq: 7000, dest: rGain });                   // 칙 (반 박)
-    const b = R_BASS[i % 8]; if (b && i >= 8) tone(midi(b), rNext, half * 1.6, { type: "triangle", vol: 0.18, dest: rGain });
-    const l = R_LEAD[i % 16]; if (l && i >= 16) tone(midi(l), rNext, half * 0.9, { type: "square", vol: 0.035, dest: rGain });
+    const i = rStep, k = i - INTRO;
+    drum(S.drums, i, rNext, half, rGain);
+    if (k >= -8) {   // 베이스는 멜로디 한 마디 전부터
+      const root = S.roots[Math.floor((((k % S.steps.length) + S.steps.length) % S.steps.length) / 4) % S.roots.length];
+      if (S.bassStyle === "pump") tone(midi(root + (i % 2 ? 12 : 0)), rNext, half * 0.8, { type: "triangle", vol: 0.17, dest: rGain });
+      else if (S.bassStyle === "half") { if (i % 4 === 0) tone(midi(root), rNext, half * 3.2, { type: "triangle", vol: 0.17, dest: rGain }); }
+      else if (i % 2 === 0) tone(midi(root), rNext, half * 1.6, { type: "triangle", vol: 0.18, dest: rGain });
+    }
+    const o = onsetAt(S, i);
+    if (o) tone(midi(o[0]), rNext, half * o[1] * 0.92, { type: S.lead[0], vol: S.lead[1], dest: rGain });
     rNext += half; rStep++;
   }
 }
 export const rhythm = {
   // 이미 시작했으면 같은 시작 시각을 돌려줌 (2인 공유)
-  start(bpm) {
+  start(songId) {
     if (rTimer || rStart > 0) return rStart;
-    rSpb = 60 / bpm; rSeed = 1 + Math.floor(Math.random() * 1e6);
+    rhythm.stopPreview();
+    rSong = songOf(songId); rSpb = 60 / rSong.bpm; rSeed = 1 + Math.floor(Math.random() * 1e6);
     rStart = clock() + 0.15;
     if (ac && (settings.bgm || settings.sfx)) {
       rGain = ac.createGain(); rGain.gain.value = 0.6; rGain.connect(settings.bgm ? musicBus : sfxBus);   // 배경음악을 꺼도 박자는 들리게
@@ -149,6 +219,26 @@ export const rhythm = {
     if (rGain && ac) { const g = rGain; g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.05); setTimeout(() => { try { g.disconnect(); } catch (e) {} }, 400); }
     rGain = null;
   },
+  // 곡 고를 때 앞부분 미리 듣기 (약 3초)
+  preview(songId) {
+    rhythm.stopPreview();
+    if (!ac || !(settings.bgm || settings.sfx)) return;
+    const S = songOf(songId), half = 30 / S.bpm;
+    pGain = ac.createGain(); pGain.gain.value = 0.6; pGain.connect(settings.bgm ? musicBus : sfxBus);
+    let t = ac.currentTime + 0.05, k = 0;
+    while (k * half < 3.2 && k < S.steps.length) {
+      const o = S.steps[k];
+      if (o) tone(midi(o[0]), t + k * half, half * o[1] * 0.92, { type: S.lead[0], vol: S.lead[1], dest: pGain });
+      if (k % 4 === 0) tone(midi(S.roots[Math.floor(k / 4) % S.roots.length]), t + k * half, half * 1.6, { type: "triangle", vol: 0.16, dest: pGain });
+      k++;
+    }
+  },
+  stopPreview() {
+    if (pGain && ac) { const g = pGain; g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.03); setTimeout(() => { try { g.disconnect(); } catch (e) {} }, 300); }
+    pGain = null;
+  },
   get spb() { return rSpb; },
   get seed() { return rSeed; },
+  get song() { return rSong; },
+  INTRO,
 };

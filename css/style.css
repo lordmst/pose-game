@@ -220,3 +220,7 @@ body:not(.live) .overlay { background: var(--y); }
 .cards.lots .card { width: clamp(100px, min(17vw, 21vh), 210px); }
 .cards.lots .card .ico { font-size: clamp(36px, min(6vw, 8.5vh), 84px); }
 @media (max-width: 640px) { .cards.lots { grid-template-columns: repeat(3, auto); } }
+/* 리듬 박자 노래 고르기 */
+.songpick { margin: .4vmin 0; }
+.songpick .tab { display: inline-flex; align-items: center; gap: .6vmin; font-size: clamp(14px, 2.3vmin, 21px); padding: .8vmin 1.8vmin; }
+.songpick .tab small { font-size: .72em; opacity: .65; }

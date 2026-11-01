@@ -1,6 +1,6 @@
 // 두더지 잡기: 구멍에서 튀어나온 두더지를 주먹으로 콩! 금두더지 3점, 토끼는 치면 안 됨
-import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=17";
-import { sfx } from "../audio.js?v=17";
+import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=18";
+import { sfx } from "../audio.js?v=18";
 
 const PUNCH = 3.0;          // 타격 인정 속도 (얼음 깨기와 같음)
 const POP = 0.15;           // 올라오고 내려가는 시간
