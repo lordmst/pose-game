@@ -170,3 +170,4 @@ body:not(.live) .overlay { background: var(--y); }
 .dbtn.on.hard { background: #e0306a; color: #fff; }
 #rankList .df { font-size: .7em; padding: 1px 8px; border-radius: 10px; color: #fff; background: #f0a020; white-space: nowrap; }
 #rankList .df.easy { background: #37c26a; } #rankList .df.hard { background: #e0306a; }
+.cur.idle { opacity: .28; box-shadow: none; transform-origin: center; }

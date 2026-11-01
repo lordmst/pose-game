@@ -1,13 +1,13 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=11";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=11";
-import * as R from "./records.js?v=11";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=11";
-import copy from "./games/copy.js?v=11";
-import math, { LEVELS } from "./games/math.js?v=11";
-import ice from "./games/ice.js?v=11";
-import star from "./games/star.js?v=11";
-import { DIFFS, diffOf } from "./difficulty.js?v=11";
+import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=12";
+import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=12";
+import * as R from "./records.js?v=12";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=12";
+import copy from "./games/copy.js?v=12";
+import math, { LEVELS } from "./games/math.js?v=12";
+import ice from "./games/ice.js?v=12";
+import star from "./games/star.js?v=12";
+import { DIFFS, diffOf } from "./difficulty.js?v=12";
 
 const GAMES = { copy, math, ice, star };
 const GAME_ORDER = ["copy", "math", "ice", "star"];
@@ -539,11 +539,16 @@ function buildCursors() {
   }));
 }
 function drawCursors() {
-  const emoji = (state === "play" || state === "countdown") ? (GAMES[gameId].cursor || "") : "";
+  const inGame = state === "play" || state === "countdown";
+  // 하나만 고르는 게임(수학 풍선)과 메뉴에서는 '쓰는 손'만 진하게, 나머지 손은 흐리게
+  const oneHand = !inGame || !!GAMES[gameId].oneHand;
   for (const c of curEls) {
     const tr = trackers[c.i], h = tr && tr.hands[c.k];
     if (!h || !h.vis) { if (c.d.style.display !== "none") c.d.style.display = "none"; continue; }
     if (c.d.style.display !== "flex") c.d.style.display = "flex";
+    const idle = oneHand && tr.active !== c.k;
+    c.d.classList.toggle("idle", idle);
+    const emoji = inGame && !idle ? (GAMES[gameId].cursor || "") : "";
     if (c.d._e !== emoji) { c.d.textContent = emoji; c.d._e = emoji; }
     const k = 1 + Math.min(0.7, h.bodySpeed / 12);
     c.d.style.transform = `translate(${h.x.toFixed(1)}px, ${h.y.toFixed(1)}px) scale(${k.toFixed(2)})`;
@@ -556,7 +561,7 @@ function handUI(dt) {
   const els = $$(".screen.on [data-hand]");
   if (!els.length) return;
   const hs = [];
-  trackers.forEach(tr => tr.hands.forEach(h => { if (h.vis) hs.push(h); }));
+  trackers.forEach(tr => { if (tr.activeHand) hs.push(tr.activeHand); });   // 메뉴도 들어 올린 한 손으로만 선택
   for (const el of els) {
     if (el.disabled || el.offsetParent === null) continue;
     const r = el.getBoundingClientRect();

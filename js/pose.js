@@ -85,9 +85,9 @@ export class Hand {
 }
 
 export class Tracker {
-  constructor(slot) { this.slot = slot; this.pts = null; this.present = false; this.lostT = 9; this.hands = [new Hand(), new Hand()]; this.scale = 0; this.fullBody = false; this.lowerT = 0; this.meters = 0; }
+  constructor(slot) { this.slot = slot; this.pts = null; this.present = false; this.lostT = 9; this.hands = [new Hand(), new Hand()]; this.active = -1; this.scale = 0; this.fullBody = false; this.lowerT = 0; this.meters = 0; }
   update(raw, cam, dt, t, visSupported) {
-    if (!raw) { this.present = false; this.lostT += dt; this.pts = null; this.fullBody = false; this.hands.forEach(h => h.lose()); this.lowerT = Math.max(0, this.lowerT - dt); return; }
+    if (!raw) { this.present = false; this.lostT += dt; this.pts = null; this.fullBody = false; this.hands.forEach(h => h.lose()); this.active = -1; this.lowerT = Math.max(0, this.lowerT - dt); return; }
     this.present = true; this.lostT = 0;
     const pts = raw.map(p => {
       const s = cam.toScreen(p);
@@ -108,7 +108,21 @@ export class Tracker {
       h.update(x, y, t, dt, this.scale);
       if (h.bodySpeed > 0.6) this.meters += h.bodySpeed * dt * 0.4;   // 어깨너비 ≈ 0.4m 가정
     });
+    this.pickActive(pts);
   }
+  /* 하나만 고르는 게임·메뉴에서 쓸 '한 손'
+     - 허리보다 위로 올린 손만 후보 (내려 둔 손이 풍선·버튼에 닿아도 무시)
+     - 둘 다 올렸으면 더 높이 든 손. 손이 자주 바뀌지 않도록, 다른 손이 확실히(어깨너비 1/3 이상) 더 높을 때만 교체 */
+  pickActive(pts) {
+    const hipY = pts[23].v && pts[24].v ? (pts[23].y + pts[24].y) / 2 : (pts[11].y + pts[12].y) / 2 + this.scale * 1.4;
+    const up = this.hands.map(h => h.vis && h.y < hipY);
+    const cur = this.active;
+    if (cur >= 0 && up[cur]) {
+      const o = 1 - cur;
+      if (up[o] && this.hands[o].y < this.hands[cur].y - this.scale * 0.35) this.active = o;
+    } else this.active = up[0] && up[1] ? (this.hands[0].y <= this.hands[1].y ? 0 : 1) : up[0] ? 0 : up[1] ? 1 : -1;
+  }
+  get activeHand() { return this.active >= 0 ? this.hands[this.active] : null; }
   get lowerSeen() { return this.lowerT > 0; }
 }
 

@@ -1,12 +1,13 @@
 // 수학 풍선: 정답이 적힌 풍선을 손으로 터뜨리기 (손을 잠깐 대거나 빠르게 치면 터짐)
-import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=11";
-import { sfx } from "../audio.js?v=11";
+import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=12";
+import { sfx } from "../audio.js?v=12";
 
 export const LEVELS = { add10: "덧셈 (10까지)", addsub20: "덧셈·뺄셈 (20까지)", mul: "구구단", mix: "사칙 혼합" };
 const OPS = { add10: ["+"], addsub20: ["+", "-"], mul: ["×"], mix: ["+", "-", "×", "÷"] };
 const READ = { "+": "더하기", "-": "빼기", "×": "곱하기", "÷": "나누기" };
 const COLORS = ["#ff5a5a", "#4da6ff", "#ffc233", "#a07bff", "#37d67a", "#ff8fd0"];
-const DWELL = 0.18;
+const DWELL = 0.25;          // 손을 풍선에 이만큼 대고 있으면 터짐
+const AFTER_POP_LOCK = 0.6; // 하나 터진 뒤 다른 풍선이 바로 이어서 터지지 않게 잠깐 멈춤
 const RISE_START = 0.12;   // 시작할 때 상승 속도 (초당 화면 높이 비율) — 화면 아래→위 약 8초
 const RISE_END = 0.2;      // 끝날 무렵 속도 — 약 5초
 const josa = n => [0, 1, 3, 6, 7, 8].includes(n % 10) ? "은" : "는";   // 영·일·삼·육·칠·팔 → 은
@@ -43,7 +44,7 @@ function drawBalloon(ctx, x, y, r, color, val, alpha, hover) {
 }
 
 export default {
-  id: "math", title: "수학 풍선", icon: "🎈", sec: 60, cursor: "👊",
+  id: "math", title: "수학 풍선", icon: "🎈", sec: 60, cursor: "👊", oneHand: true,
   how: "문제의 정답이 적힌 풍선을 손으로 터뜨려요. 틀린 풍선은 조심!",
   create(env) {
     const z = env.zone, v = env.view;
@@ -57,7 +58,8 @@ export default {
       phase = "ask"; boxOk = false; lock = 0.4; needSpeak = true;
     }
     function pop(b) {
-      b.alive = false; sfx.pop();
+      b.alive = false; sfx.pop(); lock = AFTER_POP_LOCK;
+      balloons.forEach(o => { o.dwell = 0; });
       const r = R();
       if (b.val === prob.ans) {
         phase = "done"; doneT = 0.85; boxOk = true; correct++;
@@ -77,17 +79,24 @@ export default {
         if (needSpeak) { env.speak(prob.speech); needSpeak = false; }
         if (phase === "done") { doneT -= dt; if (doneT <= 0) next(); }
         const rise = (RISE_START + (RISE_END - RISE_START) * env.progress()) * env.diff.speed * (env.fever() ? 1.15 : 1), r = R();
-        const hands = env.tracker.hands.filter(h => h.vis);
         for (const b of balloons) {
           if (!b.alive) continue;
           b.fy -= rise * dt; if (b.fy < -0.15) b.fy = 1.1;
           b.x = z.x0 + b.fx * z.w + Math.sin(tAll * 1.6 + b.ph) * r * 0.3; b.y = b.fy * v.H;
-          if (phase !== "ask") { b.hover = false; continue; }
-          const near = lock === 0 ? hands.filter(h => Math.hypot(h.x - b.x, h.y - b.y) < r * 1.1) : [];
-          b.hover = near.length > 0;
-          b.dwell = b.hover ? b.dwell + dt : Math.max(0, b.dwell - dt * 2);
-          if (b.dwell >= DWELL || near.some(h => h.bodySpeed > 4)) pop(b);
         }
+        // 들어 올린 '한 손'만 쓰고, 그 손에 가장 가까운 풍선 하나만 선택 대상
+        const h = phase === "ask" && lock === 0 ? env.tracker.activeHand : null;
+        let target = null, bd = Infinity;
+        if (h) for (const b of balloons) {
+          if (!b.alive) continue;
+          const d = Math.hypot(h.x - b.x, h.y - b.y);
+          if (d < r * 1.1 && d < bd) { target = b; bd = d; }
+        }
+        for (const b of balloons) {
+          b.hover = b === target;
+          b.dwell = b.hover ? b.dwell + dt : Math.max(0, b.dwell - dt * 2);
+        }
+        if (target && (target.dwell >= DWELL || h.bodySpeed > 4)) pop(target);   // 프레임마다 최대 하나만 터짐
       },
       draw(ctx) {
         const r = R();
@@ -104,6 +113,7 @@ export default {
         outlinedText(ctx, txt, bx.x + jx + bx.w / 2, bx.y + bx.h * 0.54, Math.min(bx.h * 0.62, bx.w / (txt.length * 0.55)), "#222", "#fff", 2);
       },
       result: () => `정답 ${correct} · 틀림 ${wrong}`,
+      get balloons() { return balloons; },   // 점검용
     };
   },
 };
