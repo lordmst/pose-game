@@ -1,13 +1,13 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=12";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=12";
-import * as R from "./records.js?v=12";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=12";
-import copy from "./games/copy.js?v=12";
-import math, { LEVELS } from "./games/math.js?v=12";
-import ice from "./games/ice.js?v=12";
-import star from "./games/star.js?v=12";
-import { DIFFS, diffOf } from "./difficulty.js?v=12";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=13";
+import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=13";
+import * as R from "./records.js?v=13";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=13";
+import copy from "./games/copy.js?v=13";
+import math, { LEVELS } from "./games/math.js?v=13";
+import ice from "./games/ice.js?v=13";
+import star from "./games/star.js?v=13";
+import { DIFFS, diffOf } from "./difficulty.js?v=13";
 
 const GAMES = { copy, math, ice, star };
 const GAME_ORDER = ["copy", "math", "ice", "star"];
@@ -30,6 +30,9 @@ const detectorP = createDetector()
   .then(d => { detector = d; if (state === "setup") setMsg("준비 완료! 선수를 고르고 시작하세요"); return d; })
   .catch(e => { setMsg("게임 엔진을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.", true); console.error(e); throw e; });
 detectorP.catch(() => {});
+// 손 모양(편 손/주먹) 판정기: 몸 인식이 준비된 뒤 이어서 불러옴. 실패해도 게임은 '들어 올린 손' 방식으로 동작
+let handShape = null, shapeErr = 0, shapeSeenAt = -99, shapeRR = 0;
+detectorP.then(() => createHandShape()).then(h => { handShape = h; }).catch(e => console.warn("손 모양 인식 불러오기 실패", e));
 
 let state = "setup";
 let sel = [];
@@ -232,12 +235,19 @@ function chooseGame(id) {
   $("#readyHint").textContent = slots.length === 2
     ? "1P는 화면 왼쪽, 2P는 오른쪽에 서서 두 손을 머리 위로 올려(만세) 주세요"
     : "화면 가운데에 서서 두 손을 머리 위로 올려(만세) 주세요";
-  readyT = 0; readyCache = "";
+  readyT = 0; readyCache = ""; tutOk = slots.map(() => false); tutT = slots.map(() => 0); readyStartT = lastT;
+  $("#tutorial").hidden = !g.oneHand;
   setState("ready");
 }
+let tutOk = [], tutT = [], readyStartT = 0;
+const TUT_HOLD = 0.8;      // 연습: 들어 올린 손을 펴서 이만큼 유지하면 통과
+const TUT_MIN_SHOW = 3;    // 한 손 게임은 안내를 읽을 수 있게 자리 잡기 화면을 최소 3초 보여줌(자동 시작 기준)
+// 손 모양을 3초 넘게 한 번도 판정 못 했으면(너무 멀거나 손 인식 모델이 없으면) 튜토리얼 확인을 건너뜀
+const shapeUnavailable = () => !handShape || (lastT - shapeSeenAt > 3 && lastT - readyStartT > 3);
 function renderReadyStat(ok) {
   const html = slots.map((s, i) => {
-    const msg = ok[i] ? "준비 완료" : !trackers[i].present ? "만세 해 주세요" : "몸이 다 안 보여요";
+    const tr = trackers[i];
+    const msg = ok[i] ? (GAMES[gameId].oneHand && tutOk[i] ? "✋ 확인! 준비 완료" : "준비 완료") : !tr.present ? "만세 해 주세요" : !tr.fullBody ? "몸이 다 안 보여요" : "손을 들어 손바닥을 펴 보세요";
     return `<span class="rs${ok[i] ? " ok" : ""}" style="--c:${s.color}">${i + 1}P ${esc(s.name)} · ${msg}</span>`;
   }).join("");
   if (html !== readyCache) { $("#readyStat").innerHTML = html; readyCache = html; }
@@ -422,6 +432,7 @@ function frame(now) {
     sfx.select(); popup(L.x, L.y, `${i + 1}P ${slots[i].name} 인식!`, { size: view.U * 0.06, color: "#fff", stroke: slots[i].color, life: 1.2 });
   }
   if (state === "select") updateSelBadges();
+  updateShapes(t);
   tick(dt);
   updateFx(dt);
   draw(t);
@@ -430,10 +441,21 @@ function frame(now) {
 }
 function tick(dt) {
   if (state === "ready") {
-    const ok = trackers.map(tr => tr.present && tr.fullBody);
+    const g = GAMES[gameId], noShape = shapeUnavailable();
+    if (g.oneHand) trackers.forEach((tr, i) => {
+      const a = tr.present && tr.activeHand;
+      tutT[i] = a && a.shape === "open" ? tutT[i] + dt : Math.max(0, tutT[i] - dt);
+      if (tutT[i] >= TUT_HOLD && !tutOk[i]) { tutOk[i] = true; sfx.catch(3); }
+    });
+    const ok = trackers.map((tr, i) => tr.present && tr.fullBody && (!g.oneHand || tutOk[i] || noShape));
+    const minShown = !g.oneHand || lastT - readyStartT >= TUT_MIN_SHOW;
+    if (g.oneHand) {
+      const note = noShape ? "멀어서 손 모양이 잘 안 보여요. 이럴 땐 허리 위로 들어 올린 손으로 골라요" : "";
+      const el = $("#tutNote"); if (el.textContent !== note) el.textContent = note;
+    }
     readyT = ok.every(Boolean) ? readyT + dt : 0;
     renderReadyStat(ok);
-    if (readyT >= 1.2) beginCountdown(3);
+    if (readyT >= 1.2 && minShown) beginCountdown(3);
   } else if (state === "countdown") {
     const before = Math.ceil(cdT); cdT -= dt; const after = Math.ceil(cdT);
     if (after !== before && after > 0) { showCd(String(after)); sfx.tick(); }
@@ -529,6 +551,26 @@ function drawLost() {
   });
 }
 
+/* ---------- 손 모양 판정 (한 프레임에 손 하나씩 돌아가며) ---------- */
+function updateShapes(t) {
+  trackers.forEach(tr => tr.hands.forEach(h => h.ageShape(t)));
+  if (!handShape || !cam.ready || state === "setup") return;
+  if ((state === "play" || state === "countdown") && !GAMES[gameId].oneHand) return;   // 두 손 다 쓰는 게임은 판정 안 함(속도 확보)
+  const list = [];
+  trackers.forEach(tr => { if (tr.raw) [0, 1].forEach(k => { if (tr.hands[k].vis) list.push([tr, k]); }); });
+  if (!list.length) return;
+  const [tr, k] = list[shapeRR++ % list.length];
+  const w = tr.raw[k ? 16 : 15], e = tr.raw[k ? 14 : 13], vw = cam.vw, vh = cam.vh;
+  const wx = w.x * vw, wy = w.y * vh, ex = e.x * vw, ey = e.y * vh;
+  const fore = Math.hypot(wx - ex, wy - ey);
+  const size = Math.max(64, Math.min(vh * 0.7, fore * 1.8));        // 손 크기 ≈ 아래팔 길이 → 넉넉히 잘라냄
+  try {
+    const r = handShape.check(video, wx + (wx - ex) * 0.45, wy + (wy - ey) * 0.45, size, k);
+    tr.hands[k].setShape(r, t);
+    if (r === "open" || r === "closed") shapeSeenAt = t;
+  } catch (err) { console.warn(err); if (++shapeErr > 20) handShape = null; }
+}
+
 /* ---------- 손 커서 · 손으로 버튼 누르기 ---------- */
 const curEls = [];
 function buildCursors() {
@@ -548,7 +590,9 @@ function drawCursors() {
     if (c.d.style.display !== "flex") c.d.style.display = "flex";
     const idle = oneHand && tr.active !== c.k;
     c.d.classList.toggle("idle", idle);
-    const emoji = inGame && !idle ? (GAMES[gameId].cursor || "") : "";
+    // 하나만 고를 때: 편 손 ✋, 주먹 ✊ 으로 손 모양을 그대로 보여줌
+    const shapeIcon = h.shape === "open" ? "✋" : h.shape === "closed" ? "✊" : "";
+    const emoji = oneHand ? (shapeIcon || (inGame && !idle ? GAMES[gameId].cursor || "" : "")) : (GAMES[gameId].cursor || "");
     if (c.d._e !== emoji) { c.d.textContent = emoji; c.d._e = emoji; }
     const k = 1 + Math.min(0.7, h.bodySpeed / 12);
     c.d.style.transform = `translate(${h.x.toFixed(1)}px, ${h.y.toFixed(1)}px) scale(${k.toFixed(2)})`;

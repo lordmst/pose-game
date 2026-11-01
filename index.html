@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=12">
+<link rel="stylesheet" href="css/style.css?v=13">
 </head>
 <body>
 <video id="video" playsinline muted autoplay></video>
@@ -48,7 +48,7 @@
 <section id="scr-select" class="screen overlay">
   <div class="sel">
     <h2>어떤 게임을 할까요?</h2>
-    <p class="sub">선수는 먼저 만세로 인식! 그다음 손을 카드 위에 1초 대거나 화면을 눌러요</p>
+    <p class="sub">선수는 먼저 만세로 인식! 그다음 손바닥을 펴서 카드 위에 1초 대거나 화면을 눌러요</p>
     <div class="cards">
       <button class="card" type="button" data-hand data-game="copy" style="--bg:#b39ddb"><span class="ico">🙆</span><span class="lbl">따라쟁이</span><span class="desc">그림 자세 따라하기</span></button>
       <button class="card" type="button" data-hand data-game="math" style="--bg:#ff7675"><span class="ico">🎈</span><span class="lbl">수학 풍선</span><span class="desc">정답 풍선 터뜨리기</span></button>
@@ -70,6 +70,14 @@
     <p id="readyHow" class="how"></p>
     <p id="readyHint"></p>
     <p class="opnote">만세를 한 사람만 선수로 인식해요. 태블릿을 누른 사람은 "5초 후 시작"을 누르고 자리로 가서 만세하세요</p>
+    <div id="tutorial" class="tutorial" hidden>
+      <div class="tut-row">
+        <div class="tut-card ok"><span class="tut-ico">✋</span><b>고르는 손</b><small>활짝 펴기</small></div>
+        <div class="tut-card no"><span class="tut-ico">✊</span><b>다른 손</b><small>주먹 쥐기</small></div>
+      </div>
+      <p class="tut-try">연습: 한 손을 들어 카메라를 향해 손바닥을 활짝 펴 보세요</p>
+      <p id="tutNote" class="tut-note"></p>
+    </div>
     <div id="readyStat"></div>
     <div class="row">
       <button class="pill" type="button" data-hand id="btnGo">바로 시작</button>
@@ -128,6 +136,6 @@
     setTimeout(function () { if (!window.__appReady) show("게임을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요."); }, 8000);
   })();
 </script>
-<script type="module" src="js/main.js?v=12"></script>
+<script type="module" src="js/main.js?v=13"></script>
 </body>
 </html>

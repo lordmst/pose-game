@@ -6,10 +6,15 @@ const VIS = 0.5;                 // 이 값보다 신뢰도가 낮은 관절은 
 // ?sim=1 / ?sim=2 : 카메라 없이 가상 선수로 동작 (개발·점검용)
 export const SIM = (() => { const m = location.search.match(/sim=(\d)/); return m ? Math.min(2, +m[1]) : 0; })();
 
+const HAND_MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+let mpP = null;     // 몸 인식·손 인식이 같은 엔진을 함께 씀
+function loadMP() {
+  return mpP || (mpP = import(MP_URL).then(async mod => ({ mod, vision: await mod.FilesetResolver.forVisionTasks(MP_URL + "/wasm") })));
+}
+
 export async function createDetector() {
   if (SIM) return new SimDetector(SIM);
-  const { PoseLandmarker, FilesetResolver } = await import(MP_URL);
-  const vision = await FilesetResolver.forVisionTasks(MP_URL + "/wasm");
+  const { mod: { PoseLandmarker }, vision } = await loadMP();
   const opts = delegate => ({
     baseOptions: { modelAssetPath: MODEL, delegate },
     runningMode: "VIDEO", numPoses: 3,      // 선수 2명 + 조작하는 사람 1명까지 감지해야 선수를 놓치지 않음
@@ -26,6 +31,42 @@ export async function createDetector() {
       return lm.detectForVideo(video, ts).landmarks || [];
     },
   };
+}
+
+/* ---------- 손 모양(편 손 / 주먹) 판정 ----------
+   몸 인식 모델은 손가락을 모르므로 손 전용 모델을 씀.
+   2~3m 떨어지면 손이 작게 찍히므로, 손목 주변만 잘라 크게 확대한 뒤 판정 */
+const CROP = 224;
+export async function createHandShape() {
+  if (SIM) return /palm=1/.test(location.search) ? { check: (v, x, y, s, k) => (k === 0 ? "open" : "closed") } : null;   // 점검용: 왼손 펴고 오른손 주먹
+  const { mod: { HandLandmarker }, vision } = await loadMP();
+  const opts = delegate => ({ baseOptions: { modelAssetPath: HAND_MODEL, delegate }, runningMode: "IMAGE", numHands: 1, minHandDetectionConfidence: 0.35, minHandPresenceConfidence: 0.35 });
+  let hl;
+  try { hl = await HandLandmarker.createFromOptions(vision, opts("GPU")); }
+  catch (e) { hl = await HandLandmarker.createFromOptions(vision, opts("CPU")); }
+  const cv = document.createElement("canvas"); cv.width = cv.height = CROP;
+  const c2 = cv.getContext("2d");
+  return {
+    // (cx, cy, size): 영상 픽셀 기준 손 중심과 잘라낼 크기 → "open" | "closed" | "unsure"(애매) | null(손을 못 찾음)
+    check(video, cx, cy, size) {
+      const vw = video.videoWidth, vh = video.videoHeight;
+      let sx = cx - size / 2, sy = cy - size / 2, sw = size, sh = size;
+      const x0 = Math.max(0, sx), y0 = Math.max(0, sy), x1 = Math.min(vw, sx + sw), y1 = Math.min(vh, sy + sh);
+      if (x1 - x0 < 8 || y1 - y0 < 8) return null;
+      const k = CROP / size;
+      c2.fillStyle = "#000"; c2.fillRect(0, 0, CROP, CROP);
+      c2.drawImage(video, x0, y0, x1 - x0, y1 - y0, (x0 - sx) * k, (y0 - sy) * k, (x1 - x0) * k, (y1 - y0) * k);
+      const r = hl.detect(cv), L = r.landmarks && r.landmarks[0];
+      return L ? classifyHand(L) : null;
+    },
+  };
+}
+// 손가락 끝이 둘째 마디보다 손목에서 충분히 멀면 '펴짐'. 4손가락 중 3개 이상 펴짐 → 편 손, 1개 이하 → 주먹
+export function classifyHand(L) {
+  const d = (a, b) => Math.hypot(L[a].x - L[b].x, L[a].y - L[b].y);
+  let ext = 0;
+  for (const [pip, tip] of [[6, 8], [10, 12], [14, 16], [18, 20]]) if (d(tip, 0) > d(pip, 0) * 1.12) ext++;
+  return ext >= 3 ? "open" : ext <= 1 ? "closed" : "unsure";
 }
 
 export class Camera {
@@ -69,8 +110,11 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
 export class Hand {
-  constructor() { this.vis = false; this.x = 0; this.y = 0; this.vx = 0; this.vy = 0; this.speed = 0; this.bodySpeed = 0; this.hist = []; }
-  lose() { this.vis = false; this.hist.length = 0; this.speed = 0; this.bodySpeed = 0; this.vx = this.vy = 0; }
+  constructor() { this.vis = false; this.x = 0; this.y = 0; this.vx = 0; this.vy = 0; this.speed = 0; this.bodySpeed = 0; this.hist = []; this.shape = "unknown"; this.shapeT = -9; }
+  lose() { this.vis = false; this.hist.length = 0; this.speed = 0; this.bodySpeed = 0; this.vx = this.vy = 0; this.shape = "unknown"; }
+  // 손 모양 판정 결과 반영. 0.8초 넘게 판정을 못 하면 '모름'
+  setShape(r, t) { if (r === "open" || r === "closed") { this.shape = r; this.shapeT = t; } else if (r === "unsure") this.shapeT = t; }
+  ageShape(t) { if (t - this.shapeT > 0.8) this.shape = "unknown"; }
   update(x, y, t, dt, scale) {
     if (!this.vis) { this.x = x; this.y = y; this.hist.length = 0; }
     else { const a = 1 - Math.exp(-dt / 0.035); this.x += (x - this.x) * a; this.y += (y - this.y) * a; }   // 떨림 완화
@@ -87,8 +131,8 @@ export class Hand {
 export class Tracker {
   constructor(slot) { this.slot = slot; this.pts = null; this.present = false; this.lostT = 9; this.hands = [new Hand(), new Hand()]; this.active = -1; this.scale = 0; this.fullBody = false; this.lowerT = 0; this.meters = 0; }
   update(raw, cam, dt, t, visSupported) {
-    if (!raw) { this.present = false; this.lostT += dt; this.pts = null; this.fullBody = false; this.hands.forEach(h => h.lose()); this.active = -1; this.lowerT = Math.max(0, this.lowerT - dt); return; }
-    this.present = true; this.lostT = 0;
+    if (!raw) { this.present = false; this.lostT += dt; this.pts = null; this.raw = null; this.fullBody = false; this.hands.forEach(h => h.lose()); this.active = -1; this.lowerT = Math.max(0, this.lowerT - dt); return; }
+    this.present = true; this.lostT = 0; this.raw = raw;
     const pts = raw.map(p => {
       const s = cam.toScreen(p);
       const inFrame = p.x > -0.02 && p.x < 1.02 && p.y > -0.02 && p.y < 1.02;
@@ -111,16 +155,18 @@ export class Tracker {
     this.pickActive(pts);
   }
   /* 하나만 고르는 게임·메뉴에서 쓸 '한 손'
-     - 허리보다 위로 올린 손만 후보 (내려 둔 손이 풍선·버튼에 닿아도 무시)
-     - 둘 다 올렸으면 더 높이 든 손. 손이 자주 바뀌지 않도록, 다른 손이 확실히(어깨너비 1/3 이상) 더 높을 때만 교체 */
+     1순위: 허리 위로 올려 손바닥을 편 손 (주먹 쥔 손, 힘 빼고 내려 둔 손은 무시)
+     2순위: 손 모양을 판정 못 할 때(멀거나 흐릴 때)는 허리 위로 올린 손
+     둘 다 해당하면 더 높이 든 손. 조금만(어깨너비 15%) 더 높아도 바뀌므로 한쪽에 고정되지 않음 */
   pickActive(pts) {
     const hipY = pts[23].v && pts[24].v ? (pts[23].y + pts[24].y) / 2 : (pts[11].y + pts[12].y) / 2 + this.scale * 1.4;
-    const up = this.hands.map(h => h.vis && h.y < hipY);
+    const rank = this.hands.map(h => !h.vis || h.y >= hipY || h.shape === "closed" ? 0 : h.shape === "open" ? 2 : 1);
+    const best = Math.max(rank[0], rank[1]);
+    if (best === 0) { this.active = -1; return; }
+    if (rank[0] !== rank[1]) { this.active = rank[0] > rank[1] ? 0 : 1; return; }
     const cur = this.active;
-    if (cur >= 0 && up[cur]) {
-      const o = 1 - cur;
-      if (up[o] && this.hands[o].y < this.hands[cur].y - this.scale * 0.35) this.active = o;
-    } else this.active = up[0] && up[1] ? (this.hands[0].y <= this.hands[1].y ? 0 : 1) : up[0] ? 0 : up[1] ? 1 : -1;
+    if (cur >= 0) { const o = 1 - cur; if (this.hands[o].y < this.hands[cur].y - this.scale * 0.15) this.active = o; }
+    else this.active = this.hands[0].y <= this.hands[1].y ? 0 : 1;
   }
   get activeHand() { return this.active >= 0 ? this.hands[this.active] : null; }
   get lowerSeen() { return this.lowerT > 0; }
