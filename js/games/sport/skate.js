@@ -1,15 +1,18 @@
 // 스케이트보드 (스포츠 리조트처럼 3D): 내 캐릭터 뒤에서 바닷가 내리막길을 달리며 동전 모으기
-// 방향 = 몸을 왼쪽·오른쪽으로 기울이기(또는 몸을 옆으로 옮기기), 속도 = 제자리에서 무릎 들기(발 구르기)
+// 방향 = 몸을 왼쪽·오른쪽으로 옮기기(내 몸 위치 = 보드 위치), 속도 = 제자리에서 무릎 들기(발 구르기)
+// 다음 동전 줄(또는 앞에 고깔이 있으면 피할 자리)을 바닥 점선·점선 원·방향 글자·카메라 작은 창 세로 점선으로 안내
 // 점프 = 두 손을 머리 위로 번쩍(또는 제자리 점프). 고깔·울타리는 피하거나 점프, 점프대에서 점프하면 트릭 보너스
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=32";
-import { sfx } from "../../audio.js?v=32";
-import { makeStepCounter } from "../run.js?v=32";
-import { stage, THREE, sea, palm, cloud, tree, box, cyl, mesh, playerAvatar } from "./kit3d.js?v=32";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=33";
+import { sfx } from "../../audio.js?v=33";
+import { makeStepCounter } from "../run.js?v=33";
+import { stage, THREE, sea, palm, cloud, tree, box, cyl, mesh, playerAvatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=33";
 
 const AIR = 0.8;                         // 점프 시간(초)
 const RS = 2.2, ZD = 70;                 // 게임 좌표 → 3D(m): 옆 1 = 2.2m, 앞 1 = 70m
 const ROAD = 1.25 * RS;                  // 길 반 너비
 const SPAN = 140;                        // 풍경이 되풀이되는 길이
+const LMAX = 1;                          // 보드가 갈 수 있는 좌우 끝(게임 좌표)
+const GUIDE_Z = -3.2;                    // 안내 점선을 그릴 곳(보드 앞, m)
 
 function skateboard(color) {
   const g = new THREE.Group();
@@ -42,8 +45,8 @@ function coin() {
 }
 
 export default {
-  id: "skate", title: "스케이트보드", icon: "🛹", sec: 50, cursor: "", cat: "sport", bg: "#cfd9df", desc: "몸 기울여 내리막 달리기", scene3d: true,
-  how: "몸을 왼쪽·오른쪽으로 기울여 방향을 바꾸고, 제자리에서 무릎을 들면 빨라져요. 두 손을 머리 위로 번쩍 들면 점프! 동전을 모으고 장애물은 피하거나 넘어요",
+  id: "skate", title: "스케이트보드", icon: "🛹", sec: 50, cursor: "", cat: "sport", bg: "#cfd9df", desc: "좌우로 움직여 내리막 달리기", scene3d: true,
+  how: "몸을 왼쪽·오른쪽으로 옮기면 보드도 따라가요. 점선 자리로 가서 동전을 모으고, 제자리에서 무릎을 들면 빨라져요. 두 손을 머리 위로 번쩍 들면 점프! 장애물은 피하거나 넘어요",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, steps = makeStepCounter();
     const st = stage(env, { fov: 58, sky: ["#4fb3f6", "#e6f7ff"], fog: ["#dff2ff", 60, 170], shadowSize: 14 });
@@ -68,6 +71,8 @@ export default {
     const me = playerAvatar(env); me.rotation.y = Math.PI; scene.add(me);
     const board = skateboard(env.color || "#3b5bdb"); me.add(board); board.position.y = -0.12;
     me.body.position.y = 0.12;
+    const mover = bodyMover(env, LMAX), guideM = moveGuide(scene);
+    let target = null, prevL = 0;
 
     let L = 0, speed = 18, t = 0, dist = 0, objs = [], spawnT = 0.8, air = 0, safe = 0, steer = 0, armsUp = false, hipBase = null;
     let coins = 0, tricks = 0, crashes = 0, onRamp = false, pushT = 9, pushLeg = 0;
@@ -91,17 +96,15 @@ export default {
       update(dt) {
         t += dt; safe -= dt; pushT += dt;
         const p = env.tracker.pts, sc = env.tracker.scale || v.U * 0.13;
-        // 기울이기: 어깨 가운데가 엉덩이 가운데보다 옆으로 + 몸 위치
+        // 좌우: 내 몸 위치를 그대로 따라감. steer는 옆으로 움직이는 빠르기(보드·몸 기울기 모양에만 씀)
+        L = clamp(mover.follow(L, dt), -LMAX, LMAX);
+        steer += (clamp((L - prevL) / Math.max(dt, 1e-3) * 0.7, -1, 1) - steer) * Math.min(1, dt * 8); prevL = L;
         if (p && p[11].v && p[12].v) {
-          const sx = (p[11].x + p[12].x) / 2, lean = p[23].v && p[24].v ? (sx - (p[23].x + p[24].x) / 2) / sc : 0, shift = (sx - z.cx) / (z.w * 0.3);
-          let want = clamp(lean * 1.8 + shift * 0.6, -1, 1); if (Math.abs(want) < 0.12) want = 0;
-          steer += (want - steer) * Math.min(1, dt * 8);
           // 점프: 두 손을 머리 위로 번쩍 (들어가는 순간), 또는 엉덩이가 확 올라감
           const up = p[15].v && p[16].v && p[0].v && p[15].y < p[0].y - sc * 0.2 && p[16].y < p[0].y - sc * 0.2;
           if (up && !armsUp) jump(); armsUp = up;
           if (p[23].v && p[24].v) { const hy = (p[23].y + p[24].y) / 2; hipBase = hipBase == null ? hy : Math.max(hy, hipBase - dt * sc * 0.1); if (hipBase - hy > sc * 0.35) jump(); }
         }
-        L = clamp(L + steer * 1.5 * dt, -1, 1);
         // 발 구르기(무릎 들기)마다 빨라짐, 가만히 있으면 천천히 느려짐
         const n = steps.update(p, t, dt);
         if (n) { speed = Math.min(48, speed + 3.5 * n); sfx.step(n % 2); pushT = 0; pushLeg = 1 - pushLeg; }
@@ -134,6 +137,15 @@ export default {
           }
         }
         objs = objs.filter(o => { if (o.z > -0.12) return true; drop(o.mesh); return false; });
+        // 가야 할 자리: 앞에 내 줄을 막는 고깔이 먼저 오면 피할 자리, 아니면 다음 동전 줄(점프대 포함)
+        const ahead = objs.filter(o => !o.done && o.z > 0.02 && o.z < 0.95).sort((a, b) => a.z - b.z);
+        const goodO = ahead.find(o => (o.kind === "coin" && !o.high) || o.kind === "ramp");
+        const cone_ = ahead.find(o => o.kind === "cone" && Math.abs(o.x - L) < 0.4 && (!goodO || o.z <= goodO.z));
+        if (cone_) { const side = cone_.x > 0 ? -1 : 1; target = clamp(cone_.x + side * 0.6, -0.9, 0.9); }
+        else target = goodO ? goodO.x : null;
+        const ok = target != null && Math.abs(target - L) < 0.22 * D.reach;
+        if (target != null) guideM.show(L * RS, target * RS, GUIDE_Z, ok, t); else guideM.hide();
+        st.pipMark = target != null ? { x: mover.toScreenX(target), ok } : null;
         // 3D 반영
         for (const o of objs) {
           if (o.z < -0.9) continue;
@@ -167,29 +179,32 @@ export default {
         const bw = Math.min(z.w * 0.86, U * 0.62), bh = U * 0.07, top = v.H * 0.11;
         ctx.fillStyle = "rgba(40,40,50,.78)"; rr(ctx, z.cx - bw / 2, top, bw, bh, U * 0.02); ctx.fill();
         outlinedText(ctx, `${Math.round(speed)} km/h · 🪙 ${coins}`, z.cx, top + bh / 2, Math.min(U * 0.04, z.w / 13), "#fff", "#333", 3);
+        if (target != null) {   // 어디로 얼마나
+          const ok = Math.abs(target - L) < 0.22 * D.reach;
+          outlinedText(ctx, moveText((target - L) * RS, ok, "좋아요! 그대로"), z.cx, top + bh + U * 0.06, Math.min(U * 0.045, z.w / 13), "#fff", ok ? "#2f8f2f" : "#c07800", 4);
+        }
         if (speed < 13 && t > 2) outlinedText(ctx, "무릎을 들어 발을 굴러요!", z.cx, v.H * 0.8, Math.min(U * 0.045, z.w / 14), "#fff", "#b04a00", 4);
       },
       stop() { st.dispose(); },
       result: () => `동전 ${coins} · 트릭 ${tricks} · 쿵 ${crashes}`,
       // 설명 시연용
       get L() { return L; }, get speed() { return speed; }, get air() { return air; },
+      get moveTo() { return target == null ? null : mover.toScreenX(target); },
       get objs() { return objs.filter(o => !o.done && o.z > 0); },
     };
   },
   demo: {
     dur: 17,
     run(T, g, p, S, say) {
-      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
-      if (T < 4) say("스케이트보드! 몸을 기울이면 그쪽으로 가요");
+      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.walk = 1.6; p.leanT = 0;
+      if (g.moveTo != null) p.tcx = g.moveTo;                                   // 점선 자리로 옆걸음
+      if (T < 4) say("스케이트보드! 몸을 옆으로 옮기면 보드도 따라가요");
       else if (T < 9) say("제자리에서 무릎을 들면 빨라져요");
       else if (T < 15) say("두 손을 머리 위로 번쩍! 점프해서 장애물을 넘어요");
       else say("이제 직접 해 봐요!");
       const os = g.objs.sort((a, b) => a.z - b.z);
       // 가까운 장애물이 길 안에 있으면 점프, 아니면 동전 쪽으로 기울이기
       const danger = os.find(o => (o.kind === "bar" || (o.kind === "cone" && Math.abs(o.x - g.L) < 0.35)) && o.z < 0.2);
-      const coin = os.find(o => o.kind === "coin" && !o.high) || os.find(o => o.kind === "ramp");
-      const want = coin ? clamp((coin.x - g.L) * 3, -1, 1) : -g.L;
-      p.leanT = Math.abs(want) < 0.15 ? 0 : want * 0.9;
       if (danger && g.air <= 0 && (!S.jt || T - S.jt > 0.9)) { S.jt = T; S.up = T; }
       const arms = S.up && T - S.up < 0.35;
       p.rest(0, arms ? "up" : "down", arms ? 6 : 2); p.rest(1, arms ? "up" : "down", arms ? 6 : 2);

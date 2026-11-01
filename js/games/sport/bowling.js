@@ -1,13 +1,18 @@
 // 볼링 (스포츠 리조트처럼 3D 실내 레인): 내 캐릭터 뒤에서 레인을 봄. 공 든 손을 허리 아래로 내렸다가 앞(위)으로 빠르게 휘두르면 공이 굴러감
 // 조준 = 내 몸의 좌우 위치(옆으로 걸어서 맞춤), 휘두를 때 손이 옆으로 쏠리면 공이 휘어짐(커브). 굴러가는 공을 카메라가 따라감
-import { burst, popup, shake, outlinedText, rr, clamp, FONT } from "../../fx.js?v=32";
-import { sfx } from "../../audio.js?v=32";
-import { stage, THREE, box, ball as sphere, mesh, mat, cyl, playerAvatar, textBoard } from "./kit3d.js?v=32";
+// 던지기 전에 추천 자리(1구: 1·3번 핀 사이, 2구: 남은 핀 쪽)를 점선으로 안내. 안내일 뿐이라 어디서 던져도 됨
+import { burst, popup, shake, outlinedText, rr, clamp, FONT } from "../../fx.js?v=33";
+import { sfx } from "../../audio.js?v=33";
+import { stage, THREE, box, ball as sphere, mesh, mat, cyl, playerAvatar, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=33";
 
 const LANE_LEN = 18;            // 레인 길이(레인 좌표, 레인 폭 = 2)
 const PIN_R = 0.12, BALL_R = 0.21;
 const SWING = 2.0;              // 휘두르기로 인정하는 손 속도(어깨너비/초)
 const LW = 0.53;                // 레인 좌표 1 = 0.53m (레인 폭 1.06m)
+const AIM_MAX = 0.85, AIM_SPAN = 0.238;   // 조준 범위(레인 좌표)·몸을 구역 너비의 이 비율만큼 옮기면 끝까지
+const AIM_OK = 0.28;            // 추천 자리에서 이만큼(레인 좌표, 약 15cm) 안이면 초록
+const POCKET = 0.15;            // 1구 추천 자리: 1번과 3번 핀 사이(포켓)
+const GUIDE_S = 0.35;           // 이동 안내 크기(코트용 점선 도구를 레인 크기로 줄임)
 // 핀 10개: 1번 핀이 앞, 4줄 삼각형
 const PINS = []; for (let r = 0; r < 4; r++) for (let i = 0; i <= r; i++) PINS.push({ x: (i - r / 2) * 0.58, y: 15.6 + r * 0.52 });
 const wx = x => x * LW, wz = y => -y * LW * 1.9;   // 레인 좌표 → 3D (길이 방향은 실제 레인처럼 18m 남짓)
@@ -69,7 +74,7 @@ function hall(scene) {
 
 export default {
   id: "bowling", title: "볼링", icon: "🎳", sec: 60, cursor: "", cat: "sport", bg: "#f6d365", desc: "공 굴려 핀 쓰러뜨리기", scene3d: true,
-  how: "공 든 손을 허리 아래로 내렸다가 앞으로 쭉 휘둘러 굴려요. 옆으로 걸어서 조준! 휘두를 때 손이 옆으로 가면 공이 휘어요",
+  how: "공 든 손을 허리 아래로 내렸다가 앞으로 쭉 휘둘러 굴려요. 옆으로 걸어서 조준! 점선 자리가 추천 자리예요. 휘두를 때 손이 옆으로 가면 공이 휘어요",
   create(env) {
     const z = env.zone, v = env.view;
     const st = stage(env, { fov: 50, sky: ["#1c1838", "#2b2357"], shadowSize: 6 });
@@ -85,6 +90,10 @@ export default {
     // 조준선
     const aimGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
     const aimLine = new THREE.Line(aimGeo, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.25, gapSize: 0.18, transparent: true, opacity: 0.75 })); scene.add(aimLine);
+    // 추천 자리 안내: 레인 크기에 맞게 줄인 무리 안에 점선 도구를 둠
+    const guideG = new THREE.Group(); guideG.scale.setScalar(GUIDE_S); scene.add(guideG);
+    const guide = moveGuide(guideG), mover = bodyMover(env, AIM_MAX, AIM_SPAN);
+    const GUIDE_Z = 0.35;           // 파울 라인 바로 앞(어프로치) 바닥
 
     let phase = "aim", ball = null, pins = [], frame = 1, roll = 1, settleT = 0, aimX = 0, lowT = -9, t = 0;
     let total = 0, strikes = 0, spares = 0, frameDown = 0, lastRelease = -9, swingT = 9, camZ = 3.4;
@@ -109,6 +118,15 @@ export default {
       pin.down = true; pin.vx = dx / d * power + (Math.random() - 0.5) * 0.8; pin.vy = dy / d * power + 1.2; pin.spinR = (Math.random() - 0.5) * 12;
       sfx.hit(1);
     }
+    // 추천 자리(레인 좌표): 1구는 포켓, 2구는 남은 핀 중 맨 앞 핀과 남은 핀 가운데의 중간
+    function recommend() {
+      const up = pins.filter(p => !p.down);
+      if (!up.length || up.length === 10) return POCKET;
+      const fy = Math.min(...up.map(p => p.y)), front = up.filter(p => p.y - fy < 0.1);
+      const fx = front.reduce((a, p) => a + p.x, 0) / front.length, cx = up.reduce((a, p) => a + p.x, 0) / up.length;
+      return clamp((fx + cx) / 2, -AIM_MAX, AIM_MAX);
+    }
+    const aimOk = () => Math.abs(aimX - recommend()) <= AIM_OK;
     function pinScreen() { return st.toScreen(new THREE.Vector3(0, 0.4, wz(16.2))); }
     function endRoll() {
       const downNow = pins.filter(p => p.down && !p.gone).length, standing = pins.filter(p => !p.down).length;
@@ -160,13 +178,19 @@ export default {
       // 조준선
       aimLine.visible = phase === "aim";
       if (aimLine.visible) { const a = aimGeo.attributes.position; a.setXYZ(0, wx(aimX), 0.02, wz(0.9)); a.setXYZ(1, wx(aimX), 0.02, wz(15.2)); a.needsUpdate = true; aimLine.computeLineDistances(); }
+      // 추천 자리 안내 (굴러가는 동안은 숨김)
+      if (phase === "aim") {
+        const rec = recommend(), ok = aimOk();
+        guide.show(wx(aimX) / GUIDE_S, wx(rec) / GUIDE_S, GUIDE_Z / GUIDE_S, ok, t);
+        st.pipMark = { x: mover.toScreenX(rec), ok };
+      } else { guide.hide(); st.pipMark = null; }
     }
     return {
       update(dt) {
         t += dt; swingT += dt;
         const b = body(), hands = env.tracker.hands;
         if (phase === "aim") {
-          if (b) aimX = clamp((b.x - z.cx) / (z.w * 0.28), -0.85, 0.85);    // 옆으로 걸어서 조준
+          if (b) aimX = mover.toCourt(b.x);                                 // 옆으로 걸어서 조준
           if (b && t - lastRelease > 1) hands.forEach(h => {
             if (!h.vis || phase !== "aim") return;
             if (h.y > b.hipY - b.sw * 0.35) lowT = t;                       // 손을 허리 아래로 내림
@@ -225,8 +249,14 @@ export default {
         ctx.fillStyle = "#ffd43b"; ctx.fillRect(x0 + n * cw + 2, y0, cw * 1.4 - 4, ch);
         ctx.fillStyle = "#222"; ctx.font = `bold ${Math.round(ch * 0.5)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(total), x0 + n * cw + cw * 0.7, y0 + ch * 0.58);
         outlinedText(ctx, `${frame}프레임 · ${roll}구`, z.cx, y0 + ch + U * 0.04, U * 0.032, "#fff", "#2b2357", 3);
+        if (phase === "aim") {   // 어디로 얼마나: 프레임 글자 아래
+          const ok = aimOk(), mt = moveText(recommend() - aimX, ok, "좋아요! 추천 자리", 0.3);
+          outlinedText(ctx, mt, z.cx, y0 + ch + U * 0.1, Math.min(U * 0.042, z.w / 13), "#fff", ok ? "#2f8f2f" : "#c07800", 4);
+        }
         if (phase === "aim") {
-          const pw = Math.min(z.w * 0.24, U * 0.3), hx = z.x0 + (z.w - pw) / 2, txt = roll === 1 ? "손을 내렸다가 앞으로 쭉 휘둘러요!" : "남은 핀을 노려요!";
+          // 아래 안내 글자는 카메라 작은 창(1인·2P는 오른쪽, 1P는 왼쪽 구석)을 피해 남은 자리 가운데에
+          const two = env.mode === 2, pw = Math.min(z.w * (two ? 0.2 : 0.24), U * 0.3), left = two && env.slot === 0;
+          const hx = left ? z.x0 + pw + (z.w - pw) / 2 : z.x0 + (z.w - pw) / 2, txt = roll === 1 ? "손을 내렸다가 앞으로 쭉 휘둘러요!" : "남은 핀을 노려요!";
           outlinedText(ctx, txt, hx, v.H * 0.88, Math.min(U * 0.04, (z.w - pw) / (txt.length * 0.95)), "#fff", "#8a2a5a", 4);
         }
       },
@@ -236,6 +266,8 @@ export default {
       get phase() { return phase; },
       get aimX() { return aimX; },
       get standing() { return pins.filter(p => !p.down).map(p => p.x); },
+      get moveTo() { return phase === "aim" ? mover.toScreenX(recommend()) : null; },
+      get aimOk() { return aimOk(); },
     };
   },
   demo: {
@@ -245,11 +277,10 @@ export default {
       p.hands.forEach(h => { h.shape = "closed"; }); p.active = -1;
       if (T < 4) say("볼링! 공 든 손을 허리 아래로 내렸다가");
       else if (T < 9) say("앞으로 쭉 휘두르면 공이 굴러가요");
-      else if (T < 14) say("옆으로 걸어서 남은 핀을 노려요");
+      else if (T < 14) say("옆으로 걸어서 점선 자리로! 남은 핀을 노려요");
       else say("이제 직접 해 봐요!");
-      // 남은 핀 쪽으로 몸을 옮김 (2구째)
-      const st = g.standing, tx = st.length && st.length < 10 ? st.reduce((a, b) => a + b, 0) / st.length : 0;
-      p.tcx = p.v.W / 2 + tx * p.v.W * 0.28 * 0.9; p.walk = 0.5;
+      // 점선 추천 자리로 걸어감
+      if (g.moveTo != null) p.tcx = g.moveTo; p.walk = 1.2;
       p.rest(0, "down", 1);
       if (g.phase !== "aim" || Math.abs(p.cx - p.tcx) > 0.2 * u) { p.rest(1, "down", 1.2); S.ph = 0; S.t0 = T; return; }
       if (!S.ph) { S.ph = 1; S.t0 = T; }
