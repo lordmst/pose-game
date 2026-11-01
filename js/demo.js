@@ -1,8 +1,8 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=19";
-import { DIFFS } from "./difficulty.js?v=19";
-import { speak } from "./audio.js?v=19";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=20";
+import { DIFFS } from "./difficulty.js?v=20";
+import { speak } from "./audio.js?v=20";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
@@ -154,8 +154,9 @@ function balloonScript(tx) {
   };
 }
 const SCRIPTS = {
-  math: balloonScript({ intro: "수학 풍선! 문제의 정답이 적힌 풍선을 터뜨려요", pick: "고르는 손은 활짝 펴서 정답 풍선에 대요", good: "정답! 점수를 얻어요", again: "편 손으로 정답을 골라요!" }),
-  word: balloonScript({ intro: "글자 풍선! 그림 낱말의 글자를 앞에서부터 순서대로 터뜨려요", pick: "고르는 손은 활짝 펴서 첫 글자 풍선에 대요", good: "맞았어요! 다음 글자도 순서대로", again: "편 손으로 다음 글자를 골라요!" }),
+  math: balloonScript({ intro: "숫자 풍선! 문제의 정답이 적힌 풍선을 터뜨려요", pick: "고르는 손은 활짝 펴서 정답 풍선에 대요", good: "정답! 점수를 얻어요", again: "편 손으로 정답을 골라요!" }),
+  hangul: balloonScript({ intro: "한글 풍선! 그림 낱말의 글자를 앞에서부터 순서대로 터뜨려요", pick: "고르는 손은 활짝 펴서 첫 글자 풍선에 대요", good: "맞았어요! 다음 글자도 순서대로", again: "편 손으로 다음 글자를 골라요!" }),
+  english: balloonScript({ intro: "영어 풍선! 그림 낱말의 알파벳을 앞에서부터 순서대로 터뜨려요", pick: "고르는 손은 활짝 펴서 첫 글자 풍선에 대요", good: "맞았어요! 다음 글자도 순서대로", again: "편 손으로 다음 글자를 골라요!" }),
   ice: {
     dur: 18,
     run(T, g, p, S, say) {
@@ -279,17 +280,25 @@ const SCRIPTS = {
     },
   },
   rhythm: {
-    dur: 14,
+    dur: 16,
     run(T, g, p, S, say) {
       p.hands.forEach(h => { h.shape = "open"; }); p.active = -1; p.tcx = p.v.W / 2;
-      if (T < 4.2) say("리듬 박자! 몸 둘레에 판이 7개 있어요"); else if (T < 8.2) say("링이 줄어들어 판에 닿는 순간 그 판을 쳐요"); else if (T < 11.6) say("점선으로 이어진 두 판은 양손으로 같이!"); else say("이제 직접 해 봐요!");
+      if (T < 4.2) say("리듬 박자! 펌프처럼 화살표가 아래에서 올라와요");
+      else if (T < 8.4) say("화살표가 위 판에 겹치는 순간 그 판에 손을 넣어요");
+      else if (T < 13.4) say("긴 막대는 끝날 때까지 손을 그대로 대고 있어요");
+      else say("이제 직접 해 봐요!");
       const P = g.pads, now = g.now, want = [null, null];
+      for (const n of g.notes) {        // 홀드 중이면 그 손은 판에 그대로
+        if (!n.holding) continue;
+        const k = n.lane < 2 ? 0 : n.lane > 2 ? 1 : (want[0] ? 1 : 0); want[k] = P[n.lane];
+      }
       for (const n of g.notes) {
-        if (n.done || n.time - now > 0.16 || n.time - now < -0.1) continue;
-        const k = n.lane < 3 ? 0 : n.lane > 3 ? 1 : (want[1] ? 0 : 1);   // 왼쪽 판은 왼손, 오른쪽 판은 오른손
+        if (n.done || n.holding || n.time - now > 0.16 || n.time - now < -0.1) continue;
+        let k = n.lane < 2 ? 0 : n.lane > 2 ? 1 : (want[1] ? 0 : 1);   // 왼쪽 판은 왼손, 오른쪽 판은 오른손
+        if (want[k]) k = 1 - k;
         if (!want[k]) want[k] = P[n.lane];
       }
-      [0, 1].forEach(k => (want[k] ? p.reach(k, want[k].x, want[k].y, 2.2) : p.rest(k, "down", 1.2)));
+      [0, 1].forEach(k => (want[k] ? p.reach(k, want[k].x, want[k].y, 2.2) : p.rest(k, "guard", 1.2)));
     },
   },
   goalie: {
@@ -355,7 +364,7 @@ export function startDemo(id, game, view) {
   const p = new Puppet(view), zone = { x0: 0, x1: view.W, w: view.W, cx: view.W / 2 };
   const me = { combo: 0 }, stats = { ok: 0, miss: 0, pen: 0 };
   const env = {
-    slot: 0, player: me, tracker: p, zone, view, mode: 1, level: "add10", diff: DIFFS.normal, color: "#ff8a3d", name: "도우미",
+    slot: 0, player: me, tracker: p, zone, view, mode: 1, level: "add10", song: "london", diff: DIFFS.normal, color: "#ff8a3d", name: "도우미",
     progress: () => 0.1, fever: () => false, speak: () => {},
     award: (base, x, y) => { me.combo++; stats.ok++; popup(x, y, `+${base * DIFFS.normal.points}`, { size: view.U * 0.065, color: "#fff", stroke: "#ff8a3d" }); },
     miss: (x, y, label) => { me.combo = 0; stats.miss++; if (label) popup(x, y, label, { size: view.U * 0.04, color: "#eee", stroke: "#555" }); },
@@ -384,7 +393,7 @@ export function startDemo(id, game, view) {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#bfe3ff"); g.addColorStop(0.75, "#fff3d6"); g.addColorStop(1, "#ffe2a8");
       ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
       ctx.fillStyle = "#c9e8a6"; ctx.fillRect(-20, H * 0.965, W + 40, H);
-      inst.draw(ctx); p.draw(ctx);
+      if (id === "rhythm") { p.draw(ctx); inst.draw(ctx); } else { inst.draw(ctx); p.draw(ctx); }   // 리듬은 판정 글자가 캐릭터 위에 보이게
     },
   };
 }

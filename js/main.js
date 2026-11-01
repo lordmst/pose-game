@@ -1,28 +1,28 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=19";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=19";
-import * as R from "./records.js?v=19";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=19";
-import copy from "./games/copy.js?v=19";
-import math from "./games/math.js?v=19";
-import ice from "./games/ice.js?v=19";
-import star from "./games/star.js?v=19";
-import fruit from "./games/fruit.js?v=19";
-import mole from "./games/mole.js?v=19";
-import wall from "./games/wall.js?v=19";
-import rhythm from "./games/rhythm.js?v=19";
-import goalie from "./games/goalie.js?v=19";
-import word from "./games/word.js?v=19";
-import clockGame from "./games/clock.js?v=19";
-import run from "./games/run.js?v=19";
-import simon from "./games/simon.js?v=19";
-import { DIFFS, diffOf } from "./difficulty.js?v=19";
-import { startDemo } from "./demo.js?v=19";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=20";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=20";
+import * as R from "./records.js?v=20";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=20";
+import copy from "./games/copy.js?v=20";
+import math from "./games/math.js?v=20";
+import ice from "./games/ice.js?v=20";
+import star from "./games/star.js?v=20";
+import fruit from "./games/fruit.js?v=20";
+import mole from "./games/mole.js?v=20";
+import wall from "./games/wall.js?v=20";
+import rhythm from "./games/rhythm.js?v=20";
+import goalie from "./games/goalie.js?v=20";
+import { hangul, english } from "./games/word.js?v=20";
+import clockGame from "./games/clock.js?v=20";
+import run from "./games/run.js?v=20";
+import simon from "./games/simon.js?v=20";
+import { DIFFS, diffOf } from "./difficulty.js?v=20";
+import { startDemo } from "./demo.js?v=20";
 
-const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, word, clock: clockGame, simon };
-const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "goalie", "run", "math", "word", "clock", "simon"];
+const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, hangul, english, clock: clockGame, simon };
+const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
 // 카드 하나로 묶는 게임: 카드를 고른 뒤 자리 잡기 화면에서 과목을 고름 (기록·순위는 게임별 그대로)
-const GROUPS = [{ id: "balloon", members: ["math", "word"], icon: "🎈", title: "풍선 퀴즈", desc: "수학·글자 중 골라서", bg: "#ffd6a5", cat: "learn" }];
+const GROUPS = [];   // 예: { id, members: [게임 id...], icon, title, desc, bg, cat }
 const groupOf = id => GROUPS.find(g => g.members.includes(id));
 const CATS = [{ id: "move", label: "🏃 운동" }, { id: "learn", label: "📚 학습" }];
 const LEVEL_GAMES = GAME_ORDER.filter(id => GAMES[id].levels);   // 선수별로 단계를 고르는 게임 (수학 풍선, 글자 풍선)
@@ -304,7 +304,7 @@ function renderCards() {
   const box = $("#cards"); box.innerHTML = "";
   const ids = cardIds(catTab);
   box.classList.toggle("many", ids.length > 4);
-  box.classList.toggle("lots", ids.length > 8);
+  box.classList.toggle("lots", ids.length > 8 || ids.length === 5);   // 5개나 9개 이상이면 한 줄에 5개
   for (const id of ids) {
     const grp = GROUPS.find(g => g.id === id), G = grp || GAMES[id], b = document.createElement("button");
     b.type = "button"; b.className = "card"; b.setAttribute("data-hand", ""); b.dataset.game = id; b.style.setProperty("--bg", G.bg);
@@ -509,7 +509,7 @@ function endGame() {
     let rec = null;
     if (p.profileId) {
       const lvl = recLevel(p);
-      rec = R.addRecord({ key: R.gameKey(gameId, lvl), game: gameId, level: lvl, playerId: p.profileId, name: p.name, score: p.score, mode: players.length, meters, diff: p.diff });
+      rec = R.addRecord({ key: R.gameKey(GAMES[gameId].recId || gameId, lvl), game: gameId, level: lvl, playerId: p.profileId, name: p.name, score: p.score, mode: players.length, meters, diff: p.diff });
       justSaved.add(rec.record.id);
     }
     return { p, meters, rec, extra: (insts[i].result && insts[i].result()) || "" };
@@ -565,7 +565,7 @@ function renderRanking() {
     if (!SUB[rankView.level]) rankView.level = firstLevel(RG);
     for (const [k, v] of Object.entries(SUB)) sub.appendChild(tabBtn(v, rankView.level === k, () => { rankView.level = k; renderRanking(); }));
   } else rankView.level = null;
-  const key = R.gameKey(rankView.game, rankView.level);
+  const key = R.gameKey(RG.recId || rankView.game, rankView.level);
   const ol = $("#rankList"); ol.innerHTML = "";
   const list = R.ranking(key, 10);
   if (!list.length) ol.innerHTML = '<li class="empty">아직 기록이 없어요. 첫 기록의 주인공이 되어 보세요!</li>';

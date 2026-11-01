@@ -1,7 +1,7 @@
-// 글자 풍선: 그림 낱말의 글자를 앞에서부터 순서대로 풍선에서 골라 터뜨리기 (한 손으로 고름)
-import { burst, rr, outlinedText, FONT, rnd, shuffle } from "../fx.js?v=19";
-import { sfx } from "../audio.js?v=19";
-import { drawBalloon } from "./math.js?v=19";
+// 한글·영어 풍선: 그림 낱말의 글자를 앞에서부터 순서대로 풍선에서 골라 터뜨리기 (한 손으로 고름)
+import { burst, rr, outlinedText, FONT, rnd, shuffle } from "../fx.js?v=20";
+import { sfx } from "../audio.js?v=20";
+import { drawBalloon } from "./math.js?v=20";
 
 export const WORD_LEVELS = { ko2: "한글 2글자", ko3: "한글 3글자", en3: "영어 3글자", en45: "영어 4~5글자" };
 const WORDS = {
@@ -23,12 +23,14 @@ const EN_POOL = "ABCDEFGHIJKLMNOPRSTUVWYZ".split("");
 const COLORS = ["#ff5a5a", "#4da6ff", "#ffc233", "#a07bff", "#37d67a", "#ff8fd0"];
 const DWELL = 0.25, AFTER_POP_LOCK = 0.6, RISE = 0.12;
 
-export default {
-  id: "word", title: "글자 풍선", icon: "🔤", sec: 60, cursor: "✋", oneHand: true, cat: "learn", bg: "#80d0ff", desc: "글자 순서대로 터뜨리기",
-  levels: WORD_LEVELS, levelField: "wordLevel", levelLabel: "글자 풍선",
+// 한글 풍선과 영어 풍선은 같은 규칙, 낱말만 다름. 기록은 예전 '글자 풍선' 기록을 이어 씀 (recId: "word")
+const pickLevels = keys => Object.fromEntries(keys.map(k => [k, WORD_LEVELS[k]]));
+const makeWordGame = meta => ({
+  sec: 60, cursor: "✋", oneHand: true, cat: "learn", recId: "word",
   how: "그림 낱말의 글자를 앞에서부터 순서대로 터뜨려요. 한 손만 활짝 펴서 대기!",
+  ...meta,
   create(env) {
-    const z = env.zone, v = env.view, level = WORDS[env.level] ? env.level : "ko2", en = level.startsWith("en");
+    const keys = Object.keys(meta.levels), z = env.zone, v = env.view, level = keys.includes(env.level) ? env.level : keys[0], en = level.startsWith("en");
     let word = null, letters = [], idx = 0, balloons = [], phase = "ask", doneT = 0, lock = 0, tAll = 0, bad = 0, words = 0, wrong = 0, needSpeak = false, last = null;
     const R = () => Math.min(z.w * 0.11, v.U * 0.095);
     const box = () => { const w = Math.min(z.w * 0.86, v.U * 0.85), h = v.U * 0.14; return { x: z.x0 + (z.w - w) / 2, y: v.H * 0.13, w, h }; };
@@ -106,4 +108,7 @@ export default {
       get phase() { return phase; },
     };
   },
-};
+});
+export const hangul = makeWordGame({ id: "hangul", title: "한글 풍선", icon: "가", bg: "#80d0ff", desc: "한글 낱말 순서대로", levels: pickLevels(["ko2", "ko3"]), levelField: "koLevel", levelLabel: "한글 풍선" });
+export const english = makeWordGame({ id: "english", title: "영어 풍선", icon: "🔤", bg: "#a29bfe", desc: "영어 낱말 순서대로", levels: pickLevels(["en3", "en45"]), levelField: "enLevel", levelLabel: "영어 풍선" });
+

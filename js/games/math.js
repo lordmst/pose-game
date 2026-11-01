@@ -1,6 +1,6 @@
 // 수학 풍선: 정답이 적힌 풍선을 손으로 터뜨리기 (손을 잠깐 대거나 빠르게 치면 터짐)
-import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=19";
-import { sfx } from "../audio.js?v=19";
+import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=20";
+import { sfx } from "../audio.js?v=20";
 
 export const LEVELS = { add10: "덧셈 (10까지)", addsub20: "덧셈·뺄셈 (20까지)", mul: "구구단", mix: "사칙 혼합" };
 const OPS = { add10: ["+"], addsub20: ["+", "-"], mul: ["×"], mix: ["+", "-", "×", "÷"] };
@@ -44,8 +44,8 @@ export function drawBalloon(ctx, x, y, r, color, val, alpha, hover) {
 }
 
 export default {
-  id: "math", title: "수학 풍선", icon: "🎈", sec: 60, cursor: "✋", oneHand: true, cat: "learn", bg: "#ff7675", desc: "정답 풍선 터뜨리기",
-  levels: LEVELS, levelField: "level", levelLabel: "수학 풍선",
+  id: "math", title: "숫자 풍선", icon: "🔢", sec: 60, cursor: "✋", oneHand: true, cat: "learn", bg: "#ff7675", desc: "정답 풍선 터뜨리기",
+  levels: LEVELS, levelField: "level", levelLabel: "숫자 풍선",
   how: "한 손만 활짝 펴서 정답 풍선에 대요. 다른 손은 주먹! 틀린 풍선은 조심",
   create(env) {
     const z = env.zone, v = env.view;
