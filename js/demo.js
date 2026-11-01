@@ -1,18 +1,21 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=16";
-import { DIFFS } from "./difficulty.js?v=16";
-import { speak } from "./audio.js?v=16";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=17";
+import { DIFFS } from "./difficulty.js?v=17";
+import { speak } from "./audio.js?v=17";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
    다리: 엉덩이 기준 무릎·발목 위치, drop = 몸이 내려가는 정도 */
-const ARM = { up: [0.25, -2.0], wide: [2.0, 0], down: [0.35, 1.9], hips: [0.15, 1.6], heart: [-0.5, -1.7], guard: [0.45, 0.85], cheer: [0.9, -1.7] };
+const ARM = { up: [0.25, -2.0], wide: [2.0, 0], down: [0.35, 1.9], hips: [0.15, 1.6], heart: [-0.5, -1.7], guard: [0.45, 0.85], cheer: [0.9, -1.7],
+  head: [-0.35, -0.9], shoulders: [0.15, 0.25], cross: [-1.1, 0.2], clap: [-0.62, 0.8] };
 const LEG = { stand: { drop: 0, k: [0.05, 1.3], a: [0.1, 2.6] }, squat: { drop: 0.9, k: [0.5, 0.4], a: [0.4, 1.7] }, raise: { drop: 0, k: [0.25, 0.15], a: [0.25, 1.1] } };
 const POSE = {
   rest: ["down", "down"], up: ["up", "up"], wide: ["wide", "wide"], left: ["up", "down"], right: ["down", "up"],
   hips: ["hips", "hips"], heart: ["heart", "heart"], squat: ["wide", "wide", "squat", "squat"],
   lknee: ["wide", "wide", "raise", "stand"], rknee: ["wide", "wide", "stand", "raise"],
+  head: ["head", "head"], shoulders: ["shoulders", "shoulders"], crossL: ["down", "cross"], crossR: ["cross", "down"], clap: ["clap", "clap"],
+  runL: ["guard", "hips", "raise", "stand"], runR: ["hips", "guard", "stand", "raise"],
 };
 
 class Puppet {
@@ -271,16 +274,17 @@ const SCRIPTS = {
     },
   },
   rhythm: {
-    dur: 13,
+    dur: 14,
     run(T, g, p, S, say) {
       p.hands.forEach(h => { h.shape = "open"; }); p.active = -1; p.tcx = p.v.W / 2;
-      if (T < 4.5) say("리듬 박자! 음표가 동그라미에 닿을 때 손을 쏙!"); else if (T < 8.5) say("박자에 딱 맞으면 '완벽!'"); else if (T < 11.3) say("손을 뺐다가 다시 넣어야 다음 음표를 쳐요"); else say("이제 직접 해 봐요!");
-      const L = g.lanes, now = g.now;
-      [0, 1].forEach(li => {
-        const ln = L[li], nx = g.notes.filter(n => !n.done && n.lane === li).sort((a, b) => a.time - b.time)[0];
-        if (nx && nx.time - now < 0.16 && nx.time - now > -0.1) p.reach(li, ln.x, ln.y, 2.2);
-        else p.reach(li, ln.x + (li ? 1 : -1) * ln.r * 0.5, ln.y + ln.r * 2.4, 1.2);
-      });
+      if (T < 4.2) say("리듬 박자! 몸 둘레에 판이 7개 있어요"); else if (T < 8.2) say("링이 줄어들어 판에 닿는 순간 그 판을 쳐요"); else if (T < 11.6) say("점선으로 이어진 두 판은 양손으로 같이!"); else say("이제 직접 해 봐요!");
+      const P = g.pads, now = g.now, want = [null, null];
+      for (const n of g.notes) {
+        if (n.done || n.time - now > 0.16 || n.time - now < -0.1) continue;
+        const k = n.lane < 3 ? 0 : n.lane > 3 ? 1 : (want[1] ? 0 : 1);   // 왼쪽 판은 왼손, 오른쪽 판은 오른손
+        if (!want[k]) want[k] = P[n.lane];
+      }
+      [0, 1].forEach(k => (want[k] ? p.reach(k, want[k].x, want[k].y, 2.2) : p.rest(k, "down", 1.2)));
     },
   },
   goalie: {
@@ -296,6 +300,31 @@ const SCRIPTS = {
       if (!s) { p.rest(0, "guard", 0.6); p.rest(1, "guard", 0.6); return; }
       const k = s.dx < cx ? 0 : 1;
       p.reach(k, s.dx, s.dy, 1.0); p.rest(1 - k, "guard", 0.6);
+    },
+  },
+  run: {
+    dur: 12,
+    run(T, g, p, S, say) {
+      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
+      if (T < 4) say("달리기 경주! 제자리에서 무릎을 번갈아 높이 들어요");
+      else if (T < 8) say("빨리 들수록 빨리 달려요. 토끼보다 먼저 결승선에!");
+      else say("이제 직접 해 봐요!");
+      if (T < 1 || T > 10.6) { p.setPose("rest"); return; }
+      const ph = Math.floor((T - 1) / 0.32);
+      if (ph !== S.ph) { S.ph = ph; p.setPose(ph % 2 ? "runR" : "runL"); }
+    },
+  },
+  simon: {
+    dur: 15,
+    run(T, g, p, S, say) {
+      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
+      if (!S.init) { S.init = 1; g.forceSays(0, true, "up"); g.forceSays(1, false, "left"); g.forceSays(2, true, "crossL"); }
+      const r = g.round;
+      if (!r) { say("가라사대! '가라사대'가 붙은 말만 따라 해요"); p.setPose("rest"); return; }
+      if (r.i >= 3) { say("이제 직접 해 봐요!"); p.setPose("rest"); S.endAt = S.endAt || T + 1.2; if (T > S.endAt) S.end = true; return; }
+      if (r.says) say(`"가라사대"가 붙으면 따라 해요: ${r.cmd.text}`);
+      else say(`"가라사대"가 없으면 움직이지 않아요!`);
+      p.setPose(r.says && r.tIn > 0.9 ? r.cmd.id : "rest");
     },
   },
   clock: {

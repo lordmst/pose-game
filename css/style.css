@@ -215,3 +215,8 @@ body:not(.live) .overlay { background: var(--y); }
 .vol input[type=range] { width: 100%; accent-color: var(--b); }
 .volnote { font-size: 13px; opacity: .65; text-align: center; }
 #btnVoice { position: absolute; right: max(12px, 1.6vmin); bottom: max(12px, 1.6vmin); z-index: 16; padding: 8px 16px; border-radius: 20px; background: rgba(255, 255, 255, .88); border: 3px solid var(--b); font-size: 16px; }
+/* 카드 9개 이상: 한 줄 5개, 조금 작게 */
+.cards.lots { grid-template-columns: repeat(5, auto); max-width: min(98vw, 1200px); }
+.cards.lots .card { width: clamp(100px, min(17vw, 21vh), 210px); }
+.cards.lots .card .ico { font-size: clamp(36px, min(6vw, 8.5vh), 84px); }
+@media (max-width: 640px) { .cards.lots { grid-template-columns: repeat(3, auto); } }

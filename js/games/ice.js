@@ -1,6 +1,6 @@
 // 얼음 깨기: 손을 빠르게 휘둘러 얼음을 치면 맞은 자리에서 금이 가고, 다 깨면 안에 든 물건이 튀어나옴
-import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=16";
-import { sfx } from "../audio.js?v=16";
+import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=17";
+import { sfx } from "../audio.js?v=17";
 
 const PUNCH = 3.0;      // 타격으로 인정하는 손 속도 (어깨너비/초). 낮출수록 쉬움
 const STRONG = 7.5;     // 이 이상이면 강펀치(2타)
@@ -20,7 +20,20 @@ export default {
       return { fx: slot.fx, fy: slot.fy, hp, max: hp, gold, item: ITEMS[rnd(0, ITEMS.length - 1)], cracks: [], cool: [0, 0], shake: 0, broken: false, respawn: 0, born: 0, hint: 0 };
     }
     const blocks = [];
-    for (const fy of [0.42, 0.76]) for (let c = 0; c < cols; c++) blocks.push(fresh({ fx: (c + 0.5) / cols, fy }));
+    // 무작위 위치: 서로 겹치지 않고, 손이 닿는 높이(화면 30~80%) 안에서
+    function randomSpot(except) {
+      const s = S(), others = blocks.filter(o => o !== except && !o.broken);
+      let best = null, bestGap = -1;
+      for (let i = 0; i < 40; i++) {
+        const fx = 0.1 + Math.random() * 0.8, fy = 0.32 + Math.random() * 0.46, x = z.x0 + fx * z.w, y = fy * v.H;
+        if (x - s / 2 < z.x0 + 4 || x + s / 2 > z.x1 - 4) continue;
+        const gap = others.length ? Math.min(...others.map(o => Math.hypot(z.x0 + o.fx * z.w - x, o.fy * v.H - y))) : 1e9;
+        if (gap > s * 1.25) return { fx, fy };
+        if (gap > bestGap) { bestGap = gap; best = { fx, fy }; }
+      }
+      return best || { fx: 0.5, fy: 0.5 };
+    }
+    for (let i = 0; i < cols * 2; i++) { const b = fresh({ fx: 0, fy: 0 }); blocks.push(b); Object.assign(b, randomSpot(b)); }
 
     function addCracks(b, ix, iy) {
       const n = 3 + rnd(0, 1);
@@ -46,7 +59,7 @@ export default {
         for (const b of blocks) {
           b.born = Math.min(1, b.born + dt * 4); b.shake = Math.max(0, b.shake - dt); b.hint = Math.max(0, b.hint - dt);
           b.cool[0] = Math.max(0, b.cool[0] - dt); b.cool[1] = Math.max(0, b.cool[1] - dt);
-          if (b.broken) { b.respawn -= dt; if (b.respawn <= 0) Object.assign(b, fresh(b)); continue; }
+          if (b.broken) { b.respawn -= dt; if (b.respawn <= 0) Object.assign(b, fresh(randomSpot(b))); continue; }   // 다른 자리에서 새 얼음
           const cx = z.x0 + b.fx * z.w, cy = b.fy * v.H;
           hands.forEach((h, k) => {
             if (b.broken || !h.vis || b.cool[k] > 0) return;

@@ -61,6 +61,7 @@ export const sfx = {
   go: () => play(t => { tone(1320, t, 0.4, { type: "square", vol: 0.13 }); tone(660, t, 0.4, { type: "triangle", vol: 0.22 }); }),
   select: () => play(t => { tone(660, t, 0.08, { type: "triangle", vol: 0.22 }); tone(990, t + 0.07, 0.12, { type: "triangle", vol: 0.22 }); }),
   fever: () => play(t => [0, 4, 7, 12, 16, 19].forEach((s, i) => tone(523.25 * Math.pow(2, s / 12), t + i * 0.06, 0.2, { type: "square", vol: 0.09 }))),
+  step: (alt = 0) => play(t => { tone(alt ? 150 : 175, t, 0.07, { vol: 0.3, slide: 0.6 }); noise(t, 0.05, { vol: 0.15, freq: 500 }); }),
   slice: () => play(t => { noise(t, 0.14, { vol: 0.5, type: "highpass", freq: 3000 }); tone(900, t, 0.1, { type: "triangle", vol: 0.12, slide: 0.5 }); }),
   squish: () => play(t => { noise(t, 0.18, { vol: 0.45, freq: 700, q: 1.5 }); tone(260, t, 0.12, { vol: 0.25, slide: 0.6 }); }),
   bonk: () => play(t => { tone(420, t, 0.12, { type: "square", vol: 0.16, slide: 0.45 }); noise(t, 0.06, { vol: 0.4, freq: 1800, q: 3 }); }),
