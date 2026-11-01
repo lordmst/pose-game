@@ -1,31 +1,33 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=27";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=27";
-import * as R from "./records.js?v=27";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=27";
-import copy from "./games/copy.js?v=27";
-import math from "./games/math.js?v=27";
-import ice from "./games/ice.js?v=27";
-import star from "./games/star.js?v=27";
-import fruit from "./games/fruit.js?v=27";
-import mole from "./games/mole.js?v=27";
-import wall from "./games/wall.js?v=27";
-import rhythm from "./games/rhythm.js?v=27";
-import goalie from "./games/goalie.js?v=27";
-import { hangul, english } from "./games/word.js?v=27";
-import clockGame from "./games/clock.js?v=27";
-import run from "./games/run.js?v=27";
-import simon from "./games/simon.js?v=27";
-import conductor from "./games/conductor.js?v=27";
-import { DIFFS, diffOf } from "./difficulty.js?v=27";
-import { startDemo } from "./demo.js?v=27";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=28";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=28";
+import * as R from "./records.js?v=28";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=28";
+import copy from "./games/copy.js?v=28";
+import math from "./games/math.js?v=28";
+import ice from "./games/ice.js?v=28";
+import star from "./games/star.js?v=28";
+import fruit from "./games/fruit.js?v=28";
+import mole from "./games/mole.js?v=28";
+import wall from "./games/wall.js?v=28";
+import rhythm from "./games/rhythm.js?v=28";
+import goalie from "./games/goalie.js?v=28";
+import { hangul, english } from "./games/word.js?v=28";
+import clockGame from "./games/clock.js?v=28";
+import run from "./games/run.js?v=28";
+import simon from "./games/simon.js?v=28";
+import conductor from "./games/conductor.js?v=28";
+import SPORTS from "./games/sports.js?v=28";
+import { DIFFS, diffOf } from "./difficulty.js?v=28";
+import { startDemo } from "./demo.js?v=28";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
+for (const g of SPORTS) { GAMES[g.id] = g; GAME_ORDER.push(g.id); }   // 스포츠 탭 (스포츠 리조트 종목들)
 // 카드 하나로 묶는 게임: 카드를 고른 뒤 자리 잡기 화면에서 과목을 고름 (기록·순위는 게임별 그대로)
 const GROUPS = [];   // 예: { id, members: [게임 id...], icon, title, desc, bg, cat }
 const groupOf = id => GROUPS.find(g => g.members.includes(id));
-const CATS = [{ id: "move", label: "🏃 운동" }, { id: "learn", label: "📚 학습" }];
+const CATS = [{ id: "move", label: "🏃 운동" }, { id: "sport", label: "🏅 스포츠" }, { id: "learn", label: "📚 학습" }];
 const LEVEL_GAMES = GAME_ORDER.filter(id => GAMES[id].levels);   // 선수별로 단계를 고르는 게임 (수학 풍선, 글자 풍선)
 const firstLevel = g => Object.keys(subOf(g))[0];
 // 순위 세부 탭: 선수별 단계(수학·글자) 또는 노래(리듬)

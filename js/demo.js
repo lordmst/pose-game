@@ -1,8 +1,8 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=27";
-import { DIFFS } from "./difficulty.js?v=27";
-import { speak } from "./audio.js?v=27";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=28";
+import { DIFFS } from "./difficulty.js?v=28";
+import { speak } from "./audio.js?v=28";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
@@ -387,7 +387,7 @@ export function startDemo(id, game, view) {
     miss: (x, y, label) => { me.combo = 0; stats.miss++; if (label) popup(x, y, label, { size: view.U * 0.04, color: "#eee", stroke: "#555" }); },
     penalty: (n, x, y, label) => { me.combo = 0; stats.pen++; popup(x, y, `${label} -${n * DIFFS.normal.points}`, { size: view.U * 0.06, color: "#fff", stroke: "#d02020" }); },
   };
-  const inst = game.create(env), sc = SCRIPTS[id], S = { step: 0 };
+  const inst = game.create(env), sc = SCRIPTS[id] || game.demo, S = { step: 0 };   // 시연 대본: 여기 SCRIPTS 또는 게임 파일 안의 demo
   let T = 0, caption = "";
   const say = text => { if (text !== caption) { caption = text; speak(text); } };
   return {
@@ -401,7 +401,7 @@ export function startDemo(id, game, view) {
     update(dt) {
       T += dt;
       zone.x1 = zone.w = view.W; zone.cx = view.W / 2;
-      sc.run(T, inst, p, S, say);
+      sc.run(T, inst, p, S, say, once);
       p.update(dt);
       inst.update(dt);
     },
@@ -410,7 +410,7 @@ export function startDemo(id, game, view) {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#bfe3ff"); g.addColorStop(0.75, "#fff3d6"); g.addColorStop(1, "#ffe2a8");
       ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
       ctx.fillStyle = "#c9e8a6"; ctx.fillRect(-20, H * 0.965, W + 40, H);
-      if (id === "rhythm" || id === "conductor") { p.draw(ctx); inst.draw(ctx); } else { inst.draw(ctx); p.draw(ctx); }   // 리듬은 판정 글자가 캐릭터 위에 보이게
+      if (["rhythm", "conductor", "plane", "skate", "jetski"].includes(id)) { p.draw(ctx); inst.draw(ctx); }   // 게임 화면을 캐릭터 위에 (판정 글자·탈것이 가려지지 않게) else { inst.draw(ctx); p.draw(ctx); }   // 리듬은 판정 글자가 캐릭터 위에 보이게
     },
   };
 }
