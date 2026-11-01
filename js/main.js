@@ -1,26 +1,29 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=18";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=18";
-import * as R from "./records.js?v=18";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=18";
-import copy from "./games/copy.js?v=18";
-import math from "./games/math.js?v=18";
-import ice from "./games/ice.js?v=18";
-import star from "./games/star.js?v=18";
-import fruit from "./games/fruit.js?v=18";
-import mole from "./games/mole.js?v=18";
-import wall from "./games/wall.js?v=18";
-import rhythm from "./games/rhythm.js?v=18";
-import goalie from "./games/goalie.js?v=18";
-import word from "./games/word.js?v=18";
-import clockGame from "./games/clock.js?v=18";
-import run from "./games/run.js?v=18";
-import simon from "./games/simon.js?v=18";
-import { DIFFS, diffOf } from "./difficulty.js?v=18";
-import { startDemo } from "./demo.js?v=18";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=19";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=19";
+import * as R from "./records.js?v=19";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=19";
+import copy from "./games/copy.js?v=19";
+import math from "./games/math.js?v=19";
+import ice from "./games/ice.js?v=19";
+import star from "./games/star.js?v=19";
+import fruit from "./games/fruit.js?v=19";
+import mole from "./games/mole.js?v=19";
+import wall from "./games/wall.js?v=19";
+import rhythm from "./games/rhythm.js?v=19";
+import goalie from "./games/goalie.js?v=19";
+import word from "./games/word.js?v=19";
+import clockGame from "./games/clock.js?v=19";
+import run from "./games/run.js?v=19";
+import simon from "./games/simon.js?v=19";
+import { DIFFS, diffOf } from "./difficulty.js?v=19";
+import { startDemo } from "./demo.js?v=19";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, word, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "goalie", "run", "math", "word", "clock", "simon"];
+// 카드 하나로 묶는 게임: 카드를 고른 뒤 자리 잡기 화면에서 과목을 고름 (기록·순위는 게임별 그대로)
+const GROUPS = [{ id: "balloon", members: ["math", "word"], icon: "🎈", title: "풍선 퀴즈", desc: "수학·글자 중 골라서", bg: "#ffd6a5", cat: "learn" }];
+const groupOf = id => GROUPS.find(g => g.members.includes(id));
 const CATS = [{ id: "move", label: "🏃 운동" }, { id: "learn", label: "📚 학습" }];
 const LEVEL_GAMES = GAME_ORDER.filter(id => GAMES[id].levels);   // 선수별로 단계를 고르는 게임 (수학 풍선, 글자 풍선)
 const firstLevel = g => Object.keys(subOf(g))[0];
@@ -280,24 +283,33 @@ function updateSelBadges() {
     b.textContent = `${i + 1}P ${slots[i].name} · ${on ? "인식됨" : "만세 해 주세요"}`;
   });
 }
-// 게임 카드: 운동 / 학습 탭
+// 게임 카드: 운동 / 학습 탭. 묶인 게임은 첫 게임 자리에 카드 하나로
+function cardIds(cat) {
+  const out = [];
+  for (const id of GAME_ORDER) {
+    if (GAMES[id].cat !== cat) continue;
+    const g = groupOf(id);
+    if (!g) out.push(id); else if (!out.includes(g.id)) out.push(g.id);
+  }
+  return out;
+}
 let catTab = "move";
 function renderCards() {
   const tabs = $("#catTabs"); tabs.innerHTML = "";
   for (const c of CATS) {
-    const n = GAME_ORDER.filter(id => GAMES[id].cat === c.id).length;
+    const n = cardIds(c.id).length;
     const b = document.createElement("button"); b.type = "button"; b.className = "tab" + (catTab === c.id ? " on" : ""); b.setAttribute("data-hand", "");
     b.textContent = `${c.label} ${n}`; b.onclick = () => { catTab = c.id; renderCards(); }; tabs.appendChild(b);
   }
   const box = $("#cards"); box.innerHTML = "";
-  const ids = GAME_ORDER.filter(id => GAMES[id].cat === catTab);
+  const ids = cardIds(catTab);
   box.classList.toggle("many", ids.length > 4);
   box.classList.toggle("lots", ids.length > 8);
   for (const id of ids) {
-    const G = GAMES[id], b = document.createElement("button");
+    const grp = GROUPS.find(g => g.id === id), G = grp || GAMES[id], b = document.createElement("button");
     b.type = "button"; b.className = "card"; b.setAttribute("data-hand", ""); b.dataset.game = id; b.style.setProperty("--bg", G.bg);
     b.innerHTML = `<span class="ico">${G.icon}</span><span class="lbl">${esc(G.title)}</span><span class="desc">${esc(G.desc)}</span>`;
-    b.onclick = () => { unlock(); chooseGame(id); };
+    b.onclick = () => { unlock(); chooseGame(grp ? (grp.members.includes(R.getSettings()["last_" + grp.id]) ? R.getSettings()["last_" + grp.id] : grp.members[0]) : id); };
     box.appendChild(b);
   }
 }
@@ -309,6 +321,7 @@ $("#btnSetup").onclick = backToSetup;
 let readyCache = "";
 function chooseGame(id) {
   gameId = id;
+  const grp = groupOf(id); if (grp) R.setSettings({ ...R.getSettings(), ["last_" + grp.id]: id });
   if (needDemo(id)) openDemo(); else goReady();
 }
 function goReady() {
@@ -320,8 +333,20 @@ function goReady() {
     : "화면 가운데에 서서 두 손을 머리 위로 올려(만세) 주세요";
   readyT = 0; readyCache = ""; tutOk = slots.map(() => false); tutT = slots.map(() => 0); readyStartT = lastT;
   $("#tutorial").hidden = !g.oneHand;
-  renderSongPick();
+  renderSongPick(); renderSubjPick();
   setState("ready");
+}
+// 과목 고르기 (풍선 퀴즈): 바꾸면 그 게임의 자리 잡기 화면으로 (처음이면 설명부터)
+function renderSubjPick() {
+  const grp = groupOf(gameId), box = $("#subjPick");
+  box.hidden = !grp; box.innerHTML = "";
+  if (!grp) return;
+  for (const id of grp.members) {
+    const G = GAMES[id], b = document.createElement("button"); b.type = "button"; b.setAttribute("data-hand", "");
+    b.className = "tab" + (gameId === id ? " on" : ""); b.textContent = `${G.icon} ${G.title}`;
+    b.onclick = () => { if (id === gameId) return; unlock(); sfx.select(); R.setSettings({ ...R.getSettings(), ["last_" + grp.id]: id }); chooseGame(id); };
+    box.appendChild(b);
+  }
 }
 // 노래 고르기 (리듬 박자): 손바닥으로 1초 대거나 화면을 눌러 고름. 고르면 앞부분을 들려줌
 function renderSongPick() {

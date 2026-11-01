@@ -1,8 +1,8 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=18";
-import { DIFFS } from "./difficulty.js?v=18";
-import { speak } from "./audio.js?v=18";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=19";
+import { DIFFS } from "./difficulty.js?v=19";
+import { speak } from "./audio.js?v=19";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
@@ -16,6 +16,7 @@ const POSE = {
   lknee: ["wide", "wide", "raise", "stand"], rknee: ["wide", "wide", "stand", "raise"],
   head: ["head", "head"], shoulders: ["shoulders", "shoulders"], crossL: ["down", "cross"], crossR: ["cross", "down"], clap: ["clap", "clap"],
   runL: ["guard", "hips", "raise", "stand"], runR: ["hips", "guard", "stand", "raise"],
+  leanL: ["up", "up", "stand", "stand", -1.0], leanR: ["up", "up", "stand", "stand", 1.0],   // 다섯째 값: 윗몸 기울기
 };
 
 class Puppet {
@@ -24,14 +25,14 @@ class Puppet {
     this.arms = [0, 1].map(() => ({ mode: "preset", preset: "down", tx: 0, ty: 0, speed: 1, w: null, e: null }));
     this.legs = ["stand", "stand"]; this.legCur = null;
     this.hands = [0, 1].map(() => ({ vis: true, x: 0, y: 0, vx: 0, vy: 0, speed: 0, bodySpeed: 0, shape: "unknown" }));
-    this.active = -1; this.present = true; this.fullBody = true; this.lowerSeen = true; this.lostT = 0; this.pts = null;
+    this.lean = 0; this.leanT = 0; this.active = -1; this.present = true; this.fullBody = true; this.lowerSeen = true; this.lostT = 0; this.pts = null;
     this.update(0.016);
   }
   get u() { return Math.min(this.v.U * 0.115, this.v.H * 0.11); }
   get scale() { return this.u * 1.2; }        // 어깨너비 (게임의 손 속도 기준)
   get shoulderY() { return this.v.H * 0.44; }
   get activeHand() { return this.active >= 0 ? this.hands[this.active] : null; }
-  setPose(id) { const [la, ra, ll = "stand", rl = "stand"] = POSE[id] || POSE.rest; this.rest(0, la, 1.3); this.rest(1, ra, 1.3); this.legs = [ll, rl]; }
+  setPose(id) { const [la, ra, ll = "stand", rl = "stand", lean = 0] = POSE[id] || POSE.rest; this.rest(0, la, 1.3); this.rest(1, ra, 1.3); this.legs = [ll, rl]; this.leanT = lean; }
   rest(k, preset = "down", speed = 1.0) { const a = this.arms[k]; a.mode = "preset"; a.preset = preset; a.speed = speed; }
   reach(k, x, y, speed = 0.9) { const a = this.arms[k]; a.mode = "reach"; a.tx = x; a.ty = y; a.speed = speed; }
   jump() { if (this.jumpT <= 0) this.jumpT = 0.45; }
@@ -44,7 +45,9 @@ class Puppet {
     this.jumpT = Math.max(0, this.jumpT - dt);
     const jy = this.jumpT > 0 ? Math.sin((1 - this.jumpT / 0.45) * Math.PI) * u * 0.7 : 0;
     const sy = this.shoulderY + this.drop * u - jy, hy = sy + 2 * u, cx = this.cx;
-    const S = [{ x: cx - 0.6 * u, y: sy }, { x: cx + 0.6 * u, y: sy }];
+    this.lean += (this.leanT - this.lean) * Math.min(1, dt * 6);
+    const lx = this.lean * u;                               // 윗몸 기울기만큼 어깨·머리가 옆으로
+    const S = [{ x: cx - 0.6 * u + lx, y: sy + Math.abs(this.lean) * 0.15 * u }, { x: cx + 0.6 * u + lx, y: sy + Math.abs(this.lean) * 0.15 * u }];
     const HIP = [{ x: cx - 0.45 * u, y: hy }, { x: cx + 0.45 * u, y: hy }];
     this.arms.forEach((a, k) => {
       const side = k === 0 ? -1 : 1, s = S[k];
@@ -67,7 +70,7 @@ class Puppet {
     const f = Math.min(1, dt * 9);
     this.legCur = this.legCur.map((c, k) => ({ k: lerpP(c.k, target[k].k, f), a: lerpP(c.a, target[k].a, f) }));
     // 선수 인식 결과와 같은 모양의 관절 목록
-    const head = { x: cx, y: sy - 0.8 * u };
+    const head = { x: cx + lx * 1.25, y: sy - 0.8 * u + Math.abs(this.lean) * 0.2 * u };
     const P = Array.from({ length: 33 }, () => ({ ...head, v: true }));
     P[11] = { ...S[0], v: true }; P[12] = { ...S[1], v: true };
     P[13] = { ...this.arms[0].e, v: true }; P[14] = { ...this.arms[1].e, v: true };
@@ -83,9 +86,12 @@ class Puppet {
     for (const [h, k, a] of [[23, 25, 27], [24, 26, 28]]) line([P[h], P[k], P[a]], u * 0.42, "#3b5bdb");
     ctx.fillStyle = "#2b2b2b";
     for (const a of [27, 28]) { ctx.beginPath(); ctx.ellipse(P[a].x, P[a].y + u * 0.12, u * 0.32, u * 0.16, 0, 0, Math.PI * 2); ctx.fill(); }
-    const top = Math.min(P[11].y, P[12].y) - 0.15 * u;
-    ctx.fillStyle = "#ff8a3d"; rr(ctx, this.cx - 0.75 * u, top, 1.5 * u, P[23].y - top + 0.25 * u, 0.4 * u); ctx.fill();
-    ctx.fillStyle = "#ffd23d"; ctx.beginPath(); ctx.arc(this.cx, top + 0.9 * u, 0.28 * u, 0, Math.PI * 2); ctx.fill();   // 셔츠 무늬
+    // 몸통: 엉덩이 가운데 → 어깨 가운데 (기울이면 같이 기욺)
+    const shm = { x: (P[11].x + P[12].x) / 2, y: (P[11].y + P[12].y) / 2 }, hpm = { x: (P[23].x + P[24].x) / 2, y: (P[23].y + P[24].y) / 2 + 0.1 * u };
+    const ta = Math.atan2(shm.x - hpm.x, hpm.y - shm.y), tl = Math.hypot(shm.x - hpm.x, shm.y - hpm.y);
+    ctx.save(); ctx.translate(hpm.x, hpm.y + 0.15 * u); ctx.rotate(ta);
+    ctx.fillStyle = "#ff8a3d"; rr(ctx, -0.75 * u, -tl - 0.3 * u, 1.5 * u, tl + 0.3 * u, 0.4 * u); ctx.fill(); ctx.restore();
+    ctx.fillStyle = "#ffd23d"; ctx.beginPath(); ctx.arc(shm.x + (hpm.x - shm.x) * 0.38, shm.y + (hpm.y - shm.y) * 0.38, 0.28 * u, 0, Math.PI * 2); ctx.fill();   // 셔츠 무늬
     for (const [s, e, w] of [[11, 13, 15], [12, 14, 16]]) { line([P[s], P[e]], u * 0.36, "#ff8a3d"); line([P[e], P[w]], u * 0.28, "#ffcf9e"); }
     // 얼굴
     const hx = this.head.x, hy = this.head.y, r = 0.55 * u;
@@ -178,26 +184,25 @@ const SCRIPTS = {
     },
   },
   star: {
-    dur: 15,
+    dur: 14,
     run(T, g, p, S, say) {
       const u = p.u; p.hands.forEach(h => { h.shape = "open"; }); p.active = -1;
-      const at = (t, fn) => { S.done = S.done || {}; if (T >= t && !S.done[t]) { S.done[t] = 1; fn(); } };
-      at(0, () => say("별 따기! 떨어지는 별을 손으로 잡아요"));
-      at(0.3, () => g.forceSpawn("star", 0.38)); at(1.8, () => g.forceSpawn("star", 0.64));
-      at(4.6, () => { g.forceSpawn("gold", 0.5); say("높이 뜬 금별은 3점! 손을 높이 뻗어요"); });
-      at(8.6, () => { g.forceSpawn("bomb", 0.5); g.forceSpawn("star", 0.82); say("폭탄은 피해요! 닿으면 점수가 깎여요"); });
-      at(12.6, () => say("이제 직접 해 봐요!"));
-      const stars = g.stars, bombs = stars.filter(s => s.kind === "bomb" && s.y > 0);
-      const goods = stars.filter(s => s.kind !== "bomb" && s.y > 0 && !bombs.some(bm => Math.hypot(bm.x - s.x, bm.y - s.y) < 2.5 * u));
-      const danger = bombs.find(bm => Math.abs(bm.x - p.cx) < 3.2 * u && bm.y > p.shoulderY - 3.5 * u);
-      if (danger && !goods.length) {   // 폭탄 피하기: 손 모으고 옆으로 비킴
-        p.tcx = danger.x + (p.cx <= danger.x ? -3.4 * u : 3.4 * u); p.rest(0, "guard"); p.rest(1, "guard"); return;
+      once(S, T, 0, () => say("별 따기! 떨어지는 별을 손으로 잡아요"));
+      once(S, T, 0.3, () => g.forceSpawn("star", 0.38)); once(S, T, 1.8, () => g.forceSpawn("star", 0.64));
+      once(S, T, 4.6, () => { g.forceSpawn("big", 0.5); say("반짝이는 큰 별은 두 손으로 함께 잡아요! 3점"); });
+      once(S, T, 8.8, () => { g.forceSpawn("star", 0.3); g.forceSpawn("star", 0.72); say("양쪽에서 오면 양손으로!"); });
+      once(S, T, 12, () => say("이제 직접 해 봐요!"));
+      const stars = g.stars.filter(s => s.y > 0), big = stars.find(s => s.kind === "big");
+      if (big) {   // 큰 별: 두 손을 별 양옆으로
+        p.tcx = big.x; p.reach(0, big.x - 0.25 * u, big.y, 1.1); p.reach(1, big.x + 0.25 * u, big.y, 1.1); return;
       }
-      const tg = goods.find(s => s.kind === "gold") || goods.sort((a, b) => b.y - a.y)[0];
-      if (!tg) { p.rest(0); p.rest(1); return; }
-      const k = tg.x < p.cx ? 0 : 1;
-      p.tcx = tg.x + (k === 0 ? 0.9 * u : -0.9 * u); p.reach(k, tg.x, tg.y, 1.1); p.rest(1 - k, "guard");
-      if (tg.y < p.shoulderY - 1.7 * u && dist(p.hands[k], tg) > 0.4 * u && (!S.jt || T - S.jt > 0.8)) { p.jump(); S.jt = T; }
+      if (!stars.length) { p.rest(0); p.rest(1); return; }
+      // 별마다 가까운 손
+      const L = stars.filter(s => s.x < p.cx).sort((a, b) => b.y - a.y)[0], R = stars.filter(s => s.x >= p.cx).sort((a, b) => b.y - a.y)[0];
+      if (!L !== !R) { const tg = L || R; p.tcx = tg.x + (L ? 0.9 : -0.9) * u; }
+      else p.tcx = (L.x + R.x) / 2;
+      if (L) p.reach(0, L.x, L.y, 1.1); else p.rest(0, "guard");
+      if (R) p.reach(1, R.x, R.y, 1.1); else p.rest(1, "guard");
     },
   },
   copy: {
@@ -245,7 +250,7 @@ const SCRIPTS = {
       }
       once(S, T, 0, () => say("두더지 잡기! 튀어나온 두더지를 주먹으로 콩!"));
       once(S, T, 0.6, () => g.forcePop(S.A)); once(S, T, 3.0, () => g.forcePop(S.B));
-      once(S, T, 5.4, () => { g.forcePop(S.A, "gold"); say("금두더지는 3점!"); });
+      once(S, T, 5.4, () => { g.forcePop(S.A, "helmet"); say("헬멧 쓴 두더지는 두 번 콩! 2점"); });
       once(S, T, 8.2, () => { g.forcePop(S.B, "rabbit"); say("토끼는 치면 안 돼요!"); });
       once(S, T, 11.6, () => say("이제 직접 해 봐요!"));
       const t = g.targets.filter(x => x.kind !== "rabbit" && Math.abs(x.x - p.cx) < 2.6 * u).sort((a, b) => Math.abs(a.x - p.cx) - Math.abs(b.x - p.cx))[0];
@@ -264,11 +269,11 @@ const SCRIPTS = {
   wall: {
     dur: 20,
     run(T, g, p, S, say) {
-      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
+      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = g.holeX ?? p.v.W / 2; p.walk = 1.2;
       const i = g.index, id = g.current, k = g.progressK;
       if (i <= 1) { if (k >= 0.45) S.c1 = true; say(S.c1 ? "구멍 모양대로 자세를 잡으면 통과!" : "벽 통과! 다가오는 벽의 구멍 모양을 잘 봐요"); }
-      else if (i === 2) say("자세가 다르면 쿵! 부딪혀요");
-      else if (i === 3) say("다시 한 번! 모양을 맞춰요");
+      else if (i === 2) { say("자세가 다르면 쿵! 부딪혀요"); once(S, T, 0, () => g.forceOff(0.26)); }
+      else if (i === 3) say("구멍이 옆에 있으면 그 자리로 가서 모양을 맞춰요");
       else { say("이제 직접 해 봐요!"); S.endAt = S.endAt || T + 1.2; if (T > S.endAt) S.end = true; }
       p.setPose(i !== 2 && id && k > 0.4 ? id : "rest");                 // 두 번째 벽은 일부러 못 맞춤
     },
@@ -288,18 +293,20 @@ const SCRIPTS = {
     },
   },
   goalie: {
-    dur: 13,
+    dur: 15,
     run(T, g, p, S, say) {
-      const u = p.u, cx = p.v.W / 2, sy = p.shoulderY; p.hands.forEach(h => { h.shape = "open"; }); p.active = -1; p.tcx = cx;
+      const u = p.u, cx = p.v.W / 2, sy = p.shoulderY; p.hands.forEach(h => { h.shape = "open"; }); p.active = -1; p.walk = 1.2;
       once(S, T, 0, () => say("골키퍼! 날아오는 공을 손으로 막아요"));
       once(S, T, 0.4, () => g.forceShot(cx - 2.0 * u, sy - 0.6 * u)); once(S, T, 3.0, () => g.forceShot(cx + 2.1 * u, sy + 0.9 * u));
       once(S, T, 4.6, () => say("동그라미가 공이 올 자리예요. 미리 손을 대요!"));
-      once(S, T, 5.8, () => g.forceShot(cx - 1.3 * u, sy - 1.6 * u)); once(S, T, 8.4, () => g.forceShot(cx + 1.6 * u, sy + 0.2 * u));
-      once(S, T, 11.2, () => say("이제 직접 해 봐요!"));
-      const s = g.shots.filter(x => x.k > 0.25).sort((a, b) => b.k - a.k)[0];
-      if (!s) { p.rest(0, "guard", 0.6); p.rest(1, "guard", 0.6); return; }
-      const k = s.dx < cx ? 0 : 1;
-      p.reach(k, s.dx, s.dy, 1.0); p.rest(1 - k, "guard", 0.6);
+      once(S, T, 5.8, () => g.forceShot(cx - 1.3 * u, sy - 1.6 * u));
+      once(S, T, 8.0, () => { g.forceShot(cx + 4.2 * u, sy + 0.3 * u, true); say("화살표가 나오면 옆으로 가서 막아요! 2점"); });
+      once(S, T, 12.4, () => say("이제 직접 해 봐요!"));
+      const s = g.shots.filter(x => x.k > 0.15).sort((a, b) => b.k - a.k)[0];
+      if (!s) { p.tcx = cx; p.rest(0, "guard", 0.6); p.rest(1, "guard", 0.6); return; }
+      const k = s.dx < p.cx ? 0 : 1;
+      if (s.far) p.tcx = s.dx + (k ? -1.5 : 1.5) * u;          // 먼 공은 옆걸음
+      if (s.k > 0.25) p.reach(k, s.dx, s.dy, 1.0); p.rest(1 - k, "guard", 0.6);
     },
   },
   run: {
@@ -318,7 +325,7 @@ const SCRIPTS = {
     dur: 15,
     run(T, g, p, S, say) {
       p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
-      if (!S.init) { S.init = 1; g.forceSays(0, true, "up"); g.forceSays(1, false, "left"); g.forceSays(2, true, "crossL"); }
+      if (!S.init) { S.init = 1; g.forceSays(0, true, "up"); g.forceSays(1, false, "left"); g.forceSays(2, true, "lknee"); }
       const r = g.round;
       if (!r) { say("가라사대! '가라사대'가 붙은 말만 따라 해요"); p.setPose("rest"); return; }
       if (r.i >= 3) { say("이제 직접 해 봐요!"); p.setPose("rest"); S.endAt = S.endAt || T + 1.2; if (T > S.endAt) S.end = true; return; }

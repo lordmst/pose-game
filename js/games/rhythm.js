@@ -1,6 +1,6 @@
 // 리듬 박자: 몸 둘레 7개 판. 판 위로 줄어드는 링이 판에 딱 닿는 순간 그 판에 손을 넣기 (펌프처럼)
-import { burst, popup, outlinedText, FONT } from "../fx.js?v=18";
-import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=18";
+import { burst, popup, outlinedText, FONT } from "../fx.js?v=19";
+import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=19";
 
 const PERFECT = 0.09, GOOD = 0.22;     // 판정 시간 폭(초)
 const TRAVEL = 1.5;                     // 링이 줄어들기 시작해서 판에 닿기까지(초, 보통)

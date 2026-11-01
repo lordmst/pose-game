@@ -1,13 +1,13 @@
-// 두더지 잡기: 구멍에서 튀어나온 두더지를 주먹으로 콩! 금두더지 3점, 토끼는 치면 안 됨
-import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=18";
-import { sfx } from "../audio.js?v=18";
+// 두더지 잡기: 구멍에서 튀어나온 두더지를 주먹으로 콩! 헬멧 두더지는 두 번 쳐야 함(2점), 토끼는 치면 안 됨
+import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=19";
+import { sfx } from "../audio.js?v=19";
 
 const PUNCH = 3.0;          // 타격 인정 속도 (얼음 깨기와 같음)
 const POP = 0.15;           // 올라오고 내려가는 시간
 
 export default {
-  id: "mole", title: "두더지 잡기", icon: "🐹", sec: 45, cursor: "👊", cat: "move", bg: "#d4a373", desc: "튀어나온 두더지 콩!",
-  how: "구멍에서 튀어나온 두더지를 주먹으로 빠르게 콩! 금두더지는 3점, 토끼는 치면 안 돼요",
+  id: "mole", title: "두더지 잡기", icon: "🐹", sec: 45, cursor: "👊", cat: "move", bg: "#d4a373", desc: "헬멧은 두 번 콩!",
+  how: "구멍에서 튀어나온 두더지를 주먹으로 빠르게 콩! 헬멧 쓴 두더지는 두 번 쳐야 해요(2점). 토끼는 치면 안 돼요",
   create(env) {
     const z = env.zone, v = env.view;
     const cols = clamp(Math.floor(z.w / (v.U * 0.3)), 2, 4);
@@ -18,11 +18,17 @@ export default {
     const pos = h => ({ x: z.x0 + h.fx * z.w, y: h.fy * v.H });
     function popUp(h, kind) {
       const p = env.progress();
-      h.kind = kind || (p > 0.1 && Math.random() < 0.15 * env.diff.bomb ? "rabbit" : Math.random() < 0.12 ? "gold" : "mole");
-      h.state = "up"; h.t = 0; h.up = (1.7 - 0.6 * p) / env.diff.speed;
+      h.kind = kind || (p > 0.1 && Math.random() < 0.15 * env.diff.bomb ? "rabbit" : Math.random() < 0.18 ? "helmet" : "mole");
+      h.state = "up"; h.t = 0; h.up = (1.7 - 0.6 * p) / env.diff.speed * (h.kind === "helmet" ? 1.5 : 1); h.armor = h.kind === "helmet" ? 1 : 0;
     }
     function bonk(h, hand) {
       const { x, y } = pos(h), r = HR();
+      if (h.armor > 0) {   // 헬멧이 먼저 벗겨짐
+        h.armor--; h.knock = 0.35; sfx.hit(1); shake(v.U * 0.006, 0.12);
+        burst(x, y - r * 1.2, { n: 10, colors: ["#e23b3b", "#ffffff", "#ffd400"], shape: "shard", speed: v.U * 0.5, gravity: v.U * 1.5, size: v.U * 0.015, life: 0.6 });
+        popup(x, y - r * 2.2, "한 번 더!", { size: v.U * 0.04, color: "#fff", stroke: "#e23b3b" });
+        return;
+      }
       h.state = "hit"; h.t = 0;
       if (h.kind === "rabbit") {
         rabbits++; sfx.bad(); shake(v.U * 0.012, 0.25); env.penalty(1, x, y - r * 2, "토끼는 안 돼요!");
@@ -30,7 +36,7 @@ export default {
       }
       hits++; sfx.bonk(); shake(v.U * 0.008, 0.15);
       burst(x, y - r * 0.8, { n: 12, colors: ["#ffe14d", "#ffffff", "#ffb000"], shape: "star", speed: v.U * 0.5, gravity: v.U * 0.6, size: v.U * 0.018, life: 0.6 });
-      env.award(h.kind === "gold" ? 3 : 1, x, y - r * 2);
+      env.award(h.kind === "helmet" ? 2 : 1, x, y - r * 2);
     }
     return {
       update(dt) {
@@ -43,7 +49,7 @@ export default {
           spawnT = (1.0 - 0.45 * p) / env.diff.speed * (env.fever() ? 0.7 : 1);
         }
         for (const h of holes) {
-          h.t += dt; h.cool[0] = Math.max(0, h.cool[0] - dt); h.cool[1] = Math.max(0, h.cool[1] - dt); h.hint = Math.max(0, h.hint - dt);
+          h.t += dt; h.knock = Math.max(0, (h.knock || 0) - dt); h.cool[0] = Math.max(0, h.cool[0] - dt); h.cool[1] = Math.max(0, h.cool[1] - dt); h.hint = Math.max(0, h.hint - dt);
           if (h.state === "up" && h.t > h.up) { h.state = "down"; h.t = 0; if (h.kind !== "rabbit") { missed++; env.miss(pos(h).x, pos(h).y, null); } }
           if ((h.state === "down" && h.t > POP) || (h.state === "hit" && h.t > 0.55)) { h.state = "empty"; h.t = 0; }
           if (h.state !== "up" || h.t < POP * 0.6) continue;
@@ -78,14 +84,20 @@ export default {
             if (h.kind === "rabbit") {
               ctx.font = `${Math.round(r * 1.7)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("🐰", x, by - r * 0.1);
             } else {
-              const body = h.kind === "gold" ? "#f2b705" : "#8a5a2b", belly = h.kind === "gold" ? "#ffe58a" : "#c49a6c";
+              const body = "#8a5a2b", belly = "#c49a6c";
               ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(x, by, r * 0.75, r * 0.9 * squash, 0, 0, Math.PI * 2); ctx.fill();
               ctx.fillStyle = belly; ctx.beginPath(); ctx.ellipse(x, by + r * 0.35, r * 0.45, r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
               if (h.state === "hit") { outlinedText(ctx, "× ×", x, by - r * 0.25, r * 0.4, "#222", "#fff", 2); }
               else { ctx.fillStyle = "#111"; for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(x + s * r * 0.25, by - r * 0.28, r * 0.09, 0, Math.PI * 2); ctx.fill(); } }
               ctx.fillStyle = "#ff8fa3"; ctx.beginPath(); ctx.ellipse(x, by - r * 0.08, r * 0.14, r * 0.1, 0, 0, Math.PI * 2); ctx.fill();
               ctx.fillStyle = "#fff"; ctx.fillRect(x - r * 0.09, by + r * 0.02, r * 0.08, r * 0.13); ctx.fillRect(x + r * 0.01, by + r * 0.02, r * 0.08, r * 0.13);
-              if (h.kind === "gold") { ctx.font = `${Math.round(r * 0.7)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("👑", x, by - r * 1.05); }
+              if (h.kind === "helmet" && h.armor > 0) {   // 빨간 헬멧
+                const jy = h.knock > 0 ? -Math.sin(h.knock * 30) * r * 0.08 : 0;
+                ctx.fillStyle = "#e23b3b"; ctx.beginPath(); ctx.ellipse(x, by - r * 0.55 + jy, r * 0.82, r * 0.62, 0, Math.PI, 0); ctx.fill();
+                ctx.fillRect(x - r * 0.95, by - r * 0.6 + jy, r * 1.9, r * 0.14);
+                ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.beginPath(); ctx.ellipse(x - r * 0.3, by - r * 0.85 + jy, r * 0.18, r * 0.08, -0.4, 0, Math.PI * 2); ctx.fill();
+                outlinedText(ctx, "2", x, by - r * 0.85 + jy, r * 0.4, "#fff", "#7a1010", 2);
+              }
             }
             ctx.restore();
           }

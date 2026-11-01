@@ -1,7 +1,7 @@
 // 가라사대: "가라사대"가 붙은 지시만 따라 하기. 없으면 움직이면 안 됨. 왼쪽·오른쪽 구분과 잘 듣기 연습
-import { burst, popup, rr, outlinedText, FONT } from "../fx.js?v=18";
-import { sfx } from "../audio.js?v=18";
-import { POSES, poseMatches } from "./copy.js?v=18";
+import { burst, popup, rr, outlinedText, FONT } from "../fx.js?v=19";
+import { sfx } from "../audio.js?v=19";
+import { POSES, poseMatches } from "./copy.js?v=19";
 
 const ROUND = 4.4;      // 한 판(초): 지시를 듣고 따라 하는 시간 + 결과 보여 주는 시간
 const ANSWER = 3.2;     // 따라 하는 시간(초, 보통)
@@ -27,23 +27,28 @@ export const COMMANDS = [
   { id: "shoulders", text: "어깨에 두 손", check: p => vis(p, [11, 12, 15, 16]) && d(p[15], p[11]) < sw(p) * 0.6 && d(p[16], p[12]) < sw(p) * 0.6 },
   { id: "crossL", text: "오른손으로 왼쪽 어깨", check: p => vis(p, [11, 12, 15, 16]) && d(p[16], p[11]) < sw(p) * 0.6 && d(p[15], p[11]) > sw(p) * 0.5 },
   { id: "crossR", text: "왼손으로 오른쪽 어깨", check: p => vis(p, [11, 12, 15, 16]) && d(p[15], p[12]) < sw(p) * 0.6 && d(p[16], p[12]) > sw(p) * 0.5 },
+  // 하체 지시 (발까지 화면에 보일 때만 나옴)
+  { id: "squat", text: "앉기", lower: true, check: fromCopy("squat") },
+  { id: "lknee", text: "왼발 들기", lower: true, check: fromCopy("lknee") },
+  { id: "rknee", text: "오른발 들기", lower: true, check: fromCopy("rknee") },
+  { id: "jump", text: "제자리 뛰기", lower: true, jump: true, check: () => false },
   { id: "clap", text: "가슴 앞에서 손 모으기", check: p => vis(p, [0, 15, 16, 23, 24]) && apart(p) < 0.5 && p[15].y > p[0].y && p[15].y < (p[23].y + p[24].y) / 2 },
 ];
 const hash = (a, b) => { let x = (a * 374761393 + b * 668265263) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); x ^= x >>> 16; return (x >>> 0) / 4294967296; };
 
 // 2인이 같은 지시를 받도록 시작 시각·지시 목록을 함께 씀
 let shared = null;
-function sharedStart() {
-  if (!shared) shared = { t0: performance.now() / 1000 + 0.8, seed: 1 + Math.floor(Math.random() * 1e6), rounds: [] };
+function sharedStart(lower = true) {
+  if (!shared) shared = { t0: performance.now() / 1000 + 0.8, seed: 1 + Math.floor(Math.random() * 1e6), rounds: [], lower };
   return shared;
 }
 function roundAt(i) {
-  const S = shared, N = COMMANDS.length;
+  const S = shared, list = COMMANDS.filter(c => S.lower || !c.lower), N = list.length;
   while (S.rounds.length <= i) {
     const k = S.rounds.length;
     let idx = Math.floor(hash(S.seed, k) * N);
-    if (k > 0 && COMMANDS[idx].id === S.rounds[k - 1].cmd.id) idx = (idx + 1) % N;   // 같은 지시 연속 금지
-    S.rounds.push({ cmd: COMMANDS[idx], says: k < 2 || hash(S.seed, k * 7 + 3) >= TRAP_RATE });   // 처음 두 번은 항상 '가라사대'
+    if (k > 0 && list[idx].id === S.rounds[k - 1].cmd.id) idx = (idx + 1) % N;   // 같은 지시 연속 금지
+    S.rounds.push({ cmd: list[idx], says: k < 2 || hash(S.seed, k * 7 + 3) >= TRAP_RATE });   // 처음 두 번은 항상 '가라사대'
   }
   return S.rounds[i];
 }
@@ -53,6 +58,7 @@ export default {
   how: "'가라사대'가 붙은 지시만 따라 해요. '가라사대'가 없으면 움직이면 안 돼요! 왼쪽·오른쪽은 내 몸 기준",
   create(env) {
     const z = env.zone, v = env.view, answer = ANSWER * Math.max(0.75, Math.min(1.2, env.diff.poseTime));
+    const ankleBase = [null, null, null]; let jumping = false;
     let cur = -1, matchT = 0, result = null, resultAt = 0, okN = 0, failN = 0, now = 0, R = null;
     function finish(kind, label) {
       result = kind; resultAt = now;
@@ -67,7 +73,16 @@ export default {
     }
     return {
       update(dt = 1 / 60) {
-        const S = sharedStart();
+        const S = sharedStart(!!env.tracker.lowerSeen);
+        // 뛰기 판정: 두 발목이 '서 있을 때 높이'보다 함께 올라가면 (앉기·한 발 들기와 구별됨)
+        const P = env.tracker.pts;
+        jumping = false;
+        if (P && [23, 24, 27, 28].every(i => P[i].v)) {
+          const sw = Math.hypot(P[11].x - P[12].x, P[11].y - P[12].y) || 1, base = (k, y) => (ankleBase[k] = ankleBase[k] == null ? y : Math.max(y, ankleBase[k] - dt * sw * 0.08));
+          const ys = [P[27].y, P[28].y, (P[23].y + P[24].y) / 2];
+          ys.forEach((y, k) => base(k, y));
+          jumping = ys.every((y, k) => ankleBase[k] - y > sw * (k < 2 ? 0.3 : 0.2));   // 두 발목과 엉덩이가 함께 떠야 뛰기
+        }
         now = performance.now() / 1000;
         const el = now - S.t0;
         if (el < 0) return;
@@ -80,10 +95,11 @@ export default {
           if (!result && tIn > answer) { if (R.says) finish("late", "시간이 지났어요"); else finish("safe", "속지 않았어요!"); }
           return;
         }
-        const pts = env.tracker.pts, ok = !!(pts && R.cmd.check(pts));
+        const pts = env.tracker.pts, ok = R.cmd.jump ? jumping : !!(pts && R.cmd.check(pts));
         matchT = ok ? matchT + dt : Math.max(0, matchT - dt);
-        if (R.says && matchT >= HOLD * env.diff.hold) finish("good", "잘했어요!");
-        if (!R.says && matchT >= HOLD * 0.75) finish("caught", "가라사대가 없었어요!");
+        const need = R.cmd.jump ? 0.05 : HOLD * env.diff.hold;     // 뛰기는 한순간이면 됨
+        if (R.says && matchT >= need) finish("good", "잘했어요!");
+        if (!R.says && matchT >= (R.cmd.jump ? 0.05 : HOLD * 0.75)) finish("caught", "가라사대가 없었어요!");
       },
       draw(ctx) {
         const U = v.U, w = Math.min(z.w * 0.9, U * 0.95), h = U * 0.2, x = z.x0 + (z.w - w) / 2, y = v.H * 0.14;
@@ -106,7 +122,7 @@ export default {
       result: () => `맞힘 ${okN} · 틀림 ${failN}`,
       // 설명 시연용
       get round() { if (!shared || !R) return null; const el = now - shared.t0; return { i: cur, cmd: R.cmd, says: R.says, tIn: el - cur * ROUND, result }; },
-      forceSays(i, says, cmdId) { sharedStart(); const r = roundAt(i); r.says = says; if (cmdId) r.cmd = COMMANDS.find(c => c.id === cmdId) || r.cmd; },
+      forceSays(i, says, cmdId) { sharedStart(true); const r = roundAt(i); r.says = says; if (cmdId) r.cmd = COMMANDS.find(c => c.id === cmdId) || r.cmd; },
     };
   },
 };
