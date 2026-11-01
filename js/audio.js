@@ -73,14 +73,16 @@ export const sfx = {
   }),
 };
 
-/* ---------- 배경음악: 32스텝 반복 ---------- */
+/* ---------- 배경음악: 32스텝 반복 ----------
+   음악이 끊기지 않게: 0.4초 앞까지 미리 예약해 둠. 화면 처리(자세 인식)로 타이머가 늦게 와도 소리는 이미 예약돼 있음 */
+const LOOKAHEAD = 0.4;
 const BASS = [48, 0, 48, 0, 55, 0, 55, 0, 53, 0, 53, 0, 55, 0, 52, 0];
 const LEAD = [72, 0, 74, 76, 0, 79, 76, 0, 74, 0, 72, 74, 0, 76, 0, 0, 79, 0, 81, 79, 0, 76, 74, 0, 72, 0, 74, 0, 72, 0, 0, 0];
 let timer = null, step = 0, nextT = 0, tempo = 1;
 function schedule() {
   if (!ac || !bgmGain) return;
   const spb = 60 / (132 * tempo) / 2;
-  while (nextT < ac.currentTime + 0.12) {
+  while (nextT < ac.currentTime + LOOKAHEAD) {
     const i = step % 32, b = BASS[i % 16], l = LEAD[i];
     if (b) tone(midi(b), nextT, spb * 1.6, { type: "triangle", vol: 0.16, dest: bgmGain });
     if (l) tone(midi(l), nextT, spb * 0.9, { type: "square", vol: 0.04, dest: bgmGain });
@@ -213,7 +215,7 @@ function drum(style, i, t, half, dest) {
 function rSchedule() {
   if (!ac || !rGain || !rSong) return;
   const half = rSpb / 2, S = rSong;
-  while (rNext < ac.currentTime + 0.12) {
+  while (rNext < ac.currentTime + LOOKAHEAD) {
     const i = rStep, k = i - INTRO;
     if (rOrch) {     // 관현악: 팀파니(1·3박), 현악 지속음, 멜로디는 부드럽게 두 겹, 강조 구간엔 금관
       const beat = i % 2 === 0, inBar = (i / 2) % 4;
@@ -253,7 +255,7 @@ export const rhythm = {
     rStart = clock() + 0.15;
     if (ac && (settings.bgm || settings.sfx)) {
       rGain = ac.createGain(); rGain.gain.value = 0.6; rGain.connect(settings.bgm ? musicBus : sfxBus);   // 배경음악을 꺼도 박자는 들리게
-      rStep = 0; rNext = rStart; rTimer = setInterval(rSchedule, 25);
+      rStep = 0; rNext = rStart; rTimer = setInterval(rSchedule, 40);
     }
     return rStart;
   },
@@ -264,6 +266,8 @@ export const rhythm = {
     const vals = Object.values(rLevels), avg = vals.reduce((a, b) => a + b, 0) / vals.length;
     rGain.gain.setTargetAtTime(0.6 * (0.3 + 0.7 * avg), ac.currentTime, 0.15);
   },
+  tick() { rSchedule(); },
+  get ahead() { return ac && rTimer ? rNext - ac.currentTime : null; },   // 점검용: 미리 예약된 시간(초)                     // 게임 화면이 그릴 때마다 한 번 더 예약 (타이머가 밀려도 끊기지 않게)
   accent(steps) { rAccentUntil = Math.max(rAccentUntil, rStep + steps); },   // 금관 강조 (반 박 단위)
   stop() {
     clearInterval(rTimer); rTimer = null; rStart = 0;

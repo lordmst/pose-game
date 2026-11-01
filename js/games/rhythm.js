@@ -1,8 +1,8 @@
 // 리듬 박자 (펌프 방식): 화면 위에 판정판 4개(↙ ↖ ↗ ↘)가 한 줄로 있고 화살표가 아래에서 올라옴.
-// 판을 손으로 누르는 게 아니라 몸으로 '밟음': 왼손 11시(↖) · 오른손 1시(↗) · 왼발 7시(↙) · 오른발 5시(↘)
-// 화살표가 판에 겹치는 순간 그 손을 대각선 위로 뻗거나 그 발을 대각선 아래로 내딛기. 긴 막대(홀드)는 끝날 때까지 그대로
-import { burst, outlinedText, rr, FONT } from "../fx.js?v=25";
-import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=25";
+// 판을 손으로 누르는 게 아니라 몸으로 '밟음': 왼손(↖) · 오른손(↗)은 옆으로 뻗기, 왼발(↙) · 오른발(↘)은 다리 들기
+// 화살표가 판에 겹치는 순간 그 동작을 함. 긴 막대(홀드)는 끝날 때까지 그대로. 맞혀도 효과음은 없음(음악만)
+import { burst, outlinedText, rr, FONT } from "../fx.js?v=26";
+import { rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=26";
 
 const TRAVEL = 1.6;                                   // 화살표가 화면 아래에서 판까지 올라오는 시간(초, 보통)
 // 판정 시간 폭(초, 보통). 쉬움은 넓고 어려움은 좁음
@@ -14,10 +14,10 @@ const J_STYLE = {
 const LIFE = { PERFECT: 0.02, GREAT: 0.015, GOOD: 0.005, BAD: -0.04, MISS: -0.08 };
 // 판 (왼쪽부터): 왼발 7시 ↙ · 왼손 11시 ↖ · 오른손 1시 ↗ · 오른발 5시 ↘. 펌프처럼 발은 파랑, 손은 빨강
 export const LANES = [
-  { rot: -135, color: "#2f8bff", limb: "왼발", icon: "🦶", clock: "옆으로" },
+  { rot: -135, color: "#2f8bff", limb: "왼발", icon: "🦶", clock: "들기" },
   { rot: -45, color: "#ff3b5c", limb: "왼손", icon: "✋", clock: "옆으로" },
   { rot: 45, color: "#ff3b5c", limb: "오른손", icon: "✋", clock: "옆으로" },
-  { rot: 135, color: "#2f8bff", limb: "오른발", icon: "🦶", clock: "옆으로" },
+  { rot: 135, color: "#2f8bff", limb: "오른발", icon: "🦶", clock: "들기" },
 ];
 const MIN_GAP = { easy: 0.75, normal: 0.45, hard: 0.3 };  // 음표 사이 최소 간격(초)
 const DEG = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6];        // 반음 → 음계 자리(도=0 … 시=6)
@@ -26,8 +26,10 @@ const hash = (a, b) => { let x = (a * 374761393 + b * 668265263) | 0; x = Math.i
 
 // 팔다리 자세 판정 (화면 좌표, 거울 화면이라 선수의 왼쪽이 화면 왼쪽). 들어가는 기준과 풀리는 기준을 달리 해 떨림 방지
 // 손: 옆으로 뻗기만 해도 인정(허리보다 위에서 바깥쪽으로 쭉), 대각선 위로 들어도 인정
-// 발: 발목이 몸 가운데에서 옆으로 벌어짐 (발이 안 보이면 손을 대각선 아래로 뻗는 것으로 대신)
-export function limbStates(p, prev, footByHand) {
+// 다리: 한쪽 다리를 듦 = 그 무릎(또는 발목)이 서 있을 때 높이보다 올라가고, 다른 다리보다 확실히 높음
+//       (두 다리가 같이 움직이는 앉았다 일어나기는 다리 들기로 치지 않음). 무릎이 안 보이면 손을 대각선 아래로 뻗는 것으로 대신
+// base: { knee: [왼, 오], ankle: [왼, 오] } 서 있을 때 높이를 천천히 따라가는 기준값 (부르는 쪽에서 계속 넘겨줌)
+export function limbStates(p, prev, footByHand, base = { knee: [null, null], ankle: [null, null] }, dt = 1 / 30) {
   const out = [false, false, false, false];
   if (!p || !p[11].v || !p[12].v) return out;
   const sw = Math.hypot(p[11].x - p[12].x, p[11].y - p[12].y) || 1;
@@ -41,11 +43,18 @@ export function limbStates(p, prev, footByHand) {
   };
   out[1] = hand(15, 11, -1, prev[1]); out[2] = hand(16, 12, 1, prev[2]);
   if (!footByHand) {
-    if (p[23].v && p[24].v && p[27].v && p[28].v) {
-      const hx = (p[23].x + p[24].x) / 2;
-      const foot = (a, side, was) => ((p[a].x - hx) * side / sw) > (was ? 0.5 : 0.68);   // 옆으로 조금만 벌려도
-      out[0] = foot(27, -1, prev[0]); out[3] = foot(28, 1, prev[3]);
-    }
+    const lift = (ids, key) => ids.map((i, k) => {
+      if (!p[i].v) return null;
+      const b = base[key][k] = base[key][k] == null ? p[i].y : Math.max(p[i].y, base[key][k] - dt * sw * 0.08);
+      return (b - p[i].y) / sw;
+    });
+    const kn = lift([25, 26], "knee"), an = lift([27, 28], "ankle");
+    // 무릎이 둘 다 보이면 무릎으로, 아니면 발목으로 비교
+    const L = kn[0] != null && kn[1] != null ? kn : an[0] != null && an[1] != null ? an : null;
+    if (L) [0, 1].forEach(k => {
+      const d = L[k] - L[1 - k], lane = k ? 3 : 0;
+      out[lane] = prev[lane] ? d > 0.1 : d > 0.25;
+    });
   } else {
     const low = (w, s, side, was) => {
       if (!p[w].v) return false;
@@ -81,7 +90,7 @@ function drawArrow(ctx, x, y, s, lane, kind, glow = 0) {
 export default {
   id: "rhythm", title: "리듬 박자", icon: "🥁", sec: 45, cursor: "", cat: "move", bg: "#c39bff", desc: "펌프처럼 손발로 박자 밟기", music: false,
   songs: SONGS.map(({ id, title, icon, bpm }) => ({ id, title, icon, bpm })),
-  how: "화살표가 위 판에 겹치는 순간 몸으로 밟아요. ↖ 왼손 · ↗ 오른손은 옆으로 쭉 뻗고, ↙ 왼발 · ↘ 오른발은 옆으로 내딛기! 긴 막대는 끝까지 그대로",
+  how: "화살표가 위 판에 겹치는 순간 몸으로 밟아요. ↖ 왼손 · ↗ 오른손은 옆으로 쭉 뻗고, ↙ 왼발 · ↘ 오른발은 다리를 들어요! 긴 막대는 끝까지 그대로",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, id = D.id || "normal";
     const song = songOf(env.song), minGap = MIN_GAP[id] || 0.45, travel = TRAVEL / D.speed, wide = D.reach;
@@ -90,6 +99,7 @@ export default {
     let lastLane = null, lastIdx = null, lastTime = -9, holdUntil = -9;
     const count = { PERFECT: 0, GREAT: 0, GOOD: 0, BAD: 0, MISS: 0 };
     let life = 0.6, judge = null, judgeT = 0, limbs = [false, false, false, false], feetSeenT = -9, footByHand = false;
+    const legBase = { knee: [null, null], ankle: [null, null] };
     const flash = [0, 0, 0, 0];
 
     function layout() {
@@ -126,8 +136,8 @@ export default {
       }
       lastLane = lane; lastTime = time; if (hold) holdUntil = time + hold;
       const bar = j >= rhythm.INTRO && (j - rhythm.INTRO) % 8 === 0;
-      // 두 손 동시(만세 모양) 또는 두 발 동시(점프해서 벌리기)
-      const pair = !hold && bar && id !== "easy" && p > (id === "hard" ? 0.3 : 0.5) && hash(seed, j * 13 + 2) < (id === "hard" ? 0.35 : 0.15);
+      // 두 손 동시 (두 발 동시는 없음: 두 다리를 같이 들 수 없으니까)
+      const pair = !hold && bar && (lane === 1 || lane === 2) && id !== "easy" && p > (id === "hard" ? 0.3 : 0.5) && hash(seed, j * 13 + 2) < (id === "hard" ? 0.35 : 0.15);
       for (const l of pair ? [lane, 3 - lane] : [lane]) notes.push({ time, lane: l, hold, done: null, holding: false, pair });
     }
     function show(name, x, y) {
@@ -142,7 +152,6 @@ export default {
       const name = JUDGE.find(([, w]) => bd <= w * wide)[0];
       if (name === "BAD") { best.done = "BAD"; best.doneAt = now; show("BAD", P.x, P.y); return; }
       env.award(name === "PERFECT" ? 2 : 1, P.x, P.y - P.r * 1.6); show(name, P.x, P.y);
-      sfx.catch(env.player.combo);
       burst(P.x, P.y, { n: name === "PERFECT" ? 16 : 10, colors: [LANES[li].color, "#ffffff"], shape: "star", speed: v.U * 0.5, gravity: v.U * 0.4, size: v.U * 0.015, life: 0.5 });
       if (best.hold) { best.holding = true; best.end = best.time + best.hold; best.lostT = 0; }
       else { best.done = name; best.doneAt = now; }
@@ -150,14 +159,14 @@ export default {
     return {
       update() {
         if (t0 === null) { t0 = rhythm.start(song.id); spb = rhythm.spb; seed = rhythm.seed; }
-        now = clock();
+        rhythm.tick(); now = clock();
         const dt = lastT === null ? 0.016 : Math.min(0.1, now - lastT); lastT = now;
         while (t0 + nextJ * spb / 2 - now < travel) { addStep(nextJ); nextJ++; }
         // 발이 1초 넘게 안 보이면 발 화살표는 손을 대각선 아래로 뻗는 것으로 대신
         const p = env.tracker.pts;
-        if (p && p[27].v && p[28].v) feetSeenT = now;
+        if (p && ((p[25].v && p[26].v) || (p[27].v && p[28].v))) feetSeenT = now;
         footByHand = now - feetSeenT > 1;
-        const st = limbStates(p, limbs, footByHand), P = layout().pads;
+        const st = limbStates(p, limbs, footByHand, legBase, dt), P = layout().pads;
         st.forEach((on, li) => { if (on && !limbs[li]) hit(li); if (on) flash[li] = 1; });   // 그 자세로 '들어가는 순간'만 판정
         limbs = st;
         for (let i = 0; i < 4; i++) if (!limbs[i]) flash[i] = Math.max(0, flash[i] - dt * 5);
@@ -186,7 +195,7 @@ export default {
         P.forEach((pd, li) => {
           drawArrow(ctx, pd.x, pd.y, s * (1 + 0.06 * beat), li, "receptor", flash[li]);
           const L = LANES[li], foot = li === 0 || li === 3;
-          const label = foot && footByHand ? `${li ? "오른손" : "왼손"} ${L.clock}` : `${L.limb} ${L.clock}`;
+          const label = foot && footByHand ? `${li ? "오른손" : "왼손"} 아래로` : `${L.limb} ${L.clock}`;
           outlinedText(ctx, label, pd.x, pd.y + s * 1.45, Math.min(U * 0.026, Lo.L * 0.2), "#fff", L.color, 3);
         });
         // 올라오는 화살표 (홀드는 긴 막대)
@@ -222,7 +231,7 @@ export default {
           }
           ctx.globalAlpha = 1;
         }
-        if (footByHand && t0 !== null) outlinedText(ctx, "발이 안 보여요: 발 화살표는 손을 아래로 뻗어요", z.cx, v.H * 0.9, Math.min(U * 0.028, z.w / 22), "#fff", "#b04a00", 3);
+        if (footByHand && t0 !== null) outlinedText(ctx, "다리가 안 보여요: 발 화살표는 손을 대각선 아래로 뻗어요", z.cx, v.H * 0.9, Math.min(U * 0.028, z.w / 22), "#fff", "#b04a00", 3);
         ctx.font = `${Math.round(U * 0.028)}px ${FONT}`;
         outlinedText(ctx, `♪ ${song.title}`, z.cx, v.H * 0.955, U * 0.03, "#fff", "rgba(0,0,0,.6)", 3);
       },

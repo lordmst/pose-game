@@ -1,8 +1,8 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=25";
-import { DIFFS } from "./difficulty.js?v=25";
-import { speak } from "./audio.js?v=25";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=26";
+import { DIFFS } from "./difficulty.js?v=26";
+import { speak } from "./audio.js?v=26";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
@@ -285,13 +285,13 @@ const SCRIPTS = {
       p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
       if (T < 4.4) say("리듬 박자! 화살표가 아래에서 올라와요");
       else if (T < 9) say("↖ 왼손, ↗ 오른손은 옆으로 쭉 뻗어요");
-      else if (T < 14) say("↙ 왼발, ↘ 오른발은 옆으로 내디뎌요");
+      else if (T < 14) say("↙ 왼발, ↘ 오른발은 다리를 들어요");
       else say("이제 직접 해 봐요!");
       // 판마다 지금 밟아야 하는지: 화살표가 곧 닿거나 홀드 중이면
       const want = [false, false, false, false], now = g.now;
       for (const n of g.notes) if (n.holding || (!n.done && n.time - now < 0.12 && n.time - now > -0.15)) want[n.lane] = true;
       p.rest(0, want[1] ? "wide" : "down", 3); p.rest(1, want[2] ? "wide" : "down", 3);
-      p.legs = [want[0] ? "out" : "stand", want[3] ? "out" : "stand"];
+      p.legs = [want[0] ? "raise" : "stand", want[3] ? "raise" : "stand"];
     },
   },
   conductor: {

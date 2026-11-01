@@ -4,8 +4,8 @@
 // 지휘가 잘 맞을수록 오케스트라 소리가 커지고 연주자들이 신나게 움직임, 놓치면 작아짐
 // 중간중간 왼손 동작: ✋ '왼손 올리기'(크레셴도: 왼손을 머리 위로 쭉 올려 게이지 채우기),
 //                     ⊙ '왼손 터치'(왼쪽 위에 나온 동그라미를 왼손으로 짚어 악기 파트 불러내기). 그동안 화살표는 오른손만
-import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=25";
-import { sfx, rhythm, clock, CLASSICS, songOf } from "../audio.js?v=25";
+import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=26";
+import { rhythm, clock, CLASSICS, songOf } from "../audio.js?v=26";
 
 const PERFECT = 0.1, GOOD = 0.22;   // 판정 시간 폭(초, 보통)
 const SWING = 1.8;                  // 휘두르기로 인정하는 손 속도(어깨너비/초)
@@ -60,7 +60,6 @@ export default {
       cnt[name]++; energy = Math.min(1, energy + (name === "PERFECT" ? 0.08 : 0.05)); flare = 1;
       env.award(name === "PERFECT" ? 2 : 1, x, y - Lo.s * 3.4);
       popup(x, y - Lo.s * 1.9, name === "PERFECT" ? "완벽!" : "좋아요", { size: v.U * 0.032, color: "#fff", stroke: name === "PERFECT" ? "#e0306a" : "#3d8bff", life: 0.5 });
-      sfx.catch(env.player.combo);
       burst(x, y, { n: name === "PERFECT" ? 14 : 8, colors: ["#fff6a0", "#ffd400", "#ffffff"], shape: "star", speed: v.U * 0.5, gravity: v.U * 0.3, size: v.U * 0.014, life: 0.5 });
     }
     // 왼손 터치 자리: 왼쪽 어깨에서 바깥 위로 팔이 닿는 곳 (화살표 길과 겹치지 않게)
@@ -89,7 +88,7 @@ export default {
     return {
       update() {
         if (t0 === null) { t0 = rhythm.start(song.id, { orch: true }); spb = rhythm.spb; }
-        now = clock();
+        rhythm.tick(); now = clock();
         const dt = lastT === null ? 0.016 : Math.min(0.1, now - lastT); lastT = now;
         flare = Math.max(0, flare - dt * 3);
         while (t0 + nextJ * spb / 2 - now < travel) { addStep(nextJ); nextJ++; }
@@ -123,7 +122,7 @@ export default {
           e.hold = on ? e.hold + dt : Math.max(0, e.hold - dt * 0.5);
           if (e.hold >= (e.type === "raise" ? RAISE_HOLD : TOUCH_HOLD)) {
             e.done = "ok"; e.doneAt = now; ev.ok++; energy = Math.min(1, energy + 0.2); flare = 1;
-            rhythm.accent(16); sfx.fever();
+            rhythm.accent(16);   // 효과음 대신 금관 소리가 더해짐
             const at = e.type === "raise" ? gaugePos() : e.pos;
             env.award(3, at.x, at.y - v.U * 0.08);
             popup(at.x + (e.type === "raise" ? v.U * 0.12 : 0), at.y + v.U * 0.06, e.type === "raise" ? "크레셴도!" : "브라보!", { size: v.U * 0.045, color: "#fff", stroke: "#e08a00", life: 1.0 });
