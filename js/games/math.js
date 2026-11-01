@@ -1,12 +1,14 @@
 // 수학 풍선: 정답이 적힌 풍선을 손으로 터뜨리기 (손을 잠깐 대거나 빠르게 치면 터짐)
-import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=7";
-import { sfx } from "../audio.js?v=7";
+import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=8";
+import { sfx } from "../audio.js?v=8";
 
 export const LEVELS = { add10: "덧셈 (10까지)", addsub20: "덧셈·뺄셈 (20까지)", mul: "구구단", mix: "사칙 혼합" };
 const OPS = { add10: ["+"], addsub20: ["+", "-"], mul: ["×"], mix: ["+", "-", "×", "÷"] };
 const READ = { "+": "더하기", "-": "빼기", "×": "곱하기", "÷": "나누기" };
 const COLORS = ["#ff5a5a", "#4da6ff", "#ffc233", "#a07bff", "#37d67a", "#ff8fd0"];
 const DWELL = 0.18;
+const RISE_START = 0.12;   // 시작할 때 상승 속도 (초당 화면 높이 비율) — 화면 아래→위 약 8초
+const RISE_END = 0.2;      // 끝날 무렵 속도 — 약 5초
 const josa = n => [0, 1, 3, 6, 7, 8].includes(n % 10) ? "은" : "는";   // 영·일·삼·육·칠·팔 → 은
 
 export function makeProblem(level) {
@@ -51,7 +53,7 @@ export default {
     function next() {
       prob = makeProblem(env.level);
       const lanes = shuffle([0.2, 0.5, 0.8]);
-      balloons = prob.choices.map((val, i) => ({ val, fx: lanes[i], fy: 1.08 + i * 0.13, ph: Math.random() * 6, color: COLORS[(i + rnd(0, 5)) % COLORS.length], dwell: 0, alive: true, hover: false, x: 0, y: 0 }));
+      balloons = prob.choices.map((val, i) => ({ val, fx: lanes[i], fy: 0.98 + i * 0.07, ph: Math.random() * 6, color: COLORS[(i + rnd(0, 5)) % COLORS.length], dwell: 0, alive: true, hover: false, x: 0, y: 0 }));
       phase = "ask"; boxOk = false; lock = 0.4; needSpeak = true;
     }
     function pop(b) {
@@ -74,11 +76,11 @@ export default {
         tAll += dt; lock = Math.max(0, lock - dt); boxBad = Math.max(0, boxBad - dt);
         if (needSpeak) { env.speak(prob.speech); needSpeak = false; }
         if (phase === "done") { doneT -= dt; if (doneT <= 0) next(); }
-        const rise = (0.05 + 0.04 * env.progress()) * (env.fever() ? 1.15 : 1), r = R();
+        const rise = (RISE_START + (RISE_END - RISE_START) * env.progress()) * (env.fever() ? 1.15 : 1), r = R();
         const hands = env.tracker.hands.filter(h => h.vis);
         for (const b of balloons) {
           if (!b.alive) continue;
-          b.fy -= rise * dt; if (b.fy < -0.15) b.fy = 1.12;
+          b.fy -= rise * dt; if (b.fy < -0.15) b.fy = 1.1;
           b.x = z.x0 + b.fx * z.w + Math.sin(tAll * 1.6 + b.ph) * r * 0.3; b.y = b.fy * v.H;
           if (phase !== "ask") { b.hover = false; continue; }
           const near = lock === 0 ? hands.filter(h => Math.hypot(h.x - b.x, h.y - b.y) < r * 1.1) : [];

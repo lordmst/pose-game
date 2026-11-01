@@ -1,12 +1,12 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=7";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=7";
-import * as R from "./records.js?v=7";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=7";
-import copy from "./games/copy.js?v=7";
-import math, { LEVELS } from "./games/math.js?v=7";
-import ice from "./games/ice.js?v=7";
-import star from "./games/star.js?v=7";
+import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=8";
+import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=8";
+import * as R from "./records.js?v=8";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=8";
+import copy from "./games/copy.js?v=8";
+import math, { LEVELS } from "./games/math.js?v=8";
+import ice from "./games/ice.js?v=8";
+import star from "./games/star.js?v=8";
 
 const GAMES = { copy, math, ice, star };
 const GAME_ORDER = ["copy", "math", "ice", "star"];

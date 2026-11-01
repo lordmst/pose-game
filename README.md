@@ -37,6 +37,7 @@ v1/                 이전 단일 파일 버전
 | js/games/ice.js | `PUNCH` (3.0) | 얼음 타격 인정 속도. 낮추면 쉽게 깨짐 |
 | js/games/ice.js | `STRONG` (7.5) | 강펀치 기준 속도 |
 | js/games/copy.js | `HOLD` (0.6) | 자세 유지 시간(초) |
+| js/games/math.js | `RISE_START` (0.12) · `RISE_END` (0.2) | 풍선 상승 속도(시작·끝). 높일수록 빠름 |
 | js/games/*.js | `sec` | 게임 시간(초) |
 | js/main.js | `FEVER_SEC` (10) | 피버 타임 길이 |
 | js/main.js | `UI_DWELL` (1.0) | 손으로 버튼 누르는 데 필요한 시간 |
