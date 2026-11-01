@@ -224,3 +224,6 @@ body:not(.live) .overlay { background: var(--y); }
 .songpick { margin: .4vmin 0; }
 .songpick .tab { display: inline-flex; align-items: center; gap: .6vmin; font-size: clamp(14px, 2.3vmin, 21px); padding: .8vmin 1.8vmin; }
 .songpick .tab small { font-size: .72em; opacity: .65; }
+/* 노래 고르기: 지난번에 고른 노래 표시 */
+.card.song.last { outline: max(4px, .7vmin) solid #ffd400; outline-offset: 3px; }
+#scr-song .card .lbl { font-size: clamp(15px, min(2.2vw, 3.2vh), 26px); }

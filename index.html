@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=22">
+<link rel="stylesheet" href="css/style.css?v=23">
 </head>
 <body>
 <video id="video" playsinline muted autoplay></video>
@@ -70,6 +70,16 @@
   </div>
 </section>
 
+<!-- 노래 고르기 (리듬 박자·지휘자: 시작한 뒤에 고름) -->
+<section id="scr-song" class="screen overlay">
+  <div class="sel">
+    <h2 id="songHead">노래를 골라요</h2>
+    <p class="sub">손바닥을 펴서 노래 카드에 1초 대거나 화면을 눌러요. 손을 대면 미리 들려줘요</p>
+    <div id="songCards" class="cards"></div>
+    <div class="row"><button class="pill ghost" type="button" id="btnSongBack">뒤로</button></div>
+  </div>
+</section>
+
 <!-- 3. 자리 잡기 -->
 <section id="scr-ready" class="screen">
   <div class="readybar panel">
@@ -77,7 +87,6 @@
     <p id="readyHow" class="how"></p>
     <p id="readyHint"></p>
     <div id="subjPick" class="tabs songpick" hidden></div>
-    <div id="songPick" class="tabs songpick" hidden></div>
     <p class="opnote">만세를 한 사람만 선수로 인식해요. 태블릿을 누른 사람은 "5초 후 시작"을 누르고 자리로 가서 만세하세요</p>
     <div id="tutorial" class="tutorial" hidden>
       <div class="tut-row">
@@ -147,6 +156,6 @@
     setTimeout(function () { if (!window.__appReady) show("게임을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요."); }, 8000);
   })();
 </script>
-<script type="module" src="js/main.js?v=22"></script>
+<script type="module" src="js/main.js?v=23"></script>
 </body>
 </html>

@@ -1,8 +1,8 @@
 // 리듬 박자 (펌프 방식): 화면 위에 판정판 4개(↙ ↖ ↗ ↘)가 한 줄로 있고 화살표가 아래에서 올라옴.
 // 판을 손으로 누르는 게 아니라 몸으로 '밟음': 왼손 11시(↖) · 오른손 1시(↗) · 왼발 7시(↙) · 오른발 5시(↘)
 // 화살표가 판에 겹치는 순간 그 손을 대각선 위로 뻗거나 그 발을 대각선 아래로 내딛기. 긴 막대(홀드)는 끝날 때까지 그대로
-import { burst, outlinedText, rr, FONT } from "../fx.js?v=22";
-import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=22";
+import { burst, outlinedText, rr, FONT } from "../fx.js?v=23";
+import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=23";
 
 const TRAVEL = 1.6;                                   // 화살표가 화면 아래에서 판까지 올라오는 시간(초, 보통)
 // 판정 시간 폭(초, 보통). 쉬움은 넓고 어려움은 좁음
@@ -14,10 +14,10 @@ const J_STYLE = {
 const LIFE = { PERFECT: 0.02, GREAT: 0.015, GOOD: 0.005, BAD: -0.04, MISS: -0.08 };
 // 판 (왼쪽부터): 왼발 7시 ↙ · 왼손 11시 ↖ · 오른손 1시 ↗ · 오른발 5시 ↘. 펌프처럼 발은 파랑, 손은 빨강
 export const LANES = [
-  { rot: -135, color: "#2f8bff", limb: "왼발", icon: "🦶", clock: "7시" },
-  { rot: -45, color: "#ff3b5c", limb: "왼손", icon: "✋", clock: "11시" },
-  { rot: 45, color: "#ff3b5c", limb: "오른손", icon: "✋", clock: "1시" },
-  { rot: 135, color: "#2f8bff", limb: "오른발", icon: "🦶", clock: "5시" },
+  { rot: -135, color: "#2f8bff", limb: "왼발", icon: "🦶", clock: "옆으로" },
+  { rot: -45, color: "#ff3b5c", limb: "왼손", icon: "✋", clock: "옆으로" },
+  { rot: 45, color: "#ff3b5c", limb: "오른손", icon: "✋", clock: "옆으로" },
+  { rot: 135, color: "#2f8bff", limb: "오른발", icon: "🦶", clock: "옆으로" },
 ];
 const MIN_GAP = { easy: 0.75, normal: 0.45, hard: 0.3 };  // 음표 사이 최소 간격(초)
 const DEG = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6];        // 반음 → 음계 자리(도=0 … 시=6)
@@ -25,22 +25,25 @@ const scaleIdx = m => Math.floor(m / 12) * 7 + DEG[m % 12];
 const hash = (a, b) => { let x = (a * 374761393 + b * 668265263) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); x ^= x >>> 16; return (x >>> 0) / 4294967296; };
 
 // 팔다리 자세 판정 (화면 좌표, 거울 화면이라 선수의 왼쪽이 화면 왼쪽). 들어가는 기준과 풀리는 기준을 달리 해 떨림 방지
-// 손: 손목이 어깨보다 충분히 위 + 몸 바깥쪽(반대편으로 넘어가지 않음)
-// 발: 발목이 몸 가운데에서 옆으로 충분히 벌어짐 (발이 안 보이면 손을 대각선 아래로 뻗는 것으로 대신)
+// 손: 옆으로 뻗기만 해도 인정(허리보다 위에서 바깥쪽으로 쭉), 대각선 위로 들어도 인정
+// 발: 발목이 몸 가운데에서 옆으로 벌어짐 (발이 안 보이면 손을 대각선 아래로 뻗는 것으로 대신)
 export function limbStates(p, prev, footByHand) {
   const out = [false, false, false, false];
   if (!p || !p[11].v || !p[12].v) return out;
   const sw = Math.hypot(p[11].x - p[12].x, p[11].y - p[12].y) || 1;
+  const hipY = p[23].v && p[24].v ? (p[23].y + p[24].y) / 2 : p[11].y + sw * 1.6;
   const hand = (w, s, side, was) => {
     if (!p[w].v) return false;
-    const up = (p[s].y - p[w].y) / sw, outward = (p[w].x - p[s].x) * side / sw;
-    return was ? up > 0.35 && outward > -0.4 : up > 0.7 && outward > -0.25;
+    const up = (p[s].y - p[w].y) / sw, outward = (p[w].x - p[s].x) * side / sw, aboveHip = p[w].y < hipY - sw * 0.25;
+    const sideways = aboveHip && outward > (was ? 0.5 : 0.75);       // 옆으로 뻗기
+    const raised = up > (was ? 0.35 : 0.7) && outward > (was ? -0.4 : -0.25);   // 위로 들기
+    return sideways || raised;
   };
   out[1] = hand(15, 11, -1, prev[1]); out[2] = hand(16, 12, 1, prev[2]);
   if (!footByHand) {
     if (p[23].v && p[24].v && p[27].v && p[28].v) {
       const hx = (p[23].x + p[24].x) / 2;
-      const foot = (a, side, was) => ((p[a].x - hx) * side / sw) > (was ? 0.62 : 0.85);
+      const foot = (a, side, was) => ((p[a].x - hx) * side / sw) > (was ? 0.5 : 0.68);   // 옆으로 조금만 벌려도
       out[0] = foot(27, -1, prev[0]); out[3] = foot(28, 1, prev[3]);
     }
   } else {
@@ -78,7 +81,7 @@ function drawArrow(ctx, x, y, s, lane, kind, glow = 0) {
 export default {
   id: "rhythm", title: "리듬 박자", icon: "🥁", sec: 45, cursor: "", cat: "move", bg: "#c39bff", desc: "펌프처럼 손발로 박자 밟기", music: false,
   songs: SONGS.map(({ id, title, icon, bpm }) => ({ id, title, icon, bpm })),
-  how: "화살표가 위 판에 겹치는 순간 몸으로 밟아요. ↖ 왼손 11시, ↗ 오른손 1시로 뻗고, ↙ 왼발 7시, ↘ 오른발 5시로 내딛기! 긴 막대는 끝까지 그대로",
+  how: "화살표가 위 판에 겹치는 순간 몸으로 밟아요. ↖ 왼손 · ↗ 오른손은 옆으로 쭉 뻗고, ↙ 왼발 · ↘ 오른발은 옆으로 내딛기! 긴 막대는 끝까지 그대로",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, id = D.id || "normal";
     const song = songOf(env.song), minGap = MIN_GAP[id] || 0.45, travel = TRAVEL / D.speed, wide = D.reach;

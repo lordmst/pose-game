@@ -1,24 +1,24 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=22";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=22";
-import * as R from "./records.js?v=22";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=22";
-import copy from "./games/copy.js?v=22";
-import math from "./games/math.js?v=22";
-import ice from "./games/ice.js?v=22";
-import star from "./games/star.js?v=22";
-import fruit from "./games/fruit.js?v=22";
-import mole from "./games/mole.js?v=22";
-import wall from "./games/wall.js?v=22";
-import rhythm from "./games/rhythm.js?v=22";
-import goalie from "./games/goalie.js?v=22";
-import { hangul, english } from "./games/word.js?v=22";
-import clockGame from "./games/clock.js?v=22";
-import run from "./games/run.js?v=22";
-import simon from "./games/simon.js?v=22";
-import conductor from "./games/conductor.js?v=22";
-import { DIFFS, diffOf } from "./difficulty.js?v=22";
-import { startDemo } from "./demo.js?v=22";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=23";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=23";
+import * as R from "./records.js?v=23";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=23";
+import copy from "./games/copy.js?v=23";
+import math from "./games/math.js?v=23";
+import ice from "./games/ice.js?v=23";
+import star from "./games/star.js?v=23";
+import fruit from "./games/fruit.js?v=23";
+import mole from "./games/mole.js?v=23";
+import wall from "./games/wall.js?v=23";
+import rhythm from "./games/rhythm.js?v=23";
+import goalie from "./games/goalie.js?v=23";
+import { hangul, english } from "./games/word.js?v=23";
+import clockGame from "./games/clock.js?v=23";
+import run from "./games/run.js?v=23";
+import simon from "./games/simon.js?v=23";
+import conductor from "./games/conductor.js?v=23";
+import { DIFFS, diffOf } from "./difficulty.js?v=23";
+import { startDemo } from "./demo.js?v=23";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -98,7 +98,7 @@ window.addEventListener("resize", resize);
 resize();
 
 /* ---------- 화면 전환 ---------- */
-const SCREENS = { setup: "scr-setup", select: "scr-select", demo: "scr-demo", ready: "scr-ready", result: "scr-result", ranking: "scr-ranking" };
+const SCREENS = { setup: "scr-setup", select: "scr-select", song: "scr-song", demo: "scr-demo", ready: "scr-ready", result: "scr-result", ranking: "scr-ranking" };
 function setState(s) {
   state = s;
   $$(".screen").forEach(el => el.classList.toggle("on", el.id === SCREENS[s]));
@@ -334,7 +334,7 @@ function goReady() {
     : "화면 가운데에 서서 두 손을 머리 위로 올려(만세) 주세요";
   readyT = 0; readyCache = ""; tutOk = slots.map(() => false); tutT = slots.map(() => 0); readyStartT = lastT;
   $("#tutorial").hidden = !g.oneHand;
-  renderSongPick(); renderSubjPick();
+  renderSubjPick();
   setState("ready");
 }
 // 과목 고르기 (풍선 퀴즈): 바꾸면 그 게임의 자리 잡기 화면으로 (처음이면 설명부터)
@@ -349,29 +349,35 @@ function renderSubjPick() {
     box.appendChild(b);
   }
 }
-// 노래 고르기 (리듬 박자): 손바닥으로 1초 대거나 화면을 눌러 고름. 고르면 앞부분을 들려줌
-function renderSongPick() {
-  const g = GAMES[gameId], box = $("#songPick");
-  box.hidden = !g.songs; box.innerHTML = "";
-  if (!g.songs) return;
+// 노래 고르기 (리듬 박자·지휘자): 시작을 누른 뒤 노래 고르기 화면 → 고르면 카운트다운
+let songStartSec = 3;
+function startGame(sec) {
+  if (!GAMES[gameId].songs) return beginCountdown(sec);
+  songStartSec = sec; renderSongCards(); setState("song");
+}
+function renderSongCards() {
+  const g = GAMES[gameId], box = $("#songCards");
+  $("#songHead").textContent = `${g.icon} ${g.title} · 노래를 골라요`;
   const list = [...g.songs, { id: "random", icon: "🎲", title: "아무거나" }];
-  if (!list.some(s => s.id === songSel)) songSel = "basic";
-  for (const S of list) {
-    const b = document.createElement("button"); b.type = "button"; b.setAttribute("data-hand", "");
-    b.className = "tab song" + (songSel === S.id ? " on" : "");
-    b.innerHTML = `${S.icon} ${esc(S.title)}${S.bpm ? `<small>${S.bpm >= 120 ? "빠름" : S.bpm >= 100 ? "보통" : "느림"}</small>` : ""}`;
+  const last = R.getSettings()["lastSong_" + gameId];
+  box.innerHTML = ""; box.classList.toggle("many", list.length > 4); box.classList.toggle("lots", list.length > 6);
+  list.forEach((S, i) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "card song" + (S.id === last ? " last" : ""); b.setAttribute("data-hand", ""); b.dataset.song = S.id;
+    b.style.setProperty("--bg", S.id === "random" ? "#dfe6e9" : ["#ffeaa7", "#fab1a0", "#81ecec", "#a29bfe", "#ffb8d1", "#b8e994"][i % 6]);
+    const speed = S.bpm ? (S.bpm >= 120 ? "빠름" : S.bpm >= 100 ? "보통" : "느림") : "";
+    b.innerHTML = `<span class="ico">${S.icon}</span><span class="lbl">${esc(S.title)}</span><span class="desc">${esc([S.by, speed].filter(Boolean).join(" · ") || "무작위")}</span>`;
+    b.onmouseenter = () => { if (S.id !== "random") rhythmAudio.preview(S.id); };
     b.onclick = () => {
-      unlock(); songSel = S.id; R.setSettings({ ...R.getSettings(), lastSong: songSel });
-      readyStartT = lastT; readyT = 0;            // 고른 뒤 바로 시작되지 않게 잠깐 기다림
-      sfx.select(); if (S.id !== "random") rhythmAudio.preview(S.id); else rhythmAudio.stopPreview();
-      renderSongPick();
+      unlock(); rhythmAudio.stopPreview();
+      songSel = S.id; R.setSettings({ ...R.getSettings(), ["lastSong_" + gameId]: S.id });
+      beginCountdown(songStartSec);
     };
     box.appendChild(b);
-  }
+  });
 }
+$("#btnSongBack").onclick = () => { rhythmAudio.stopPreview(); goReady(); };
 let tutOk = [], tutT = [], readyStartT = 0;
-const TUT_HOLD = 0.8;
-const SONG_PICK_SEC = 4;   // 노래 고르는 게임은 자리 잡기 화면을 최소 4초 보여줌(자동 시작 기준)      // 연습: 들어 올린 손을 펴서 이만큼 유지하면 통과
+const TUT_HOLD = 0.8;      // 연습: 들어 올린 손을 펴서 이만큼 유지하면 통과
 const TUT_MIN_SHOW = 3;    // 한 손 게임은 안내를 읽을 수 있게 자리 잡기 화면을 최소 3초 보여줌(자동 시작 기준)
 // 손 모양을 3초 넘게 한 번도 판정 못 했으면(너무 멀거나 손 인식 모델이 없으면) 튜토리얼 확인을 건너뜀
 const shapeUnavailable = () => !handShape || (lastT - shapeSeenAt > 3 && lastT - readyStartT > 3);
@@ -383,8 +389,8 @@ function renderReadyStat(ok) {
   }).join("");
   if (html !== readyCache) { $("#readyStat").innerHTML = html; readyCache = html; }
 }
-$("#btnGo").onclick = () => beginCountdown(3);
-$("#btnGo5").onclick = () => beginCountdown(5);      // 태블릿을 누른 사람이 자리로 갈 시간
+$("#btnGo").onclick = () => startGame(3);
+$("#btnGo5").onclick = () => startGame(5);      // 태블릿을 누른 사람이 자리로 갈 시간
 $("#btnReadyBack").onclick = () => { rhythmAudio.stopPreview(); setState("select"); };
 $("#btnDemo").onclick = () => openDemo();
 
@@ -424,7 +430,7 @@ $("#btnSkip").onclick = finishDemo;
 function beginCountdown(sec = 3) {
   const g = GAMES[gameId];
   rhythmAudio.stopPreview();
-  if (g.songs) curSong = songSel === "random" ? g.songs[Math.floor(Math.random() * g.songs.length)].id : songSel;
+  if (g.songs) curSong = songSel === "random" || !g.songs.some(x => x.id === songSel) ? g.songs[Math.floor(Math.random() * g.songs.length)].id : songSel;
   clearFx(); fever = false; timeLeft = g.sec;
   $("#hud").classList.remove("fever"); bgm.setTempo(1);
   players = slots.map(s => ({ ...s, score: 0, combo: 0, maxCombo: 0, misses: 0 }));
@@ -626,14 +632,14 @@ function tick(dt) {
       if (tutT[i] >= TUT_HOLD && !tutOk[i]) { tutOk[i] = true; sfx.catch(3); }
     });
     const ok = trackers.map((tr, i) => tr.present && tr.fullBody && (!g.oneHand || tutOk[i] || noShape));
-    const minShown = (!g.oneHand || lastT - readyStartT >= TUT_MIN_SHOW) && (!g.songs || lastT - readyStartT >= SONG_PICK_SEC);
+    const minShown = !g.oneHand || lastT - readyStartT >= TUT_MIN_SHOW;
     if (g.oneHand) {
       const note = noShape ? "멀어서 손 모양이 잘 안 보여요. 이럴 땐 허리 위로 들어 올린 손으로 골라요" : "";
       const el = $("#tutNote"); if (el.textContent !== note) el.textContent = note;
     }
     readyT = ok.every(Boolean) ? readyT + dt : 0;
     renderReadyStat(ok);
-    if (readyT >= 1.2 && minShown) beginCountdown(3);
+    if (readyT >= 1.2 && minShown) startGame(3);
   } else if (state === "countdown") {
     const before = Math.ceil(cdT); cdT -= dt; const after = Math.ceil(cdT);
     if (after !== before && after > 0) { showCd(String(after)); sfx.tick(); }
@@ -791,6 +797,7 @@ function handUI(dt) {
     const inside = uiCool <= 0 && hs.some(h => h.x >= r.left && h.x <= r.right && h.y >= r.top && h.y <= r.bottom);
     const d = inside ? (el._d || 0) + dt : Math.max(0, (el._d || 0) - dt * 2);
     if (d !== el._d) { el._d = d; el.style.setProperty("--p", Math.min(1, d / UI_DWELL).toFixed(3)); }
+    if (inside && !el.classList.contains("hover") && el.dataset.song && el.dataset.song !== "random") rhythmAudio.preview(el.dataset.song);   // 손을 대면 미리 듣기
     el.classList.toggle("hover", inside);
     if (d >= UI_DWELL) {
       els.forEach(e => { e._d = 0; e.style.setProperty("--p", 0); e.classList.remove("hover"); });

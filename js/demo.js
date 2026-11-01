@@ -1,8 +1,8 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=22";
-import { DIFFS } from "./difficulty.js?v=22";
-import { speak } from "./audio.js?v=22";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=23";
+import { DIFFS } from "./difficulty.js?v=23";
+import { speak } from "./audio.js?v=23";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
@@ -284,13 +284,13 @@ const SCRIPTS = {
     run(T, g, p, S, say) {
       p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
       if (T < 4.4) say("리듬 박자! 화살표가 아래에서 올라와요");
-      else if (T < 9) say("↖ 왼손은 11시, ↗ 오른손은 1시로 쭉 뻗어요");
-      else if (T < 14) say("↙ 왼발은 7시, ↘ 오른발은 5시로 내디뎌요");
+      else if (T < 9) say("↖ 왼손, ↗ 오른손은 옆으로 쭉 뻗어요");
+      else if (T < 14) say("↙ 왼발, ↘ 오른발은 옆으로 내디뎌요");
       else say("이제 직접 해 봐요!");
       // 판마다 지금 밟아야 하는지: 화살표가 곧 닿거나 홀드 중이면
       const want = [false, false, false, false], now = g.now;
       for (const n of g.notes) if (n.holding || (!n.done && n.time - now < 0.12 && n.time - now > -0.15)) want[n.lane] = true;
-      p.rest(0, want[1] ? "diag" : "down", 3); p.rest(1, want[2] ? "diag" : "down", 3);
+      p.rest(0, want[1] ? "wide" : "down", 3); p.rest(1, want[2] ? "wide" : "down", 3);
       p.legs = [want[0] ? "out" : "stand", want[3] ? "out" : "stand"];
     },
   },
@@ -298,8 +298,8 @@ const SCRIPTS = {
     dur: 16,
     run(T, g, p, S, say) {
       p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
-      if (T < 4.5) say("지휘자! 금색 삼각형이 내려와요");
-      else if (T < 9.5) say("가로선에 닿는 순간, 삼각형 방향으로 손을 휘둘러요");
+      if (T < 4.5) say("지휘자! 클래식에 맞춰 화살표가 내려와요");
+      else if (T < 9.5) say("화살표가 가로선 칸에 겹치는 순간, 그 방향으로 손을 휘둘러요");
       else if (T < 14) say("아래, 안쪽, 바깥쪽, 위! 박자에 맞춰 지휘해요");
       else say("이제 직접 해 봐요!");
       const u = p.u, now = g.now;

@@ -158,12 +158,36 @@ export const SONGS = [
     melody: mel(`A4:1 C5:1 E5:2 D5:1 C5:1 D5:2 E5:2 G5:1 E5:1 D5:2 C5:2 A4:1 C5:1 E5:2 D5:1 C5:1 A4:2 G4:2 A4:2 C5:2 -:2
                  A5:2 G5:1 E5:1 G5:2 A5:2 G5:1 E5:1 D5:2 E5:2 -:2 C5:1 D5:1 E5:2 G5:1 E5:1 D5:2 C5:2 B4:2 A4:4`) },
 ];
-// 곡을 반 박 단위 칸으로 펼침: 칸마다 [음, 길이] 또는 null
-for (const S of SONGS) {
+// 지휘자 게임용 클래식 (모두 저작권이 끝난 작품). 오케스트라 소리로 연주
+export const CLASSICS = [
+  { id: "ode", title: "환희의 송가", by: "베토벤", icon: "🎻", bpm: 112, drums: "pop", bassStyle: "beat", lead: ["triangle", 0.12],
+    bass: SONGS.find(x => x.id === "ode").bass, melody: SONGS.find(x => x.id === "ode").melody },
+  { id: "nacht", title: "아이네 클라이네 나흐트무지크", by: "모차르트", icon: "🎶", bpm: 120, drums: "pop", bassStyle: "beat", lead: ["triangle", 0.12],
+    bass: "G G G G D D D D G G G G D D D G",
+    melody: mel(`G4:2 -:1 D4:1 G4:2 -:1 D4:1 G4:1 D4:1 G4:1 B4:1 D5:4 C5:2 -:1 A4:1 C5:2 -:1 A4:1 C5:1 A4:1 F#4:1 A4:1 D4:4
+                 G4:2 -:1 D4:1 G4:2 -:1 D4:1 G4:1 D4:1 G4:1 B4:1 D5:4 C5:2 -:1 A4:1 C5:2 -:1 A4:1 C5:1 A4:1 F#4:1 A4:1 G4:4`) },
+  { id: "mountain", title: "산왕의 궁전에서", by: "그리그", icon: "⛰️", bpm: 116, drums: "pop", bassStyle: "beat", lead: ["triangle", 0.12],
+    bass: "B B F# F# B B F# F# F# F# C# C# F# F# C# F#",
+    melody: mel(`B4:1 C#5:1 D5:1 E5:1 F#5:1 D5:1 F#5:2 F5:1 C#5:1 F5:2 E5:1 C5:1 E5:2 B4:1 C#5:1 D5:1 E5:1 F#5:1 D5:1 F#5:1 B5:1 A5:1 F#5:1 D5:1 F#5:1 A5:4
+                 F#4:1 G#4:1 A#4:1 B4:1 C#5:1 A#4:1 C#5:2 D5:1 A#4:1 D5:2 C#5:1 A#4:1 C#5:2 F#4:1 G#4:1 A#4:1 B4:1 C#5:1 A#4:1 C#5:1 F#5:1 E5:1 C#5:1 A#4:1 C#5:1 E5:4`) },
+  { id: "turkish", title: "터키 행진곡", by: "모차르트", icon: "🥁", bpm: 116, drums: "pop", bassStyle: "beat", lead: ["triangle", 0.12],
+    bass: "A A A A E E A A A A A A E E E A",
+    melody: mel(`B4:1 A4:1 G#4:1 A4:1 C5:4 D5:1 C5:1 B4:1 C5:1 E5:4 F5:1 E5:1 D#5:1 E5:1 B5:1 A5:1 G#5:1 A5:1 B5:1 A5:1 G#5:1 A5:1 C6:4
+                 B4:1 A4:1 G#4:1 A4:1 C5:4 D5:1 C5:1 B4:1 C5:1 E5:4 F5:1 E5:1 D#5:1 E5:1 B5:1 A5:1 G#5:1 A5:1 B4:1 A4:1 G#4:1 B4:1 A4:4`) },
+  { id: "canon", title: "캐논", by: "파헬벨", icon: "🎻", bpm: 80, drums: "soft", bassStyle: "half", lead: ["triangle", 0.12],
+    bass: "D A B F# G D G A D A B F# G D G A",
+    melody: mel(`F#5:4 E5:4 D5:4 C#5:4 B4:4 A4:4 B4:4 C#5:4 D5:4 C#5:4 B4:4 A4:4 G4:4 F#4:4 G4:4 E4:4`) },
+  { id: "cancan", title: "캉캉 (천국과 지옥)", by: "오펜바흐", icon: "💃", bpm: 132, drums: "pop", bassStyle: "beat", lead: ["triangle", 0.12],
+    bass: "C C C C G G C G C C C C G G G C",
+    melody: mel(`C5:2 -:2 D5:1 F5:1 E5:1 D5:1 G5:2 G5:2 G5:1 A5:1 E5:1 F5:1 D5:2 D5:2 D5:1 F5:1 E5:1 D5:1 C5:1 C6:1 B5:1 A5:1 G5:1 F5:1 E5:1 D5:1
+                 C5:2 -:2 D5:1 F5:1 E5:1 D5:1 G5:2 G5:2 G5:1 A5:1 E5:1 F5:1 D5:2 D5:2 D5:1 F5:1 E5:1 D5:1 C5:1 G5:1 D5:1 E5:1 C5:4`) },
+];
+// 곡을 반 박 단위 칸으로 펼침: 칸마다 [음, 길이] 또는 null. 베이스 근음은 F# 같은 올림·내림표도 읽음
+for (const S of [...SONGS, ...CLASSICS]) {
   S.steps = []; for (const [n, l] of S.melody) { S.steps.push(n ? [n, l] : null); for (let i = 1; i < l; i++) S.steps.push(null); }
-  S.roots = S.bass.split(/\s+/).map(c => 36 + NOTE[c]);
+  S.roots = S.bass.split(/\s+/).map(c => 36 + NOTE[c[0]] + (c[1] === "#" ? 1 : c[1] === "b" ? -1 : 0));
 }
-export const songOf = id => SONGS.find(s => s.id === id) || SONGS[0];
+export const songOf = id => SONGS.find(s => s.id === id) || CLASSICS.find(s => s.id === id) || SONGS[0];
 // 반 박 번호 j에 시작하는 멜로디 음 (게임의 음표 위치로 씀)
 export function onsetAt(song, j) { const k = j - INTRO; return k < 0 ? null : song.steps[k % song.steps.length]; }
 
