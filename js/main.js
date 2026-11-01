@@ -1,27 +1,27 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=35";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=35";
-import * as R from "./records.js?v=35";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=35";
-import copy from "./games/copy.js?v=35";
-import math from "./games/math.js?v=35";
-import ice from "./games/ice.js?v=35";
-import star from "./games/star.js?v=35";
-import fruit from "./games/fruit.js?v=35";
-import mole from "./games/mole.js?v=35";
-import wall from "./games/wall.js?v=35";
-import rhythm from "./games/rhythm.js?v=35";
-import goalie from "./games/goalie.js?v=35";
-import { hangul, english } from "./games/word.js?v=35";
-import clockGame from "./games/clock.js?v=35";
-import run from "./games/run.js?v=35";
-import simon from "./games/simon.js?v=35";
-import conductor from "./games/conductor.js?v=35";
-import SPORTS from "./games/sports.js?v=35";
-import LEARN from "./games/learn.js?v=35";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=35";
-import { DIFFS, diffOf } from "./difficulty.js?v=35";
-import { startDemo } from "./demo.js?v=35";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=36";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=36";
+import * as R from "./records.js?v=36";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=36";
+import copy from "./games/copy.js?v=36";
+import math from "./games/math.js?v=36";
+import ice from "./games/ice.js?v=36";
+import star from "./games/star.js?v=36";
+import fruit from "./games/fruit.js?v=36";
+import mole from "./games/mole.js?v=36";
+import wall from "./games/wall.js?v=36";
+import rhythm from "./games/rhythm.js?v=36";
+import goalie from "./games/goalie.js?v=36";
+import { hangul, english } from "./games/word.js?v=36";
+import clockGame from "./games/clock.js?v=36";
+import run from "./games/run.js?v=36";
+import simon from "./games/simon.js?v=36";
+import conductor from "./games/conductor.js?v=36";
+import SPORTS from "./games/sports.js?v=36";
+import LEARN from "./games/learn.js?v=36";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=36";
+import { DIFFS, diffOf } from "./difficulty.js?v=36";
+import { startDemo } from "./demo.js?v=36";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -71,7 +71,7 @@ const guestName = g => g.name.trim() || `손님 ${g.n}`;
 FIXED.forEach(n => R.addPlayer(n));
 let slots = [], trackers = [], players = [], insts = [];
 let gameId = "copy";
-let timeLeft = 0, fever = false, readyT = 0, cdT = 0, goT = 0;
+let timeLeft = 0, gameSec = 60, fever = false, readyT = 0, cdT = 0, goT = 0;
 let visSupported = false, loopOn = false, lastT = 0, uiCool = 0, assigner = null;
 let rankView = { game: "copy", level: null }, rankBackTo = "setup", justSaved = new Set();
 
@@ -440,9 +440,11 @@ function beginCountdown(sec = 3) {
   const g = GAMES[gameId];
   rhythmAudio.stopPreview();
   if (g.songs) curSong = songSel === "random" || !g.songs.some(x => x.id === songSel) ? g.songs[Math.floor(Math.random() * g.songs.length)].id : songSel;
-  clearFx(); fever = false; timeLeft = g.sec;
+  clearFx(); fever = false;
   $("#hud").classList.remove("fever"); bgm.setTempo(1);
   players = slots.map(s => ({ ...s, score: 0, combo: 0, maxCombo: 0, misses: 0 }));
+  // 게임 시간: 게임이 정하면 그대로 (리듬·지휘자 = 곡이 끝날 때까지, OX 퀴즈 = 10문제)
+  gameSec = g.secFor ? g.secFor(curSong, players.map(p => diffOf(p.diff))) : g.sec; timeLeft = gameSec;
   trackers.forEach(tr => { tr.meters = 0; });
   insts = players.map((p, i) => g.create(makeEnv(i)));
   setupHud();
@@ -456,7 +458,7 @@ function makeEnv(i) {
   return {
     slot: i, player: p, tracker: trackers[i], zone: zones[i], view, mode: slots.length,
     level: GAMES[gameId].levelField ? p[GAMES[gameId].levelField] : null, song: curSong, diff: diffOf(p.diff), color: p.color, name: p.name,
-    progress: () => 1 - Math.max(0, timeLeft) / GAMES[gameId].sec,
+    progress: () => 1 - Math.max(0, timeLeft) / gameSec,
     fever: () => fever,
     award: (base, x, y) => award(i, base, x, y),
     miss: (x, y, label) => miss(i, x, y, label),
@@ -531,7 +533,7 @@ function renderHud() {
     b.querySelector(".ps").textContent = p.score;
     b.querySelector(".pc").textContent = p.combo >= 2 ? `${p.combo} 콤보` : "";
   });
-  const sec = GAMES[gameId].sec;
+  const sec = gameSec;
   $("#tfill").style.width = Math.max(0, timeLeft / sec * 100) + "%";
   $("#ttxt").textContent = Math.max(0, Math.ceil(timeLeft));
 }
@@ -695,7 +697,7 @@ function tick(dt) {
     if (!fever && timeLeft <= FEVER_SEC) enterFever();
     insts.forEach(g => g.update(dt));
     renderHud();
-    if (timeLeft <= 0) endGame();
+    if (timeLeft <= 0 || (insts.length && insts.every(g => g.done))) endGame();   // 시간이 끝나거나 게임이 다 끝났다고 알리면
   }
 }
 

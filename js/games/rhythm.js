@@ -1,8 +1,8 @@
 // 리듬 박자 (펌프 방식): 화면 위에 판정판 4개(↙ ↖ ↗ ↘)가 한 줄로 있고 화살표가 아래에서 올라옴.
 // 판을 손으로 누르는 게 아니라 몸으로 '밟음': 왼손(↖) · 오른손(↗)은 옆으로 뻗기, 왼발(↙) · 오른발(↘)은 다리 들기
 // 화살표가 판에 겹치는 순간 그 동작을 함. 긴 막대(홀드)는 끝날 때까지 그대로. 맞혀도 효과음은 없음(음악만)
-import { burst, outlinedText, rr, FONT } from "../fx.js?v=35";
-import { rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=35";
+import { burst, outlinedText, rr, FONT } from "../fx.js?v=36";
+import { rhythm, clock, SONGS, songOf, onsetAt, songPlan } from "../audio.js?v=36";
 
 const TRAVEL = 1.6;                                   // 화살표가 화면 아래에서 판까지 올라오는 시간(초, 보통)
 // 판정 시간 폭(초, 보통). 쉬움은 넓고 어려움은 좁음
@@ -90,10 +90,12 @@ function drawArrow(ctx, x, y, s, lane, kind, glow = 0) {
 export default {
   id: "rhythm", title: "리듬 박자", icon: "🥁", sec: 45, cursor: "", cat: "move", bg: "#c39bff", desc: "펌프처럼 손발로 박자 밟기", music: false,
   songs: SONGS.map(({ id, title, icon, bpm }) => ({ id, title, icon, bpm })),
+  // 게임 시간 = 고른 곡이 끝날 때까지 (곡을 중간에 자르지 않음, 45초에 가장 가깝게 곡 단위로)
+  secFor: songId => songPlan(songId, 45).sec,
   how: "화살표가 위 판에 겹치는 순간 몸으로 밟아요. ↖ 왼손 · ↗ 오른손은 옆으로 쭉 뻗고, ↙ 왼발 · ↘ 오른발은 다리를 들어요! 긴 막대는 끝까지 그대로",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, id = D.id || "normal";
-    const song = songOf(env.song), minGap = MIN_GAP[id] || 0.45, travel = TRAVEL / D.speed, wide = D.reach;
+    const song = songOf(env.song), plan = songPlan(song.id, 45), minGap = MIN_GAP[id] || 0.45, travel = TRAVEL / D.speed, wide = D.reach;
     const badW = JUDGE[3][1] * wide;
     let t0 = null, spb = 0.6, seed = 1, nextJ = 8, notes = [], now = 0, lastT = null;
     let lastLane = null, lastIdx = null, lastTime = -9, holdUntil = -9;
@@ -122,6 +124,7 @@ export default {
     }
     // 반 박(j)마다 음표 만들기: 앞 2마디는 준비(둘째 마디에 ↖ ↗ 연습), 그다음은 노래 가락이 시작하는 곳
     function addStep(j) {
+      if (j >= plan.endStep) return;                                   // 곡이 끝나면 음표도 끝
       const time = t0 + j * spb / 2, p = env.progress(), half = spb / 2;
       let lane, hold = 0;
       if (j < rhythm.INTRO) {
@@ -158,7 +161,7 @@ export default {
     }
     return {
       update() {
-        if (t0 === null) { t0 = rhythm.start(song.id); spb = rhythm.spb; seed = rhythm.seed; }
+        if (t0 === null) { t0 = rhythm.start(song.id, { loops: plan.loops }); spb = rhythm.spb; seed = rhythm.seed; }
         rhythm.tick(); now = clock();
         const dt = lastT === null ? 0.016 : Math.min(0.1, now - lastT); lastT = now;
         while (t0 + nextJ * spb / 2 - now < travel) { addStep(nextJ); nextJ++; }

@@ -1,10 +1,11 @@
-// OX 퀴즈: 문제를 듣고 맞으면 왼쪽(O), 틀리면 오른쪽(X)으로 몸을 옮기기. 시간이 끝났을 때 몸(어깨 가운데)이 있는 쪽으로 판정
+// OX 퀴즈 (한 게임 10문제): 문제를 듣고 맞으면 왼쪽(O), 틀리면 오른쪽(X)으로 몸을 옮기기. 시간이 끝났을 때 몸(어깨 가운데)이 있는 쪽으로 판정
 // 상식·안전·수 비교·덧셈·영어 단어·한글 문제를 섞어서, 한 게임에서는 같은 문제가 다시 나오지 않음. 2인은 같은 문제를 동시에 풂
-import { burst, popup, rr, outlinedText, FONT } from "../../fx.js?v=35";
-import { sfx } from "../../audio.js?v=35";
+import { burst, popup, rr, outlinedText, FONT } from "../../fx.js?v=36";
+import { sfx } from "../../audio.js?v=36";
 
 const ANSWER = 5.0;    // 답을 고르는 시간(초, 보통)
 const SHOW = 2.4;      // 정답·설명 보여 주는 시간(초)
+const COUNT = 10;      // 한 게임 문제 수
 const DEAD = 0.05;     // 가운데 선에서 구역 너비의 이 비율 안이면 '아직 안 고름'
 
 // [문제, 정답(true=O), 설명]
@@ -105,11 +106,13 @@ function wrapLines(ctx, text, maxW) {
 
 export default {
   id: "ox", title: "OX 퀴즈", icon: "⭕", sec: 60, cursor: "", cat: "learn", bg: "#caffbf", desc: "왼쪽 O, 오른쪽 X로 이동",
-  how: "문제를 잘 듣고, 맞으면 왼쪽 O로, 틀리면 오른쪽 X로 몸을 옮겨요. 시간이 끝났을 때 서 있는 쪽이 내 답이에요",
+  // 게임 시간 = 10문제를 다 푸는 시간 (1P 난이도의 답 고르는 시간 기준)
+  secFor: (song, diffs) => 0.8 + COUNT * (ANSWER * Math.max(0.8, Math.min(1.3, (diffs && diffs[0] ? diffs[0].poseTime : 1))) + SHOW) + 0.3,
+  how: "10문제! 문제를 잘 듣고, 맞으면 왼쪽 O로, 틀리면 오른쪽 X로 몸을 옮겨요. 시간이 끝났을 때 서 있는 쪽이 내 답이에요",
   create(env) {
     const z = env.zone, v = env.view;
     const answer = ANSWER * Math.max(0.8, Math.min(1.3, env.diff.poseTime));
-    let cur = -1, Q = null, picked = null, judged = false, okN = 0, failN = 0, now = 0, bodyX = null, shownAt = 0;
+    let done = false, cur = -1, Q = null, picked = null, judged = false, okN = 0, failN = 0, now = 0, bodyX = null, shownAt = 0;
     const S0 = sharedStart(answer);
     const round = () => S0.answer + SHOW;
     // 몸 위치 → 고른 쪽 (true = O 왼쪽, false = X 오른쪽, null = 가운데)
@@ -128,6 +131,7 @@ export default {
         const el = now - S.t0;
         if (el < 0) return;
         const i = Math.floor(el / round()), tIn = el - i * round();
+        if (i >= COUNT) { done = true; return; }                    // 10문제 끝
         if (i !== cur) {   // 새 문제
           cur = i; judged = false; Q = BANK[S.order[i % S.order.length]];
           if (env.slot === 0) env.speak(Q[0], "ko-KR");
@@ -176,6 +180,12 @@ export default {
         ctx.fillStyle = judged ? (picked === Q[1] ? "#d8ffe6" : "#ffe0e0") : "#fff"; rr(ctx, x, y, w, h, U * 0.03); ctx.fill();
         ctx.lineWidth = U * 0.01; ctx.strokeStyle = env.color; ctx.stroke();
         lines.forEach((ln, k) => outlinedText(ctx, ln, z.cx, y + fs * (0.95 + k * 1.25), fs, "#222", "#fff", 2));
+        if (Q) {   // 몇 번째 문제인지 (카드 왼쪽 위)
+          const t = `${Math.min(COUNT, cur + 1)} / ${COUNT}`, bs = Math.min(U * 0.03, z.w / 22);
+          ctx.font = `bold ${Math.round(bs)}px ${FONT}`; const tw = ctx.measureText(t).width + bs;
+          ctx.fillStyle = env.color; rr(ctx, x + U * 0.015, y - bs * 0.7, tw, bs * 1.4, bs * 0.5); ctx.fill();
+          outlinedText(ctx, t, x + U * 0.015 + tw / 2, y, bs, "#fff", env.color, 2);
+        }
         // 남은 시간 막대
         if (Q && !judged) { const k = Math.max(0, 1 - tIn / S.answer); ctx.fillStyle = env.color; ctx.fillRect(x + U * 0.03, y + h - U * 0.014, (w - U * 0.06) * k, U * 0.009); }
         // 정답 설명
@@ -187,7 +197,8 @@ export default {
         }
       },
       stop() { shared = null; },
-      result: () => `맞힘 ${okN} · 틀림 ${failN}`,
+      get done() { return done; },
+      result: () => `${COUNT}문제 중 맞힘 ${okN} · 틀림 ${failN}`,
       // 설명 시연용: 지금 문제의 정답 쪽 (화면 x)
       get answerX() { return Q && !judged ? z.x0 + z.w * (Q[1] ? 0.25 : 0.75) : null; },
       get q() { return Q ? { text: Q[0], o: Q[1], judged } : null; },

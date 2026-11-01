@@ -1,9 +1,9 @@
 // 탁구 (스포츠 리조트처럼 3D): 실내 경기장, 내 캐릭터 뒤에서 탁구대를 봄
 // 상대가 친 공이 내 쪽 탁구대에 한 번 튀고 오면 팔을 휘둘러 받아치기. 아주 세게 휘두르면 스매시(상대가 잘 못 받음)
 // 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임. 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받아칠 수 있음. 11점 먼저 내면 게임(2점 차)
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=35";
-import { sfx } from "../../audio.js?v=35";
-import { stage, THREE, box, cyl, ball as sphere, mesh, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=35";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=36";
+import { sfx } from "../../audio.js?v=36";
+import { stage, THREE, box, cyl, ball as sphere, mesh, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=36";
 
 const FLIGHT = 1.1;    // 공이 상대에게서 나에게 오는 시간(초, 보통)
 const BACK = 0.75;     // 받아친 공이 상대에게 가는 시간(초)

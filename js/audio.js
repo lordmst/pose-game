@@ -119,7 +119,7 @@ export function stopSpeak() { try { speechSynthesis.cancel(); } catch (e) {} }
    두 선수가 같은 반주·같은 음표 패턴을 쓰도록 시작 시각과 씨앗값을 공유 */
 export const clock = () => (ac ? ac.currentTime : performance.now() / 1000);
 let rTimer = null, rStart = 0, rSpb = 0.6, rStep = 0, rNext = 0, rGain = null, rSeed = 1, rSong = null, pGain = null;
-let rOrch = false, rAccentUntil = -1;          // 지휘자 게임: 관현악 소리, 금관 강조(파트 지시 성공 시)
+let rOrch = false, rAccentUntil = -1, rEnd = Infinity;   // rEnd: 곡이 끝나는 반 박 번호 (그 뒤로는 소리 없음)          // 지휘자 게임: 관현악 소리, 금관 강조(파트 지시 성공 시)
 const rLevels = {};                            // 선수별 음악 크기(지휘가 맞을수록 큼). 2인은 평균
 
 /* ---------- 리듬 게임 곡 ----------
@@ -217,6 +217,15 @@ function rSchedule() {
   const half = rSpb / 2, S = rSong;
   while (rNext < ac.currentTime + LOOKAHEAD) {
     const i = rStep, k = i - INTRO;
+    if (i >= rEnd) {   // 곡 끝: 마지막 으뜸화음 한 번 길게 울리고 멈춤
+      if (i === rEnd) {
+        const root = S.roots[0];
+        [0, 4, 7, 12].forEach(iv => tone(midi(root + 12 + iv), rNext, 1.5, { type: rOrch ? "sine" : "triangle", vol: 0.08, attack: 0.02, dest: rGain }));
+        tone(midi(root), rNext, 1.6, { type: "triangle", vol: 0.18, dest: rGain });
+        if (!rOrch) tone(140, rNext, 0.14, { vol: 0.6, slide: 0.35, dest: rGain });
+      }
+      rStep = rEnd + 1; return;
+    }
     if (rOrch) {     // 관현악: 팀파니(1·3박), 현악 지속음, 멜로디는 부드럽게 두 겹, 강조 구간엔 금관
       const beat = i % 2 === 0, inBar = (i / 2) % 4;
       if (beat && (inBar === 0 || inBar === 2)) tone(inBar ? 82 : 65, rNext, 0.45, { type: "triangle", vol: 0.32, slide: 0.85, dest: rGain });
@@ -246,12 +255,18 @@ function rSchedule() {
     rNext += half; rStep++;
   }
 }
+// 곡을 몇 번 돌릴지와 게임 시간(초): 기본 시간에 가장 가깝게, 곡이 중간에 끊기지 않도록 곡 단위로 맞춤
+export function songPlan(songId, baseSec) {
+  const S = songOf(songId), half = 30 / S.bpm, loopLen = S.steps.length * half, intro = INTRO * half;
+  const loops = Math.max(1, Math.round((baseSec - intro) / loopLen));
+  return { loops, endStep: INTRO + loops * S.steps.length, sec: intro + loops * loopLen + 0.15 + 1.8 };   // 0.15 시작 여유, 1.8 마지막 화음
+}
 export const rhythm = {
   // 이미 시작했으면 같은 시작 시각을 돌려줌 (2인 공유)
-  start(songId, { orch = false } = {}) {
+  start(songId, { orch = false, loops = 0 } = {}) {
     if (rTimer || rStart > 0) return rStart;
     rhythm.stopPreview(); rOrch = orch; rAccentUntil = -1; for (const k in rLevels) delete rLevels[k];
-    rSong = songOf(songId); rSpb = 60 / rSong.bpm; rSeed = 1 + Math.floor(Math.random() * 1e6);
+    rSong = songOf(songId); rEnd = loops ? INTRO + loops * rSong.steps.length : Infinity; rSpb = 60 / rSong.bpm; rSeed = 1 + Math.floor(Math.random() * 1e6);
     rStart = clock() + 0.15;
     if (ac && (settings.bgm || settings.sfx)) {
       rGain = ac.createGain(); rGain.gain.value = 0.6; rGain.connect(settings.bgm ? musicBus : sfxBus);   // 배경음악을 꺼도 박자는 들리게

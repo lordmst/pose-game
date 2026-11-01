@@ -4,8 +4,8 @@
 // 음악은 맞히든 못 맞히든 처음부터 끝까지 똑같이 나옴. 잘 맞을수록 관객 호응 게이지가 차고 연주자들이 신나게 움직임
 // 중간중간 왼손 동작: ✋ '왼손 올리기'(크레셴도: 왼손을 머리 위로 쭉 올려 게이지 채우기),
 //                     ⊙ '왼손 터치'(왼쪽 위에 나온 동그라미를 왼손으로 짚어 악기 파트 불러내기). 그동안 화살표는 오른손만
-import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=35";
-import { rhythm, clock, CLASSICS, songOf } from "../audio.js?v=35";
+import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=36";
+import { rhythm, clock, CLASSICS, songOf, songPlan } from "../audio.js?v=36";
 
 const PERFECT = 0.1, GOOD = 0.22;   // 판정 시간 폭(초, 보통)
 const SWING = 1.8;                  // 휘두르기로 인정하는 손 속도(어깨너비/초)
@@ -27,10 +27,12 @@ const RAISE_HOLD = 0.6, TOUCH_HOLD = 0.25;   // 성공으로 치는 유지 시�
 export default {
   id: "conductor", title: "지휘자", icon: "🎼", sec: 50, cursor: "🪄", cat: "move", bg: "#e8a87c", desc: "오케스트라 지휘하기", music: false,
   songs: CLASSICS.map(({ id, title, by, icon, bpm }) => ({ id, title, by, icon, bpm })), demoSong: "ode",
+  // 게임 시간 = 고른 곡이 끝날 때까지 (곡을 중간에 자르지 않음, 50초에 가장 가깝게 곡 단위로)
+  secFor: songId => songPlan(songId || "ode", 50).sec,
   how: "화살표가 가로선 칸에 겹치는 순간 그 방향으로 손을 휘둘러요(왼쪽 화살표는 왼손). ✋가 나오면 왼손을 머리 위로 쭉, ⊙가 나오면 왼손으로 터치! 클래식 명곡 6곡",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, id = D.id || "normal", wide = D.reach;
-    const song = songOf(env.song || "ode"), pat = PATTERN[id === "easy" ? 2 : 4], travel = TRAVEL / D.speed;
+    const song = songOf(env.song || "ode"), plan = songPlan(song.id, 50), pat = PATTERN[id === "easy" ? 2 : 4], travel = TRAVEL / D.speed;
     let t0 = null, spb = 0.6, nextJ = 8, notes = [], now = 0, lastT = null, energy = 0.7, flare = 0, events = [], raiseLv = 0;
     const cnt = { PERFECT: 0, GOOD: 0, MISS: 0 }, ev = { ok: 0, all: 0 }, trail = [[], []];
     // 화살표 칸 크기: 한 박 간격보다 크면 겹치므로 빠른 곡은 조금 작게
@@ -41,11 +43,12 @@ export default {
 
     // 반 박(j)마다: 박마다 지휘 모양대로 (어려움은 더 빨리 내려오고 판정이 좁음)
     function addStep(j) {
+      if (j >= plan.endStep) return;                                   // 곡이 끝나면 지휘도 끝
       const time = t0 + j * spb / 2;
       if (j % 2 === 0) {
         const b = j / 2, key = pat[b % 4];
         // 왼손 동작 시작: 셋째 마디부터 16박마다, 올리기와 터치를 번갈아
-        if (b >= 8 && (b - 8) % EVENT_EVERY === 0) {
+        if (b >= 8 && (b - 8) % EVENT_EVERY === 0 && (b + EVENT_LEN) * 2 <= plan.endStep) {   // 곡 끝 전에 끝나는 것만
           const type = ((b - 8) / EVENT_EVERY) % 2 ? "touch" : "raise";
           events.push({ type, start: time - 0.3, end: t0 + (b + EVENT_LEN) * spb, hold: 0, done: null, sec: events.length % 6, pos: null }); ev.all++;
         }
@@ -87,7 +90,7 @@ export default {
     }
     return {
       update() {
-        if (t0 === null) { t0 = rhythm.start(song.id, { orch: true }); spb = rhythm.spb; }
+        if (t0 === null) { t0 = rhythm.start(song.id, { orch: true, loops: plan.loops }); spb = rhythm.spb; }
         rhythm.tick(); now = clock();
         const dt = lastT === null ? 0.016 : Math.min(0.1, now - lastT); lastT = now;
         flare = Math.max(0, flare - dt * 3);
