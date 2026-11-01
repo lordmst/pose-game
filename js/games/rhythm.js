@@ -1,8 +1,8 @@
 // 리듬 박자 (펌프 방식): 화면 위에 판정판 4개(↙ ↖ ↗ ↘)가 한 줄로 있고 화살표가 아래에서 올라옴.
 // 판을 손으로 누르는 게 아니라 몸으로 '밟음': 왼손 11시(↖) · 오른손 1시(↗) · 왼발 7시(↙) · 오른발 5시(↘)
 // 화살표가 판에 겹치는 순간 그 손을 대각선 위로 뻗거나 그 발을 대각선 아래로 내딛기. 긴 막대(홀드)는 끝날 때까지 그대로
-import { burst, outlinedText, rr, FONT } from "../fx.js?v=23";
-import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=23";
+import { burst, outlinedText, rr, FONT } from "../fx.js?v=24";
+import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=24";
 
 const TRAVEL = 1.6;                                   // 화살표가 화면 아래에서 판까지 올라오는 시간(초, 보통)
 // 판정 시간 폭(초, 보통). 쉬움은 넓고 어려움은 좁음

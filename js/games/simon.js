@@ -1,7 +1,7 @@
 // 가라사대: "가라사대"가 붙은 지시만 따라 하기. 없으면 움직이면 안 됨. 왼쪽·오른쪽 구분과 잘 듣기 연습
-import { burst, popup, rr, outlinedText, FONT } from "../fx.js?v=23";
-import { sfx } from "../audio.js?v=23";
-import { POSES, poseMatches } from "./copy.js?v=23";
+import { burst, popup, rr, outlinedText, FONT } from "../fx.js?v=24";
+import { sfx } from "../audio.js?v=24";
+import { POSES, poseMatches } from "./copy.js?v=24";
 
 const ROUND = 4.4;      // 한 판(초): 지시를 듣고 따라 하는 시간 + 결과 보여 주는 시간
 const ANSWER = 3.2;     // 따라 하는 시간(초, 보통)
