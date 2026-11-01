@@ -12,5 +12,6 @@ import thumb from "./sport/thumb.js?v=28";
 import plane from "./sport/plane.js?v=28";
 import skate from "./sport/skate.js?v=28";
 import jetski from "./sport/jetski.js?v=28";
+import jumprope from "./sport/jumprope.js?v=28";
 
-export default [tennis, bowling, archery, boxing, volley, pingpong, cans, basket, golf, thumb, plane, skate, jetski];
+export default [jumprope, tennis, bowling, archery, boxing, volley, pingpong, cans, basket, golf, thumb, plane, skate, jetski];

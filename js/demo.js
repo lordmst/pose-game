@@ -410,7 +410,9 @@ export function startDemo(id, game, view) {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#bfe3ff"); g.addColorStop(0.75, "#fff3d6"); g.addColorStop(1, "#ffe2a8");
       ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
       ctx.fillStyle = "#c9e8a6"; ctx.fillRect(-20, H * 0.965, W + 40, H);
-      if (["rhythm", "conductor", "plane", "skate", "jetski"].includes(id)) { p.draw(ctx); inst.draw(ctx); }   // 게임 화면을 캐릭터 위에 (판정 글자·탈것이 가려지지 않게) else { inst.draw(ctx); p.draw(ctx); }   // 리듬은 판정 글자가 캐릭터 위에 보이게
+      // 리듬·지휘자·탈것 게임은 게임 화면을 캐릭터 위에 (판정 글자·탈것이 가려지지 않게), 나머지는 캐릭터를 위에
+      if (["rhythm", "conductor", "plane", "skate", "jetski"].includes(id)) { p.draw(ctx); inst.draw(ctx); }
+      else { inst.draw(ctx); p.draw(ctx); }
     },
   };
 }
