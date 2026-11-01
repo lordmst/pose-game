@@ -1,26 +1,26 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=29";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=29";
-import * as R from "./records.js?v=29";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=29";
-import copy from "./games/copy.js?v=29";
-import math from "./games/math.js?v=29";
-import ice from "./games/ice.js?v=29";
-import star from "./games/star.js?v=29";
-import fruit from "./games/fruit.js?v=29";
-import mole from "./games/mole.js?v=29";
-import wall from "./games/wall.js?v=29";
-import rhythm from "./games/rhythm.js?v=29";
-import goalie from "./games/goalie.js?v=29";
-import { hangul, english } from "./games/word.js?v=29";
-import clockGame from "./games/clock.js?v=29";
-import run from "./games/run.js?v=29";
-import simon from "./games/simon.js?v=29";
-import conductor from "./games/conductor.js?v=29";
-import SPORTS from "./games/sports.js?v=29";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=29";
-import { DIFFS, diffOf } from "./difficulty.js?v=29";
-import { startDemo } from "./demo.js?v=29";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=30";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=30";
+import * as R from "./records.js?v=30";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=30";
+import copy from "./games/copy.js?v=30";
+import math from "./games/math.js?v=30";
+import ice from "./games/ice.js?v=30";
+import star from "./games/star.js?v=30";
+import fruit from "./games/fruit.js?v=30";
+import mole from "./games/mole.js?v=30";
+import wall from "./games/wall.js?v=30";
+import rhythm from "./games/rhythm.js?v=30";
+import goalie from "./games/goalie.js?v=30";
+import { hangul, english } from "./games/word.js?v=30";
+import clockGame from "./games/clock.js?v=30";
+import run from "./games/run.js?v=30";
+import simon from "./games/simon.js?v=30";
+import conductor from "./games/conductor.js?v=30";
+import SPORTS from "./games/sports.js?v=30";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=30";
+import { DIFFS, diffOf } from "./difficulty.js?v=30";
+import { startDemo } from "./demo.js?v=30";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -460,7 +460,25 @@ function makeEnv(i) {
     miss: (x, y, label) => miss(i, x, y, label),
     penalty: (n, x, y, label) => penalty(i, n, x, y, label),
     speak: (text, lang) => speak(slots.length === 2 && !lang ? `${p.name}, ${text}` : text, slots.length === 2, lang),
+    pip: (c, x, y, w, h) => drawPip(c, i, x, y, w, h),
   };
+}
+// 3D 스포츠용 카메라 작은 화면: 그 선수 몸 주변만 잘라 구석에 보여 줌 (뼈대 선 포함)
+function drawPip(c, i, x, y, w, h) {
+  const z = zones[i], tr = trackers[i], P = tr && tr.pts, U = view.U, s = h / view.H;
+  let cx = P && P[11].v && P[12].v ? (P[11].x + P[12].x) / 2 : z.cx;
+  cx = Math.max(z.x0 + w / s / 2, Math.min(z.x1 - w / s / 2, cx));
+  c.save();
+  c.beginPath(); c.roundRect(x, y, w, h, U * 0.02); c.clip();
+  c.translate(x + w / 2, y); c.scale(s, s); c.translate(-cx, 0);
+  cam.draw(c, view.W, view.H);
+  if (P) {
+    c.strokeStyle = slots[i].color; c.lineWidth = U * 0.02; c.lineCap = "round"; c.beginPath();
+    for (const [a, b] of BONES) if (P[a].v && P[b].v) { c.moveTo(P[a].x, P[a].y); c.lineTo(P[b].x, P[b].y); }
+    c.stroke();
+  }
+  c.restore();
+  c.lineWidth = U * 0.006; c.strokeStyle = "#fff"; c.beginPath(); c.roundRect(x, y, w, h, U * 0.02); c.stroke();
 }
 function award(i, base, x, y) {
   const p = players[i], k = diffOf(p.diff).points, pts = base * k * (fever ? 2 : 1);   // 난이도 배점 × 피버 2배

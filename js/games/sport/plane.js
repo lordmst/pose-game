@@ -1,34 +1,83 @@
-// 비행기 (섬 투어): 두 팔을 날개처럼 벌리고 날기
-// 기울이기 = 두 손 높이 차이(오른손이 낮으면 오른쪽으로), 날갯짓(두 손을 함께 아래로 휘두르기) = 위로 올라감
+// 비행기 (스포츠 리조트의 섬 비행처럼 3D): 빨간 프로펠러 비행기 뒤에서 열대 섬 바다 위를 날기
+// 두 팔을 날개처럼 벌리고 날기. 기울이기 = 두 손 높이 차이(오른손이 낮으면 오른쪽으로), 날갯짓(두 손을 함께 아래로 휘두르기) = 위로 올라감
 // 팔을 벌리고 있으면 천천히 내려가고(활공), 팔을 내리면 빨리 내려감. 풍선·링을 모으고 섬 산에 부딪히지 않기
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=29";
-import { sfx } from "../../audio.js?v=29";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=30";
+import { sfx } from "../../audio.js?v=30";
+import { stage, THREE, sea, palm, cloud, box, ball as sphere, cyl, mesh, avatar } from "./kit3d.js?v=30";
 
 const ZRATE = 0.33;          // 물체가 멀리서 다가오는 속도(1/초, 보통)
 const FLAP = 2.0;            // 날갯짓으로 인정하는 손 아래 방향 속도(어깨너비/초)
-const S0 = 1 / 0.25, s = z => 1 / (0.25 + z * 3.5);   // 원근 배율 (z: 0 가까움 ~ 1 멂)
+const XS = 7, AS = 16, Y0 = 1.2, ZD = 90;   // 게임 좌표 → 3D(m): 옆 1 = 7m, 높이 1 = 16m, 앞 1 = 90m
+
+// 작은 섬: 모래 + 초록 산 + 야자수
+function island(r = 4, h = 9) {
+  const g = new THREE.Group();
+  const sand = cyl(r * 1.25, r * 1.4, 0.6, "#f3e2a9", { receive: true }); sand.position.y = 0.1; g.add(sand);
+  const hill = mesh(new THREE.ConeGeometry(r, h, 9), "#3e9b4f", { rough: 0.9 }); hill.position.y = h / 2; g.add(hill);
+  const rock = mesh(new THREE.ConeGeometry(r * 0.45, h * 0.35, 6), "#8d7a63"); rock.position.set(r * 0.25, h * 0.88, 0); g.add(rock);
+  for (let i = 0; i < 3; i++) { const a = i * 2.1; g.add(palm(Math.cos(a) * r * 1.05, Math.sin(a) * r * 1.05, 0.8)); }
+  return g;
+}
+// 빨간 프로펠러 비행기 (+조종사). 앞은 -z
+function airplane(color) {
+  const g = new THREE.Group();
+  const body = cyl(0.42, 0.22, 3.2, "#e8332f"); body.rotation.x = Math.PI / 2; g.add(body);
+  const nose = sphere(0.43, "#e8332f"); nose.position.z = -1.55; nose.scale.set(1, 1, 0.8); g.add(nose);
+  const cap = cyl(0.12, 0.12, 0.2, "#ffd43b"); cap.rotation.x = Math.PI / 2; cap.position.z = -1.95; g.add(cap);
+  const wing = box(5.2, 0.1, 0.95, "#ffffff"); wing.position.set(0, -0.1, -0.5); g.add(wing);
+  [-1, 1].forEach(s => { const tip = box(0.6, 0.11, 0.96, "#e8332f"); tip.position.set(s * 2.35, -0.1, -0.5); g.add(tip); });
+  const tailH = box(1.8, 0.08, 0.5, "#ffffff"); tailH.position.set(0, 0.05, 1.45); g.add(tailH);
+  const tailV = box(0.08, 0.75, 0.55, "#e8332f"); tailV.position.set(0, 0.42, 1.45); g.add(tailV);
+  const prop = new THREE.Group(); prop.position.z = -2.05; g.add(prop);
+  const b1 = box(0.12, 1.5, 0.04, "#333"); prop.add(b1); const b2 = b1.clone(); b2.rotation.z = Math.PI / 2; prop.add(b2);
+  const disc = mesh(new THREE.CircleGeometry(0.8, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18 }), { cast: false }); disc.position.z = -2.07; g.add(disc);
+  // 조종사 (윗몸만 보임)
+  const pilot = avatar({ shirt: color || "#ff6b6b", pants: "#2b3a67" }); pilot.scale.setScalar(0.62); pilot.rotation.y = Math.PI; pilot.position.set(0, -0.35, -0.1); g.add(pilot);
+  const glass = mesh(new THREE.SphereGeometry(0.45, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.35 }), { cast: false }); glass.position.set(0, 0.3, -0.45); glass.scale.set(1, 0.9, 1.4); g.add(glass);
+  g.prop = prop; g.pilot = pilot;
+  return g;
+}
 
 export default {
-  id: "plane", title: "비행기", icon: "✈️", sec: 50, cursor: "", cat: "sport", bg: "#89f7fe", desc: "팔 날개로 섬 하늘 날기",
+  id: "plane", title: "비행기", icon: "✈️", sec: 50, cursor: "", cat: "sport", bg: "#89f7fe", desc: "팔 날개로 섬 하늘 날기", scene3d: true,
   how: "두 팔을 날개처럼 벌려요. 오른쪽으로 가려면 오른손을 내리고, 두 팔을 아래로 힘껏 휘저으면 위로 올라가요. 풍선과 링을 모아요!",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff;
+    const st = stage(env, { fov: 55, sky: ["#3fa9f5", "#dff4ff"], fog: ["#cfeeff", 120, 480], shadowSize: 30 });
+    const { scene, camera } = st;
+    st.sun.position.set(20, 40, 10);
+    const water = sea(scene, 700, 0); water.material.color.set("#29a3d6");
+    // 멀리 있는 큰 섬 (수평선) + 구름
+    const far = island(40, 34); far.position.set(-60, 0, -330); scene.add(far);
+    const far2 = island(26, 22); far2.position.set(110, 0, -300); scene.add(far2);
+    for (let i = 0; i < 9; i++) scene.add(cloud(-120 + i * 32, 30 + (i % 3) * 8, -200 - (i % 2) * 60, 5 + (i % 3)));
+    // 지나가는 작은 섬들 (풍경, 계속 돌아옴)
+    const deco = [];
+    for (let i = 0; i < 6; i++) { const s = island(3 + (i % 3), 5 + (i % 3) * 2); s.position.set((i % 2 ? 1 : -1) * (30 + (i * 13) % 25), 0, -i * 45); scene.add(s); deco.push(s); }
+    const plane = airplane(env.color); scene.add(plane);
+    const geo = { balloon: new THREE.SphereGeometry(1, 18, 14), ring: new THREE.TorusGeometry(2.1, 0.22, 10, 32) };
+    const balloonMats = ["#ff5a7a", "#ffd43b", "#4dabf7", "#69db7c", "#cc5de8"].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35 }));
+    const ringMat = new THREE.MeshStandardMaterial({ color: "#ffd400", emissive: "#7a5a00", roughness: 0.3 });
+
     let X = 0, A = 0.55, vA = 0, steer = 0, objs = [], spawnT = 0.6, t = 0, dist = 0, flapCool = 0, wet = 0, flapN = 0;
-    let got = 0, rings = 0, streak = 0, lastRing = -9, wide = false, flapFx = 0;
-    const R = () => ({ top: v.H * 0.1, bot: v.H * 0.64 });
-    const planeY = () => { const r = R(); return r.top + (r.bot - r.top) * 0.74; };
-    function spawn(kind, ox, alt, z0 = 1) { objs.push({ kind, ox, a: alt, z: z0, done: false }); }
+    let got = 0, rings = 0, streak = 0, lastRing = -9, wide = false, flapFx = 0, roll = 0;
+    const wpos = (ox, a, oz) => new THREE.Vector3(ox * XS, Y0 + a * AS, -oz * ZD);
+    function spawn(kind, ox, alt, z0 = 1) {
+      const o = { kind, ox, a: alt, z: z0, done: false };
+      if (kind === "balloon") { o.mesh = new THREE.Group(); const b = new THREE.Mesh(geo.balloon, balloonMats[Math.floor(Math.random() * 5)]); b.scale.set(1, 1.2, 1); b.castShadow = true; o.mesh.add(b); const str = cyl(0.02, 0.02, 1.6, "#666"); str.position.y = -2; o.mesh.add(str); }
+      else if (kind === "ring") { o.mesh = new THREE.Mesh(geo.ring, ringMat); o.mesh.castShadow = true; }
+      else { o.mesh = island(3.2, 10); o.a = 0; }
+      scene.add(o.mesh); objs.push(o);
+    }
     function spawnSet() {
       const r = Math.random(), ox = clamp(X + (Math.random() - 0.5) * 1.4, -1.4, 1.4), alt = 0.25 + Math.random() * 0.6;
       if (r < 0.55) spawn("balloon", ox, alt);
       else if (r < 0.8) for (let i = 0; i < 3; i++) spawn("ring", ox + i * 0.08 * (Math.random() < 0.5 ? -1 : 1), alt, 1 + i * 0.13);
       else { spawn("island", ox, 0); spawn("balloon", ox, 0.75, 1.02); }
     }
-    // 화면 좌표: 가까울수록 크게, 비행기 높이와의 차이만큼 위아래로
-    function proj(o) {
-      const r = R(), k = s(o.z) / S0, hz = r.top + (r.bot - r.top) * 0.3;
-      return { x: z.cx + (o.ox - X) * z.w * 0.55 * k, y: hz + (planeY() - hz) * k - (o.a - A) * (r.bot - r.top) * 0.95 * k, k };
-    }
+    // 지나간 물체 치우기 (함께 쓰는 모양은 남김)
+    const drop = m => { scene.remove(m); m.traverse(c => { if (c.geometry && c.geometry !== geo.balloon && c.geometry !== geo.ring) c.geometry.dispose(); }); };
+    const scr = (ox, a, oz) => st.toScreen(wpos(ox, a, oz));
     return {
       update(dt) {
         t += dt; flapCool -= dt; flapFx = Math.max(0, flapFx - dt * 3); wet -= dt;
@@ -45,7 +94,8 @@ export default {
         X = clamp(X + steer * 0.95 * dt, -1.6, 1.6);
         vA -= (wide ? 0.12 : 0.24) * dt; vA *= Math.pow(0.6, dt); vA = clamp(vA, -0.3, 0.4);
         A = clamp(A + vA * dt, 0.03, 1);
-        if (A <= 0.03) { vA = Math.max(vA, 0.05); if (wet <= 0) { wet = 2; env.miss(z.cx, planeY(), "물에 닿았어요! 날갯짓!"); burst(z.cx, planeY() + v.U * 0.05, { n: 16, colors: ["#bfefff", "#ffffff"], speed: v.U * 0.5, gravity: v.U, size: v.U * 0.012 }); } }
+        const pp = wpos(X, A, 0), ps = st.toScreen(pp);
+        if (A <= 0.03) { vA = Math.max(vA, 0.05); if (wet <= 0) { wet = 2; env.miss(ps.x, ps.y, "물에 닿았어요! 날갯짓!"); burst(ps.x, ps.y + v.U * 0.05, { n: 16, colors: ["#bfefff", "#ffffff"], speed: v.U * 0.5, gravity: v.U, size: v.U * 0.012 }); } }
         const zr = ZRATE * D.speed;
         dist += zr * dt;
         spawnT -= dt; if (spawnT <= 0) { spawnSet(); spawnT = (1.25 - 0.35 * env.progress()) / D.speed; }
@@ -53,76 +103,55 @@ export default {
           o.z -= zr * dt;
           if (o.done || o.z > 0.04) continue;
           o.done = true;
-          const dx = Math.abs(o.ox - X), dh = Math.abs(o.a - A), q = proj(o);
+          const dx = Math.abs(o.ox - X), dh = Math.abs(o.a - A), q = scr(o.ox, o.a, 0);
           if (o.kind === "island") {
-            if (dx < 0.3 && A < 0.5) { vA = 0.45; shake(v.U * 0.02, 0.3); sfx.thud(); env.miss(z.cx, planeY(), "산에 쿵!"); streak = 0; }
+            if (dx < 0.3 && A < 0.5) { vA = 0.45; shake(v.U * 0.02, 0.3); sfx.thud(); env.miss(ps.x, ps.y, "산에 쿵!"); streak = 0; }
           } else if (dx < 0.2 * D.reach && dh < 0.17 * D.reach) {
-            if (o.kind === "balloon") { got++; sfx.pop(); env.award(1, q.x, q.y - v.U * 0.05); burst(q.x, q.y, { n: 18, colors: ["#ff5a7a", "#ffd400", "#ffffff"], speed: v.U * 0.6, gravity: v.U * 0.5, size: v.U * 0.015 }); }
+            if (o.kind === "balloon") { got++; o.mesh.visible = false; sfx.pop(); env.award(1, q.x, q.y - v.U * 0.05); burst(q.x, q.y, { n: 18, colors: ["#ff5a7a", "#ffd400", "#ffffff"], speed: v.U * 0.6, gravity: v.U * 0.5, size: v.U * 0.015 }); }
             else {
-              rings++; streak = t - lastRing < 1.2 ? streak + 1 : 1; lastRing = t; sfx.catch(env.player.combo);
+              rings++; o.hit = 1; streak = t - lastRing < 1.2 ? streak + 1 : 1; lastRing = t; sfx.catch(env.player.combo);
               env.award(streak >= 3 ? 2 : 1, q.x, q.y - v.U * 0.05);
               if (streak >= 3) popup(q.x, q.y + v.U * 0.05, `링 ${streak}개 연속!`, { size: v.U * 0.04, color: "#fff", stroke: "#1d8f47" });
             }
           } else if (o.kind === "ring") streak = 0;
         }
-        objs = objs.filter(o => o.z > -0.05);
+        objs = objs.filter(o => { if (o.z > (o.kind === "island" ? -0.03 : -0.08)) return true; drop(o.mesh); return false; });
+        // 3D 반영
+        roll += (-steer * 0.75 - roll) * Math.min(1, dt * 5);
+        plane.position.copy(pp); plane.rotation.set(clamp(vA * 1.4, -0.35, 0.45), -steer * 0.15, roll);
+        plane.prop.rotation.z += dt * 40;
+        plane.pilot.arm(0, 1.3 + Math.sin(t * 9) * flapFx * 0.6, 0, 0.1); plane.pilot.arm(1, 1.3 + Math.sin(t * 9) * flapFx * 0.6, 0, 0.1);
+        for (const o of objs) {
+          o.mesh.position.copy(wpos(o.ox, o.a, o.z));
+          if (o.kind === "balloon") o.mesh.position.y += Math.sin(t * 2 + o.ox * 5) * 0.3;
+          if (o.kind === "ring") { o.mesh.rotation.z = t * 0.6; if (o.hit) { o.hit = Math.max(0, o.hit - dt * 2); o.mesh.scale.setScalar(1 + (1 - o.hit) * 0.6); } }
+        }
+        const worldSpeed = zr * ZD;
+        deco.forEach(s => { s.position.z += worldSpeed * dt; if (s.position.z > 30) { s.position.z -= 270; s.position.x = (Math.random() < 0.5 ? -1 : 1) * (25 + Math.random() * 40); } });
+        water.update(t * 2.5);
       },
       draw(ctx) {
-        const r = R(), U = v.U, hz = r.top + (r.bot - r.top) * 0.3, pY = planeY();
-        ctx.save(); rr(ctx, z.x0 + 4, r.top, z.w - 8, r.bot - r.top, U * 0.03); ctx.clip();
-        // 하늘과 바다 (높이 날수록 수평선 아래 바다가 넓게)
-        ctx.globalAlpha = 0.86;   // 카메라 속 내 모습이 살짝 비치게
-        let g = ctx.createLinearGradient(0, r.top, 0, hz); g.addColorStop(0, "#5ec8ff"); g.addColorStop(1, "#d6f3ff");
-        ctx.fillStyle = g; ctx.fillRect(z.x0, r.top, z.w, hz - r.top);
-        g = ctx.createLinearGradient(0, hz, 0, r.bot); g.addColorStop(0, "#5fb8e8"); g.addColorStop(1, "#1f6fb5");
-        ctx.fillStyle = g; ctx.fillRect(z.x0, hz, z.w, r.bot - hz); ctx.globalAlpha = 1;
-        // 먼 섬 (옆으로 움직이면 따라 흐름)
-        ctx.fillStyle = "#4caf63";
-        for (let i = -2; i <= 2; i++) { const ix = z.cx + ((i * 0.9 - X * 0.25) % 2.25) * z.w * 0.5; ctx.beginPath(); ctx.ellipse(ix, hz, z.w * 0.09, (r.bot - r.top) * 0.035, 0, Math.PI, 0); ctx.fill(); }
-        // 파도 줄 (앞으로 흘러옴)
-        ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 2;
-        for (let i = 0; i < 8; i++) {
-          const zz = ((i / 8 - dist * 0.6) % 1 + 1) % 1, k = s(zz) / S0, y = hz + (pY + A * (r.bot - r.top) * 0.95 - hz) * k;
-          if (y > r.bot || y < hz) continue; ctx.beginPath(); ctx.moveTo(z.x0, y); ctx.lineTo(z.x1, y); ctx.stroke();
-        }
-        // 물체 (먼 것부터)
-        for (const o of [...objs].sort((a, b) => b.z - a.z)) {
-          if (o.done || o.z > 1.05) continue;
-          const q = proj(o), sz = U * 0.09 * q.k * 4;
-          ctx.globalAlpha = Math.min(1, (1.05 - o.z) * 5);
-          if (o.kind === "island") {
-            const base = hz + (pY + A * (r.bot - r.top) * 0.95 - hz) * q.k, top = base - (r.bot - r.top) * 0.5 * q.k * 4 * 0.25;
-            ctx.fillStyle = "#3e8e4f"; ctx.beginPath(); ctx.moveTo(q.x - sz * 2.2, base); ctx.lineTo(q.x - sz * 0.2, top); ctx.lineTo(q.x + sz * 0.4, top + sz * 0.3); ctx.lineTo(q.x + sz * 2.2, base); ctx.closePath(); ctx.fill();
-            ctx.fillStyle = "#f3e2a9"; ctx.beginPath(); ctx.ellipse(q.x, base, sz * 2.4, sz * 0.25, 0, 0, Math.PI * 2); ctx.fill();
-          } else if (o.kind === "balloon") {
-            ctx.strokeStyle = "#555"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(q.x, q.y + sz * 0.5); ctx.lineTo(q.x, q.y + sz * 1.1); ctx.stroke();
-            ctx.fillStyle = "#ff5a7a"; ctx.beginPath(); ctx.ellipse(q.x, q.y, sz * 0.42, sz * 0.52, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.ellipse(q.x - sz * 0.14, q.y - sz * 0.2, sz * 0.1, sz * 0.15, -0.5, 0, Math.PI * 2); ctx.fill();
-          } else {
-            ctx.strokeStyle = "#ffd400"; ctx.lineWidth = Math.max(2, sz * 0.14); ctx.beginPath(); ctx.ellipse(q.x, q.y, sz * 0.6, sz * 0.7, 0, 0, Math.PI * 2); ctx.stroke();
-            ctx.strokeStyle = "#fff6b0"; ctx.lineWidth = Math.max(1, sz * 0.05); ctx.stroke();
-          }
-          ctx.globalAlpha = 1;
-        }
-        // 내 비행기 (기울기만큼 돌아감, 프로펠러 회전)
-        const W = Math.min(z.w * 0.32, U * 0.3);
-        ctx.save(); ctx.translate(z.cx, pY); ctx.rotate(steer * 0.45);
-        ctx.fillStyle = "#ff8a3d"; rr(ctx, -W * 0.5, -W * 0.06, W, W * 0.12, W * 0.05); ctx.fill();           // 날개
-        ctx.fillStyle = "#ffcf3a"; ctx.beginPath(); ctx.ellipse(0, 0, W * 0.09, W * 0.16, 0, 0, Math.PI * 2); ctx.fill();   // 몸통
-        ctx.fillStyle = "#ff8a3d"; rr(ctx, -W * 0.16, W * 0.12, W * 0.32, W * 0.06, W * 0.03); ctx.fill();   // 꼬리
-        ctx.strokeStyle = "rgba(60,60,60,.7)"; ctx.lineWidth = 3; const pa = t * 40;
-        ctx.beginPath(); ctx.moveTo(Math.cos(pa) * W * 0.12, -W * 0.17 + Math.sin(pa) * W * 0.02); ctx.lineTo(-Math.cos(pa) * W * 0.12, -W * 0.17 - Math.sin(pa) * W * 0.02); ctx.stroke();
-        if (flapFx > 0) { ctx.strokeStyle = `rgba(255,255,255,${flapFx})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, W * 0.05, W * 0.55, 0.2, Math.PI - 0.2); ctx.stroke(); }
-        ctx.restore();
-        // 높이 막대
-        const bx = z.x1 - U * 0.05, by0 = r.top + U * 0.03, by1 = r.bot - U * 0.03;
+        // 카메라: 비행기 뒤 조금 위에서 (기울기 따라 살짝 흔들림)
+        const pp = plane.position;
+        camera.position.set(pp.x * 0.85, pp.y + 2.6, pp.z + 10);
+        camera.up.set(Math.sin(roll * 0.25), 1, 0).normalize();
+        camera.lookAt(pp.x, pp.y + 0.8, pp.z - 25);
+        st.draw(ctx);
+        const U = v.U;
+        // 날갯짓 효과
+        if (flapFx > 0) { const q = st.toScreen(pp); ctx.strokeStyle = `rgba(255,255,255,${flapFx})`; ctx.lineWidth = U * 0.008; ctx.beginPath(); ctx.arc(q.x, q.y, U * 0.18, 0.2, Math.PI - 0.2); ctx.stroke(); }
+        // 높이 막대 (왼쪽)
+        const bx = z.x0 + U * 0.05, by0 = v.H * 0.25, by1 = v.H * 0.7;
         ctx.fillStyle = "rgba(0,0,0,.35)"; rr(ctx, bx - U * 0.012, by0, U * 0.024, by1 - by0, U * 0.012); ctx.fill();
-        outlinedText(ctx, "✈️", bx, by1 - (by1 - by0) * A, U * 0.035, "#fff", "#333", 2);
-        ctx.restore();
-        ctx.lineWidth = 3; ctx.strokeStyle = env.color; rr(ctx, z.x0 + 4, r.top, z.w - 8, r.bot - r.top, U * 0.03); ctx.stroke();
-        if (A < 0.15) outlinedText(ctx, "너무 낮아요! 두 팔로 날갯짓!", z.cx, r.bot + U * 0.04, Math.min(U * 0.035, z.w / 16), "#fff", "#c0392b", 3);
-        else outlinedText(ctx, `풍선 ${got} · 링 ${rings}`, z.cx, r.bot + U * 0.04, Math.min(U * 0.035, z.w / 14), "#fff", "#1f6fb5", 3);
+        ctx.fillStyle = "#4dabf7"; rr(ctx, bx - U * 0.012, by1 - (by1 - by0) * 0.05, U * 0.024, (by1 - by0) * 0.05, U * 0.012); ctx.fill();
+        outlinedText(ctx, "✈️", bx, by1 - (by1 - by0) * A, U * 0.04, "#fff", "#333", 2);
+        // 점수판 (위쪽 가운데)
+        const bw = Math.min(z.w * 0.8, U * 0.55), bh = U * 0.07, top = v.H * 0.11;
+        ctx.fillStyle = "rgba(10,60,110,.8)"; rr(ctx, z.cx - bw / 2, top, bw, bh, U * 0.02); ctx.fill();
+        outlinedText(ctx, `🎈 ${got}  ·  ⭕ ${rings}`, z.cx, top + bh / 2, Math.min(U * 0.04, z.w / 12), "#fff", "#0a3c6e", 3);
+        if (A < 0.15) outlinedText(ctx, "너무 낮아요! 두 팔로 날갯짓!", z.cx, v.H * 0.8, Math.min(U * 0.045, z.w / 14), "#fff", "#c0392b", 4);
       },
+      stop() { st.dispose(); },
       result: () => `풍선 ${got} · 링 ${rings} · 날갯짓 ${flapN}번`,
       // 설명 시연용
       get X() { return X; }, get A() { return A; },

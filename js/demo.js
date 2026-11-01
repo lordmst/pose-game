@@ -1,8 +1,8 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=29";
-import { DIFFS } from "./difficulty.js?v=29";
-import { speak } from "./audio.js?v=29";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=30";
+import { DIFFS } from "./difficulty.js?v=30";
+import { speak } from "./audio.js?v=30";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
@@ -386,6 +386,14 @@ export function startDemo(id, game, view) {
     award: (base, x, y) => { me.combo++; stats.ok++; popup(x, y, `+${base * DIFFS.normal.points}`, { size: view.U * 0.065, color: "#fff", stroke: "#ff8a3d" }); },
     miss: (x, y, label) => { me.combo = 0; stats.miss++; if (label) popup(x, y, label, { size: view.U * 0.04, color: "#eee", stroke: "#555" }); },
     penalty: (n, x, y, label) => { me.combo = 0; stats.pen++; popup(x, y, `${label} -${n * DIFFS.normal.points}`, { size: view.U * 0.06, color: "#fff", stroke: "#d02020" }); },
+    // 3D 스포츠의 카메라 작은 화면 자리에 도우미 캐릭터를 줄여서 그림
+    pip: (c, x, y, w, h) => {
+      const s = h / view.H, P = p.pts, cx = P ? (P[11].x + P[12].x) / 2 : view.W / 2;
+      c.save(); c.beginPath(); c.roundRect(x, y, w, h, view.U * 0.02); c.clip();
+      const g = c.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, "#5b6f80"); g.addColorStop(1, "#2b3540"); c.fillStyle = g; c.fillRect(x, y, w, h);
+      c.translate(x + w / 2, y); c.scale(s, s); c.translate(-cx, 0); p.draw(c);
+      c.restore(); c.lineWidth = view.U * 0.006; c.strokeStyle = "#fff"; c.beginPath(); c.roundRect(x, y, w, h, view.U * 0.02); c.stroke();
+    },
   };
   const inst = game.create(env), sc = SCRIPTS[id] || game.demo, S = { step: 0 };   // 시연 대본: 여기 SCRIPTS 또는 게임 파일 안의 demo
   let T = 0, caption = "";
@@ -411,7 +419,8 @@ export function startDemo(id, game, view) {
       ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
       ctx.fillStyle = "#c9e8a6"; ctx.fillRect(-20, H * 0.965, W + 40, H);
       // 리듬·지휘자·탈것 게임은 게임 화면을 캐릭터 위에 (판정 글자·탈것이 가려지지 않게), 나머지는 캐릭터를 위에
-      if (["rhythm", "conductor", "plane", "skate", "jetski"].includes(id)) { p.draw(ctx); inst.draw(ctx); }
+      if (game.scene3d) inst.draw(ctx);    // 3D 스포츠: 캐릭터는 구석 작은 화면(pip)에만
+      else if (["rhythm", "conductor", "plane", "skate", "jetski"].includes(id)) { p.draw(ctx); inst.draw(ctx); }
       else { inst.draw(ctx); p.draw(ctx); }
     },
   };

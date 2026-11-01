@@ -1,147 +1,228 @@
-// 배구: 상대가 넘긴 공을 두 손 모아 받고(리시브) → 같은 편이 올려 주면(토스) → 손을 높이 들었다 세게 내려쳐서(스파이크) 득점
-// 리시브: 공이 올 때 두 손목을 붙여 가슴 아래로 / 스파이크: 높이 뜬 공 근처에서 손을 위에서 아래로 빠르게
-import { burst, popup, shake, outlinedText, rr, FONT, clamp } from "../../fx.js?v=29";
-import { sfx } from "../../audio.js?v=29";
+// 배구 (스포츠 리조트처럼 3D 비치발리볼 2:2): 내 캐릭터 뒤에서 코트를 봄
+// 리시브(두 손 모아 아래로) → 같은 편 토스 → 스파이크(높이 들었다 세게 내려치기) → 상대가 받아 공격하면 블로킹(두 손 번쩍)
+// 캐릭터는 공 쪽으로 저절로 움직임. 블로킹을 못 하면 상대 스파이크가 내 쪽으로 와서 다시 리시브
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=30";
+import { sfx } from "../../audio.js?v=30";
+import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, playerAvatar, randomAvatar } from "./kit3d.js?v=30";
 
-const SERVE = 1.6;     // 상대 공이 나에게 오는 시간(초, 보통)
+const SERVE = 1.6;     // 상대 서브가 나에게 오는 시간(초, 보통)
 const SPIKE = 3.0;     // 스파이크로 인정하는 손 속도(어깨너비/초, 아래 방향)
 const CPU_DIG = { easy: 0.2, normal: 0.32, hard: 0.45 };   // 상대가 스파이크를 받아낼 확률
+const L = 8, HW = 4, NET = 2.24;                            // 코트 반 길이·반 너비, 네트 높이(m)
+const RECV_Z = 5.6, NET_Z = 0.9;                            // 내 캐릭터 리시브 자리·네트 앞 자리
+
+const arc = (a, b, h, u) => new THREE.Vector3(a.x + (b.x - a.x) * u, Math.max(0.15, a.y + (b.y - a.y) * u + 4 * h * u * (1 - u)), a.z + (b.z - a.z) * u);
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// 비치볼 무늬
+function ballTex() {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 128;
+  const g = c.getContext("2d");
+  ["#ffd43b", "#ffffff", "#1c7ed6", "#ffffff", "#ffd43b", "#ffffff", "#1c7ed6", "#ffffff"].forEach((col, i) => { g.fillStyle = col; g.fillRect(i * 32, 0, 32, 128); });
+  g.strokeStyle = "rgba(0,0,0,.25)"; g.lineWidth = 2; for (let i = 0; i <= 8; i++) { g.beginPath(); g.moveTo(i * 32, 0); g.lineTo(i * 32, 128); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+function beach(scene) {
+  const water = sea(scene, 600, -0.7);                                                   // 물결이 모래 위로 올라오지 않게 낮게
+  const sand = cyl(38, 41, 1, "#f1d39a", { receive: true, cast: false }); sand.position.y = -0.5; scene.add(sand);   // 섬
+  const line = (w, d, x, z) => { const m = box(w, 0.03, d, "#1c7ed6", { cast: false, receive: true }); m.position.set(x, 0.02, z); scene.add(m); };
+  const T = 0.08;
+  line(HW * 2, T, 0, L); line(HW * 2, T, 0, -L); line(T, L * 2, -HW, 0); line(T, L * 2, HW, 0);
+  // 네트 (기둥 + 그물 + 위아래 띠)
+  [-1, 1].forEach(s => { const p = cyl(0.07, 0.07, NET + 0.15, "#e9ecef"); p.position.set(s * (HW + 0.7), (NET + 0.15) / 2, 0); scene.add(p); });
+  const net = mesh(new THREE.PlaneGeometry(HW * 2 + 1.4, 1.0), new THREE.MeshStandardMaterial({ color: "#111", transparent: true, opacity: 0.45, side: THREE.DoubleSide }), { cast: false });
+  net.position.set(0, NET - 0.5, 0); scene.add(net);
+  const top = box(HW * 2 + 1.4, 0.08, 0.04, "#ffffff"); top.position.set(0, NET, 0); scene.add(top);
+  const bot = box(HW * 2 + 1.4, 0.05, 0.03, "#ffffff"); bot.position.set(0, NET - 1.0, 0); scene.add(bot);
+  // 야자수·파라솔·구름 (리조트 섬 해변)
+  for (let i = 0; i < 12; i++) { const s = i % 2 ? 1 : -1; scene.add(palm(s * (HW + 6 + (i % 3) * 3), -L - 4 + i * 2.6, 1.1 + (i % 3) * 0.25)); }
+  ["#ff6b6b", "#ffd43b", "#4dabf7", "#69db7c"].forEach((col, i) => {
+    const g = new THREE.Group(), pole = cyl(0.04, 0.04, 2.2, "#ddd"); pole.position.y = 1.1;
+    const cone = mesh(new THREE.ConeGeometry(1.3, 0.55, 10), col); cone.position.y = 2.3; g.add(pole, cone);
+    g.position.set((i % 2 ? 1 : -1) * (HW + 3.2), 0, -L + 2 + i * 4.5); scene.add(g);
+  });
+  for (let i = 0; i < 6; i++) scene.add(cloud(-50 + i * 20, 16 + (i % 3) * 3, -80 - (i % 2) * 20, 3 + (i % 2)));
+  return water;
+}
 
 export default {
-  id: "volley", title: "배구", icon: "🏐", sec: 60, cursor: "", cat: "sport", bg: "#a1c4fd", desc: "리시브하고 스파이크!",
-  how: "공이 오면 두 손을 모아 아래에서 받아요(리시브). 같은 편이 공을 높이 올려 주면 손을 높이 들었다가 세게 내려쳐요(스파이크)!",
+  id: "volley", title: "배구", icon: "🏐", sec: 60, cursor: "", cat: "sport", bg: "#a1c4fd", desc: "리시브·스파이크·블로킹", scene3d: true,
+  how: "공이 오면 두 손을 모아 아래에서 받아요(리시브). 같은 편이 높이 올려 주면 손을 높이 들었다가 세게 내려쳐요(스파이크)! 상대가 공격하려 하면 두 손 번쩍(블로킹)",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff;
-    let ph = "wait", wait = 1.2, ball = null, me = 0, cpu = 0, sets = [0, 0], recv = 0, spikes = 0, pts = 0, oppX = 0.5;
+    const st = stage(env, { fov: 50, sky: ["#4fb0f2", "#dff4ff"], shadowSize: 16 });
+    const { scene, camera } = st;
+    const water = beach(scene);
+    const me = playerAvatar(env); me.scale.setScalar(1.25); me.rotation.y = Math.PI; me.position.set(0, 0, RECV_Z); scene.add(me);
+    const mate = randomAvatar(2); mate.scale.setScalar(1.25); mate.rotation.y = Math.PI; mate.position.set(-1.6, 0, 2.4); scene.add(mate);
+    const opp = [randomAvatar(1), randomAvatar(4)];   // 0: 뒤(서브·수비), 1: 네트 앞(토스·공격)
+    opp.forEach((o, i) => { o.scale.setScalar(1.25); o.position.set(i ? 1.2 : -0.5, 0, i ? -2.2 : -5.8); scene.add(o); });
+    const vb = mesh(new THREE.SphereGeometry(0.17, 24, 16), new THREE.MeshStandardMaterial({ map: ballTex(), roughness: 0.5 })); scene.add(vb);
+    const shadow = mesh(new THREE.CircleGeometry(0.22, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 }), { cast: false }); shadow.rotation.x = -Math.PI / 2; scene.add(shadow);
+    const ring = mesh(new THREE.RingGeometry(0.55, 0.72, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }), { cast: false }); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; scene.add(ring);
+    vb.visible = shadow.visible = ring.visible = false;
+
+    let ph = "wait", wait = 1.3, B = null, sMe = 0, sCpu = 0, sets = [0, 0], recv = 0, spikes = 0, blocks = 0, pts = 0, t = 0;
+    let goal = { x: 0, z: RECV_Z }, act = null, mateAct = 9, oppJump = [9, 9];
+    const fly = (p0, p1, h, T) => { B = { p0, p1, h, t: 0, T }; vb.visible = shadow.visible = true; };
+    const at = () => { const k = B.t / B.T; return { k, p: arc(B.p0, B.p1, B.h, k) }; };
+    const scr = p => st.toScreen(p);
+    function serve(from = opp[0], fast = false) {   // 상대가 공을 넘김 → 내 리시브 자리
+      const rx = clamp((Math.random() - 0.5) * 4.4, -HW + 0.8, HW - 0.8);
+      const p0 = from.position.clone().add(V(0.3, fast ? 3.0 : 2.6, 0.3));
+      fly(p0, V(rx, 0.85, RECV_Z - 0.1), fast ? 0.4 : 3.0, (fast ? 0.95 : SERVE * (1 - 0.2 * env.progress())) / D.speed);
+      B.rx = rx; goal = { x: rx, z: RECV_Z }; ph = "recv"; sfx.whoosh();
+      oppJump[opp.indexOf(from)] = 0;
+    }
+    function point(mine) {
+      if (mine) sMe++; else sCpu++;
+      if ((sMe >= 15 || sCpu >= 15) && Math.abs(sMe - sCpu) >= 2) {
+        const won = sMe > sCpu; sets[won ? 0 : 1]++; sMe = sCpu = 0;
+        if (won) { sfx.fanfare(); env.award(3, z.cx, v.H * 0.4); popup(z.cx, v.H * 0.5, "세트 승리!", { size: v.U * 0.07, color: "#fff", stroke: "#2fb65a", life: 1.3 }); }
+        else popup(z.cx, v.H * 0.5, "상대 세트", { size: v.U * 0.05, color: "#eee", stroke: "#555" });
+      }
+      B = null; ph = "wait"; wait = 1.5; goal = { x: 0, z: RECV_Z }; vb.visible = shadow.visible = ring.visible = false;
+    }
     function body() {
       const p = env.tracker.pts;
       if (p && p[11].v && p[12].v) { const sw = Math.hypot(p[11].x - p[12].x, p[11].y - p[12].y); return { x: (p[11].x + p[12].x) / 2, y: (p[11].y + p[12].y) / 2, sw: Math.max(sw, v.U * 0.08) }; }
       return { x: z.cx, y: v.H * 0.45, sw: v.U * 0.13 };
     }
-    const netY = () => v.H * 0.34, farY = () => v.H * 0.24;
-    const mate = () => ({ x: z.x0 + z.w * 0.2, y: v.H * 0.44 });
-    // 공 이동: 시작점 → 끝점, 포물선 높이 arc(화면 높이 비율), persp: 멀리서 다가오면 1, 멀어지면 -1, 같은 거리면 0
-    function fly(sx, sy, dx, dy, T, arc, persp) { ball = { sx, sy, dx, dy, t: 0, T, arc, persp, spin: 0 }; }
-    function pos() {
-      const B = ball, k = Math.min(1.3, B.t / B.T);
-      const e = B.persp > 0 ? k * k : B.persp < 0 ? 1 - (1 - Math.min(1, k)) ** 2 : k;
-      const s = B.persp > 0 ? 0.35 + 0.65 * e : B.persp < 0 ? 1 - 0.6 * e : 0.85;
-      return { k, x: B.sx + (B.dx - B.sx) * e, y: B.sy + (B.dy - B.sy) * e - Math.sin(Math.min(1, k) * Math.PI) * v.H * B.arc, s };
-    }
-    function serve() {   // 상대가 공을 넘김 → 리시브 자리
-      const b = body(), rx = clamp(b.x + (Math.random() - 0.5) * b.sw * 0.9, z.x0 + v.U * 0.06, z.x1 - v.U * 0.06), ry = Math.min(v.H * 0.85, b.y + b.sw * 1.0);
-      fly(z.x0 + z.w * oppX, farY(), rx, ry, SERVE * (1 - 0.2 * env.progress()) / D.speed, 0.2, 1); ph = "recv"; sfx.whoosh();
-    }
-    const spot = () => { const b = body(); return { x: clamp(b.x + b.sw * 0.5, z.x0 + v.U * 0.06, z.x1 - v.U * 0.06), y: Math.max(v.H * 0.16, b.y - b.sw * 1.4) }; };
-    function point(mine) {
-      if (mine) me++; else cpu++;
-      if ((me >= 15 || cpu >= 15) && Math.abs(me - cpu) >= 2) {
-        const won = me > cpu; sets[won ? 0 : 1]++; me = cpu = 0;
-        if (won) { sfx.fanfare(); env.award(3, z.cx, v.H * 0.4); popup(z.cx, v.H * 0.5, "세트 승리!", { size: v.U * 0.07, color: "#fff", stroke: "#2fb65a", life: 1.3 }); }
-      }
-      ball = null; ph = "wait"; wait = 1.4;
+    // 내 캐릭터 동작 (리시브 팔 모으기 · 스파이크 점프 · 블로킹 점프)
+    function animMe(dt) {
+      if (act) { act.t += dt; if (act.t > 0.75) act = null; }
+      const jump = act && act.k !== "recv" ? Math.sin(Math.min(1, act.t / 0.75) * Math.PI) * 0.9 : 0;
+      me.position.y = jump;
+      if (act && act.k === "recv") { me.body.rotation.x = 0.25; me.arm(0, 0.15, 1.0, 0); me.arm(1, 0.15, 1.0, 0); return; }
+      me.body.rotation.x *= 0.85;
+      if (act && act.k === "spike") { const u = Math.min(1, act.t / 0.22); me.arm(1, 2.9 - 1.7 * u, 0.2 + 1.3 * u, 0.2); me.arm(0, 2.3, 0.4, 0.3); return; }
+      if (act && act.k === "block") { me.arm(0, 2.95, 0.25, 0); me.arm(1, 2.95, 0.25, 0); return; }
+      if (ph === "recv" && B && B.t / B.T > 0.45) { me.arm(0, 0.15, 0.8, 0); me.arm(1, 0.15, 0.8, 0); return; }   // 받을 준비
+      if (ph === "spike" && B && B.t / B.T > 0.4) { me.arm(1, 2.9, 0.2, 0.2); me.arm(0, 2.3, 0.3, 0.3); return; }  // 손 높이
+      me.mimic(env.tracker.pts, true);
     }
     return {
       update(dt) {
+        t += dt; mateAct += dt; oppJump = oppJump.map(x => x + dt);
+        water.update(t);
+        me.position.x += (goal.x - me.position.x) * Math.min(1, dt * 4.5);
+        me.position.z += (goal.z - me.position.z) * Math.min(1, dt * 4.5);
+        animMe(dt); me.idle(t);
+        // 같은 편: 토스할 때 두 손 위로
+        if (mateAct < 0.5) { mate.arm(0, 2.8, 0.3, 0.5); mate.arm(1, 2.8, 0.3, 0.5); } else { mate.arm(0, 0.4, 0.6, 0.8); mate.arm(1, 0.4, 0.6, 0.8); }
+        mate.idle(t + 1);
+        opp.forEach((o, i) => {
+          const j = oppJump[i]; o.position.y = j < 0.7 ? Math.sin(j / 0.7 * Math.PI) * 0.8 : 0;
+          if (j < 0.6) { o.arm(1, 2.4 - j * 2, 0.6 + j, 0.2); o.arm(0, 2.6, 0.3, 0.3); } else { o.arm(0, 0.35, 0.7, 0.8); o.arm(1, 0.35, 0.7, 0.8); o.idle(t + i * 2); }
+        });
         if (ph === "wait") { wait -= dt; if (wait <= 0) serve(); return; }
-        ball.t += dt; ball.spin += dt * 8;
-        const c = pos(), p = env.tracker.pts, b = body(), hands = env.tracker.hands;
+        B.t += dt;
+        const { k, p } = at();
+        vb.position.copy(p); vb.rotation.x += dt * 6; vb.rotation.z += dt * 3; shadow.position.set(p.x, 0.04, p.z);
+        ring.visible = ph === "recv"; if (ring.visible) { ring.position.x = B.p1.x; ring.position.z = B.p1.z; ring.scale.setScalar(1 + Math.sin(t * 8) * 0.08); }
+        const P = env.tracker.pts, b = body(), hands = env.tracker.hands;
         if (ph === "recv") {
-          // 리시브: 두 손목이 붙어 있고 가슴보다 아래, 공 가까이
-          if (c.k > 0.72 && c.k < 1.18 && p && p[15].v && p[16].v) {
-            const close = Math.hypot(p[15].x - p[16].x, p[15].y - p[16].y) < b.sw * 0.9;
-            const low = p[15].y > b.y + b.sw * 0.25 && p[16].y > b.y + b.sw * 0.25;
-            const mx = (p[15].x + p[16].x) / 2, my = (p[15].y + p[16].y) / 2;
-            if (close && low && Math.hypot(mx - c.x, my - c.y) < b.sw * 1.4 * D.reach) {
-              recv++; sfx.bonk(); env.award(1, c.x, c.y - v.U * 0.08);
-              popup(c.x, c.y + v.U * 0.06, "리시브!", { size: v.U * 0.045, color: "#fff", stroke: "#2f6fd1", life: 0.8 });
-              burst(c.x, c.y, { n: 10, colors: ["#ffffff", "#ffd400"], shape: "star", speed: v.U * 0.4, gravity: v.U * 0.4, size: v.U * 0.014, life: 0.5 });
-              const m = mate(); fly(c.x, c.y, m.x, m.y, 0.75, 0.16, 0); ph = "toMate"; return;
+          // 리시브: 두 손목이 붙어 있고 가슴보다 아래
+          if (k > 0.72 && k < 1.18 && P && P[15].v && P[16].v) {
+            const close = Math.hypot(P[15].x - P[16].x, P[15].y - P[16].y) < b.sw * 0.9 / Math.max(0.8, D.reach);
+            const low = P[15].y > b.y + b.sw * 0.25 && P[16].y > b.y + b.sw * 0.25;
+            if (close && low) {
+              recv++; sfx.bonk(); act = { k: "recv", t: 0 };
+              const s = scr(p); env.award(1, s.x, s.y - v.U * 0.08);
+              popup(s.x, s.y + v.U * 0.06, "리시브!", { size: v.U * 0.045, color: "#fff", stroke: "#2f6fd1", life: 0.8 });
+              burst(s.x, s.y, { n: 10, colors: ["#ffffff", "#ffd400"], shape: "star", speed: v.U * 0.4, gravity: v.U * 0.4, size: v.U * 0.014, life: 0.5 });
+              fly(p.clone(), mate.position.clone().add(V(0, 2.5, -0.2)), 1.8, 0.85); ph = "toMate";
+              const sx = clamp((Math.random() - 0.5) * 4, -HW + 1, HW - 1); B.sx = sx; goal = { x: sx, z: NET_Z + 0.5 };   // 공격하러 네트 쪽으로
+              return;
             }
           }
-          if (c.k >= 1.18) { sfx.thud(); env.miss(ball.dx, ball.dy, "못 받았어요"); point(false); }
-        } else if (ph === "toMate" && c.k >= 1) {   // 같은 편이 토스
-          const s = spot(), m = mate(); fly(m.x, m.y, s.x, s.y, 1.0 / Math.min(1.2, D.speed), 0.2, 0); ph = "spike"; sfx.pop();
-          popup(m.x, m.y - v.U * 0.08, "토스!", { size: v.U * 0.035, color: "#fff", stroke: "#555", life: 0.6 });
+          if (k >= 1.18) { sfx.thud(); env.miss(z.cx, v.H * 0.75, "못 받았어요"); point(false); }
+        } else if (ph === "toMate" && k >= 1) {   // 같은 편이 토스
+          const sx = B.sx; mateAct = 0; sfx.pop();
+          const s = scr(p); popup(s.x, s.y - v.U * 0.06, "토스!", { size: v.U * 0.035, color: "#fff", stroke: "#555", life: 0.6 });
+          fly(p.clone(), V(sx, 3.0, NET_Z + 0.25), 1.5, 1.05 / Math.min(1.2, D.speed)); ph = "spike";
         } else if (ph === "spike") {
-          // 스파이크: 공 가까이에서 손이 아래로 빠르게
-          if (c.k > 0.7 && c.k < 1.3) {
-            const h = hands.find(h => h.vis && h.vy > 0 && h.bodySpeed >= SPIKE * D.punch && Math.hypot(h.x - c.x, h.y - c.y) < b.sw * 1.2 * D.reach);
+          // 스파이크: 손이 위에서 아래로 빠르게
+          if (k > 0.68 && k < 1.3) {
+            const h = hands.find(h => h.vis && h.vy > 0 && h.bodySpeed >= SPIKE * D.punch && h.y < b.y + b.sw * 0.8);
             if (h) {
-              spikes++; sfx.hit(3); shake(v.U * 0.014, 0.2); env.award(2, c.x, c.y - v.U * 0.06);
-              popup(c.x, c.y + v.U * 0.07, "스파이크!", { size: v.U * 0.055, color: "#fff", stroke: "#e0306a", life: 0.9 });
-              burst(c.x, c.y, { n: 22, colors: ["#ffffff", "#ffd400", "#ff7aa2"], shape: "star", speed: v.U * 0.8, gravity: v.U * 0.4, size: v.U * 0.018, life: 0.6 });
-              const aim = clamp(0.5 + (h.vx / (h.speed || 1)) * 0.4 + (Math.random() - 0.5) * 0.3, 0.12, 0.88);
-              fly(c.x, c.y, z.x0 + z.w * aim, netY() + v.U * 0.02, 0.5, 0.02, -1); ball.aim = aim; ph = "attack"; return;
+              spikes++; sfx.hit(3); shake(v.U * 0.014, 0.2); act = { k: "spike", t: 0.1 };
+              const s = scr(p); env.award(2, s.x, s.y - v.U * 0.06);
+              popup(s.x, s.y + v.U * 0.07, "스파이크!", { size: v.U * 0.055, color: "#fff", stroke: "#e0306a", life: 0.9 });
+              burst(s.x, s.y, { n: 22, colors: ["#ffffff", "#ffd400", "#ff7aa2"], shape: "star", speed: v.U * 0.8, gravity: v.U * 0.4, size: v.U * 0.018, life: 0.6 });
+              const aim = clamp((h.vx / (h.speed || 1)) * 3 + (Math.random() - 0.5) * 3, -HW + 0.5, HW - 0.5);
+              fly(p.clone(), V(aim, 0.15, -3.5 - Math.random() * 3.5), 0.05, 0.5); B.aim = aim; ph = "attack"; return;
             }
           }
-          if (c.k >= 1.3) { sfx.thud(); env.miss(c.x, Math.min(v.H * 0.9, c.y + v.U * 0.1), "놓쳤어요"); point(false); }
+          if (k >= 1.3) { sfx.thud(); env.miss(z.cx, v.H * 0.75, "놓쳤어요"); point(false); }
         } else if (ph === "attack") {
-          oppX += (ball.aim - oppX) * Math.min(1, dt * 2);
-          if (c.k >= 1) {
-            if (Math.random() < (CPU_DIG[D.id] || 0.32)) { popup(ball.dx, ball.dy, "상대가 받았어요", { size: v.U * 0.035, color: "#fff", stroke: "#555" }); oppX = ball.aim; serve(); }
-            else { pts++; sfx.fever(); env.award(1, ball.dx, ball.dy + v.U * 0.04); popup(ball.dx, ball.dy + v.U * 0.1, "득점!", { size: v.U * 0.06, color: "#fff", stroke: "#2fb65a", life: 1.0 }); point(true); }
+          opp[0].position.x += (B.aim - opp[0].position.x) * Math.min(1, dt * 2);   // 상대가 공 쪽으로 몸을 날림
+          if (k >= 1) {
+            if (Math.random() < (CPU_DIG[D.id] || 0.32)) {
+              const s = scr(p); popup(s.x, s.y - v.U * 0.05, "상대가 받았어요", { size: v.U * 0.035, color: "#fff", stroke: "#555" });
+              fly(p.clone().setY(0.6), opp[1].position.clone().add(V(0, 2.5, 0.2)), 1.8, 0.85); ph = "oppSet";
+            } else {
+              pts++; sfx.fever(); env.award(1, z.cx, v.H * 0.35);
+              popup(z.cx, v.H * 0.42, "득점!", { size: v.U * 0.07, color: "#fff", stroke: "#2fb65a", life: 1.0 }); point(true);
+            }
           }
+        } else if (ph === "oppSet" && k >= 1) {     // 상대 토스 → 상대 공격 준비. 나는 네트 앞에서 블로킹 준비
+          const bx = clamp((Math.random() - 0.5) * 4, -HW + 1, HW - 1);
+          fly(p.clone(), V(bx, 3.0, -NET_Z), 1.4, 1.05 / Math.min(1.2, D.speed)); ph = "oppSpike"; B.bx = bx; goal = { x: bx, z: NET_Z };
+          oppJump[1] = 9;
+        } else if (ph === "oppSpike") {
+          opp[1].position.x += (B.bx - opp[1].position.x) * Math.min(1, dt * 3);
+          // 블로킹: 두 손목이 코보다 위
+          if (k > 0.6 && k < 1.05 && P && P[0].v && P[15].v && P[16].v && P[15].y < P[0].y && P[16].y < P[0].y) {
+            blocks++; sfx.hit(3); shake(v.U * 0.012, 0.2); act = { k: "block", t: 0.1 };
+            const s = scr(p); env.award(2, s.x, s.y - v.U * 0.06);
+            popup(s.x, s.y + v.U * 0.07, "블로킹!", { size: v.U * 0.06, color: "#fff", stroke: "#f08c00", life: 1.0 });
+            burst(s.x, s.y, { n: 18, colors: ["#ffffff", "#ffd400"], shape: "star", speed: v.U * 0.7, gravity: v.U * 0.4, size: v.U * 0.016, life: 0.6 });
+            fly(p.clone(), V(p.x + (Math.random() - 0.5), 0.15, -1.6), 0.2, 0.4); ph = "blocked"; return;
+          }
+          if (k >= 1.05) { oppJump[1] = 0.15; sfx.hit(1); serve(opp[1], true); }   // 상대 스파이크 → 내가 리시브
+        } else if (ph === "blocked" && k >= 1) {
+          pts++; sfx.fever(); popup(z.cx, v.H * 0.42, "득점!", { size: v.U * 0.07, color: "#fff", stroke: "#2fb65a", life: 1.0 }); point(true);
         }
       },
       draw(ctx) {
-        const U = v.U, ny = netY(), fy = farY();
-        // 코트 (모래색 바닥) + 네트
-        ctx.fillStyle = "rgba(240,190,110,.3)"; ctx.beginPath(); ctx.moveTo(z.cx - z.w * 0.25, fy); ctx.lineTo(z.cx + z.w * 0.25, fy); ctx.lineTo(z.x1 - z.w * 0.01, v.H * 0.99); ctx.lineTo(z.x0 + z.w * 0.01, v.H * 0.99); ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.lineWidth = 3; ctx.stroke();
-        const nw = z.w * 0.62;
-        ctx.fillStyle = "rgba(30,30,30,.45)"; ctx.fillRect(z.cx - nw / 2, ny - U * 0.07, nw, U * 0.07);
-        ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1;
-        for (let x = z.cx - nw / 2; x <= z.cx + nw / 2; x += U * 0.018) { ctx.beginPath(); ctx.moveTo(x, ny - U * 0.07); ctx.lineTo(x, ny); ctx.stroke(); }
-        ctx.fillStyle = "#fff"; ctx.fillRect(z.cx - nw / 2, ny - U * 0.075, nw, U * 0.01);
-        // 상대 둘, 같은 편 하나
-        ctx.font = `${Math.round(U * 0.06)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText("🧑", z.x0 + z.w * (0.2 + oppX * 0.6), fy - U * 0.04); ctx.fillText("🧑", z.x0 + z.w * (0.8 - oppX * 0.35), fy - U * 0.03);
-        const m = mate(); ctx.font = `${Math.round(U * 0.075)}px ${FONT}`; ctx.fillText("🙋", m.x, m.y);
-        outlinedText(ctx, "같은 편", m.x, m.y + U * 0.055, U * 0.024, "#fff", "#2f6fd1", 3);
-        if (ball) {
-          const c = pos(), r = U * 0.04 * c.s;
-          // 해야 할 동작 안내
-          if (ph === "recv" && c.k > 0.25) {
-            ctx.setLineDash([U * 0.012, U * 0.01]); ctx.strokeStyle = "#ffffff"; ctx.lineWidth = U * 0.007;
-            ctx.beginPath(); ctx.arc(ball.dx, ball.dy, body().sw * 0.9, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-            outlinedText(ctx, "리시브! 두 손 모아 아래로", ball.dx, Math.min(v.H * 0.93, ball.dy + body().sw * 0.9 + U * 0.04), Math.min(U * 0.04, z.w / 14), "#fff", "#2f6fd1", 3);
-          }
-          if (ph === "spike") {
-            ctx.setLineDash([U * 0.012, U * 0.01]); ctx.strokeStyle = "#ffd400"; ctx.lineWidth = U * 0.008;
-            ctx.beginPath(); ctx.arc(ball.dx, ball.dy, body().sw * 0.8, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-            outlinedText(ctx, "스파이크! 높이 들었다 내려치기", ball.dx, ball.dy + body().sw * 0.8 + U * 0.04, Math.min(U * 0.04, z.w / 14), "#fff", "#e0306a", 3);
-          }
-          ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(ball.spin);
-          ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
-          ctx.lineWidth = Math.max(2, r * 0.28); ctx.strokeStyle = "#ffcf3a"; ctx.beginPath(); ctx.arc(0, 0, r * 0.62, -0.6, 1.4); ctx.stroke();
-          ctx.strokeStyle = "#3d7bff"; ctx.beginPath(); ctx.arc(0, 0, r * 0.62, 2.0, 3.9); ctx.stroke();
-          ctx.lineWidth = Math.max(1.5, r * 0.08); ctx.strokeStyle = "#555"; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
-          ctx.restore();
-        }
-        const bw = Math.min(z.w * 0.8, U * 0.55), by = v.H * 0.115;
-        ctx.fillStyle = "rgba(10,30,80,.6)"; rr(ctx, z.cx - bw / 2, by, bw, U * 0.06, U * 0.02); ctx.fill();
-        outlinedText(ctx, `나 ${me} : ${cpu} 상대 · 세트 ${sets[0]}:${sets[1]}`, z.cx, by + U * 0.03, Math.min(U * 0.034, z.w / 16), "#fff", "#024", 3);
+        // 카메라: 내 캐릭터 뒤 위쪽에서 상대 코트를 봄
+        const mz = me.position.z, mx = me.position.x;
+        camera.position.set(mx * 0.5, 4.0, mz + 7.2); camera.lookAt(mx * 0.3, 1.5, mz - 7);
+        st.draw(ctx);
+        const U = v.U;
+        const bw = Math.min(z.w * 0.86, U * 0.7), by = v.H * 0.11, bh = U * 0.075;
+        ctx.fillStyle = "rgba(10,30,80,.82)"; rr(ctx, z.cx - bw / 2, by, bw, bh, U * 0.02); ctx.fill();
+        outlinedText(ctx, `우리 ${sMe} - ${sCpu} 상대  ·  세트 ${sets[0]}:${sets[1]}`, z.cx, by + bh / 2, Math.min(U * 0.038, z.w / 15), "#fff", "#0a1e46", 3);
+        // 해야 할 동작 안내
+        const k = B ? B.t / B.T : 0, fs = Math.min(U * 0.045, z.w / 13), py = v.H * 0.27;
+        if (ph === "recv" && k > 0.25) outlinedText(ctx, "리시브! 두 손 모아 아래로", z.cx, py, fs, "#fff", "#2f6fd1", 4);
+        else if (ph === "spike") outlinedText(ctx, "스파이크! 높이 들었다 내려치기", z.cx, py, fs, "#fff", "#e0306a", 4);
+        else if (ph === "oppSpike") outlinedText(ctx, "블로킹! 두 손 번쩍", z.cx, py, fs, "#fff", "#f08c00", 4);
       },
-      result: () => `리시브 ${recv} · 스파이크 ${spikes} · 득점 ${pts} · 세트 ${sets[0]}:${sets[1]}`,
+      stop() { st.dispose(); },
+      result: () => `리시브 ${recv} · 스파이크 ${spikes} · 블로킹 ${blocks} · 득점 ${pts} · 세트 ${sets[0]}:${sets[1]}`,
       get phase() { return ph; },
-      get ball() { if (!ball) return null; const c = pos(); return { k: c.k, x: c.x, y: c.y, dx: ball.dx, dy: ball.dy }; },
+      get ball() { return B ? { k: B.t / B.T } : null; },
     };
   },
   demo: {
     dur: 17,
     run(T, g, p, S, say) {
       p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
-      const ph = g.phase, b = g.ball, u = p.u;
+      const ph = g.phase, b = g.ball, u = p.u, s = p.pts && p.pts[12];
       if (T > 15.5) say("이제 직접 해 봐요!");
       else if (ph === "recv") say("공이 오면 두 손 모아 아래에서 받아요. 리시브!");
       else if (ph === "toMate" || ph === "spike") say("같은 편이 올려 주면 높이 들었다 세게 내려쳐요. 스파이크!");
+      else if (ph === "oppSet" || ph === "oppSpike") say("상대가 공격하려 하면 두 손 번쩍! 블로킹");
       else if (T < 3) say("배구! 받고, 올리고, 내려쳐요");
       if (ph === "recv" && b && b.k > 0.55) { p.rest(0, "clap", 2); p.rest(1, "clap", 2); return; }
-      if (ph === "spike" && b) {
+      if (ph === "oppSpike" && b && b.k > 0.5) { p.rest(0, "up", 2); p.rest(1, "up", 2); return; }
+      if (ph === "spike" && b && s) {
         p.rest(0, "guard", 1);
-        if (b.k < 0.85) p.reach(1, b.dx, b.dy - 0.9 * u, 2.2);                 // 손을 공 위로
-        else { p.reach(1, b.dx, b.dy + 1.6 * u, 3.5); if (!S.j) { p.jump(); S.j = 1; } }   // 아래로 내려치기
+        if (b.k < 0.85) p.reach(1, s.x, s.y - 2.2 * u, 2.2);                     // 손을 높이
+        else { p.reach(1, s.x - 0.3 * u, s.y + 1.4 * u, 3.5); if (!S.j) { p.jump(); S.j = 1; } }   // 아래로 내려치기
         return;
       }
       S.j = 0; p.rest(0, "guard", 1); p.rest(1, "guard", 1);
