@@ -158,3 +158,5 @@ body:not(.live) .overlay { background: var(--y); }
 .cur { position: absolute; left: -4vmin; top: -4vmin; width: 8vmin; height: 8vmin; border-radius: 50%; border: max(4px, .7vmin) solid var(--c); background: rgba(255, 255, 255, .3); box-shadow: 0 0 2.5vmin var(--c); display: none; align-items: center; justify-content: center; font-size: 5vmin; line-height: 1; will-change: transform; }
 
 #toast { position: absolute; left: 50%; bottom: 6vmin; transform: translateX(-50%); z-index: 40; background: var(--b); color: #fff; padding: 12px 22px; border-radius: 30px; font-size: 18px; max-width: 90vw; text-align: center; }
+.pill.go5 { background: var(--b); color: #fff; }
+.readybar .opnote { font-size: clamp(12px, 1.9vmin, 17px); opacity: .7; }

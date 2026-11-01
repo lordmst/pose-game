@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=5">
+<link rel="stylesheet" href="css/style.css?v=6">
 </head>
 <body>
 <video id="video" playsinline muted autoplay></video>
@@ -69,9 +69,11 @@
     <h2 id="readyTitle"></h2>
     <p id="readyHow" class="how"></p>
     <p id="readyHint"></p>
+    <p class="opnote">태블릿을 누른 사람은 "5초 후 시작"을 누르고 자리로 가세요. 카메라에 너무 가까운 사람은 선수로 잡지 않아요</p>
     <div id="readyStat"></div>
     <div class="row">
       <button class="pill" type="button" data-hand id="btnGo">바로 시작</button>
+      <button class="pill go5" type="button" id="btnGo5">5초 후 시작</button>
       <button class="pill ghost" type="button" id="btnReadyBack">뒤로</button>
     </div>
   </div>
@@ -126,6 +128,6 @@
     setTimeout(function () { if (!window.__appReady) show("게임을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요."); }, 8000);
   })();
 </script>
-<script type="module" src="js/main.js?v=5"></script>
+<script type="module" src="js/main.js?v=6"></script>
 </body>
 </html>

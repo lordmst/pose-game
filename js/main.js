@@ -1,12 +1,12 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, createDetector, assign, SIM } from "./pose.js?v=5";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=5";
-import * as R from "./records.js?v=5";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=5";
-import copy from "./games/copy.js?v=5";
-import math, { LEVELS } from "./games/math.js?v=5";
-import ice from "./games/ice.js?v=5";
-import star from "./games/star.js?v=5";
+import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=6";
+import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=6";
+import * as R from "./records.js?v=6";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=6";
+import copy from "./games/copy.js?v=6";
+import math, { LEVELS } from "./games/math.js?v=6";
+import ice from "./games/ice.js?v=6";
+import star from "./games/star.js?v=6";
 
 const GAMES = { copy, math, ice, star };
 const GAME_ORDER = ["copy", "math", "ice", "star"];
@@ -42,7 +42,7 @@ FIXED.forEach(n => R.addPlayer(n));
 let slots = [], trackers = [], players = [], insts = [];
 let gameId = "copy";
 let timeLeft = 0, fever = false, readyT = 0, cdT = 0, goT = 0;
-let visSupported = false, loopOn = false, lastT = 0, uiCool = 0;
+let visSupported = false, loopOn = false, lastT = 0, uiCool = 0, assigner = null;
 let rankView = { game: "copy", level: "add10" }, rankBackTo = "setup", justSaved = new Set();
 
 /* ---------- 설정 불러오기 ---------- */
@@ -171,6 +171,7 @@ $("#btnStart").onclick = async () => {
     try { await detectorP; } catch (e) { cam.close(); return; }
   }
   trackers = slots.map((s, i) => new Tracker(i));
+  assigner = new Assigner(slots.length);
   document.body.classList.add("live");
   resize(); buildCursors(); renderSelect(); keepAwake();
   setMsg("");
@@ -209,17 +210,19 @@ function chooseGame(id) {
     ? "1P는 화면 왼쪽, 2P는 오른쪽에 서서 머리부터 허리, 두 팔이 다 보이게 해 주세요"
     : "화면 가운데에 서서 머리부터 허리, 두 팔이 다 보이게 해 주세요";
   readyT = 0; readyCache = "";
+  if (assigner) assigner.reset();      // 게임마다 선수를 새로 확인 (조작하던 사람이 잘못 잡혀 있었어도 풀림)
   setState("ready");
 }
 function renderReadyStat(ok) {
   const html = slots.map((s, i) => `<span class="rs${ok[i] ? " ok" : ""}" style="--c:${s.color}">${i + 1}P ${esc(s.name)} · ${ok[i] ? "준비 완료" : "몸이 다 안 보여요"}</span>`).join("");
   if (html !== readyCache) { $("#readyStat").innerHTML = html; readyCache = html; }
 }
-$("#btnGo").onclick = () => beginCountdown();
+$("#btnGo").onclick = () => beginCountdown(3);
+$("#btnGo5").onclick = () => beginCountdown(5);      // 태블릿을 누른 사람이 자리로 갈 시간
 $("#btnReadyBack").onclick = () => setState("select");
 
 /* ---------- 4. 카운트다운 · 게임 ---------- */
-function beginCountdown() {
+function beginCountdown(sec = 3) {
   const g = GAMES[gameId];
   clearFx(); fever = false; timeLeft = g.sec;
   $("#hud").classList.remove("fever"); bgm.setTempo(1);
@@ -227,7 +230,7 @@ function beginCountdown() {
   trackers.forEach(tr => { tr.meters = 0; });
   insts = players.map((p, i) => g.create(makeEnv(i)));
   setupHud();
-  cdT = 3; setState("countdown"); showCd("3"); sfx.tick();
+  cdT = sec; setState("countdown"); showCd(String(sec)); sfx.tick();
 }
 function beginPlay() { setState("play"); showCd("시작!"); goT = 0.7; sfx.go(); bgm.start(); }
 function showCd(txt) { const el = $("#cd"); el.hidden = false; el.textContent = txt; el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop"); }
@@ -386,7 +389,7 @@ function frame(now) {
   let raws = [];
   if (detector && cam.ready) { try { raws = detector.detect(video, now); } catch (e) { console.warn(e); } }
   if (!visSupported && raws.some(r => r.some(p => p.visibility > 0.01))) visSupported = true;
-  const as = assign(raws, trackers, cam, view.W);
+  const as = assigner ? assigner.assign(raws, cam, view, dt, visSupported) : [];
   trackers.forEach((tr, i) => tr.update(as[i], cam, dt, t, visSupported));
   tick(dt);
   updateFx(dt);
@@ -399,7 +402,7 @@ function tick(dt) {
     const ok = trackers.map(tr => tr.fullBody);
     readyT = ok.every(Boolean) ? readyT + dt : 0;
     renderReadyStat(ok);
-    if (readyT >= 0.8) beginCountdown();
+    if (readyT >= 1.2) beginCountdown(3);
   } else if (state === "countdown") {
     const before = Math.ceil(cdT); cdT -= dt; const after = Math.ceil(cdT);
     if (after !== before && after > 0) { showCd(String(after)); sfx.tick(); }
@@ -449,9 +452,21 @@ function drawSkeletons() {
       for (const [a, b] of BONES) if (p[a].v && p[b].v) { ctx.moveTo(p[a].x, p[a].y); ctx.lineTo(p[b].x, p[b].y); }
       ctx.stroke(); ctx.restore();
     }
-    // 2인일 때만 머리 위에 1P/2P 표시
-    if (p[0].v && slots.length === 2) outlinedText(ctx, `${i + 1}P`, p[0].x, p[0].y - tr.scale * 0.6, view.U * 0.04, "#fff", c);
+    if (!p[0].v) return;
+    const setup = state === "ready" || state === "countdown" || state === "select";
+    if (setup) {   // 자리 잡을 때는 위쪽 안내판에 가리지 않도록 가슴 높이에 이름 표시
+      const chx = (p[11].x + p[12].x) / 2, chy = (p[11].y + p[12].y + p[23].y + p[24].y) / 4;
+      outlinedText(ctx, `${i + 1}P ${slots[i].name}`, chx, Math.max(view.H * 0.36, chy), view.U * 0.05, "#fff", c);
+    }
+    else if (slots.length === 2) outlinedText(ctx, `${i + 1}P`, p[0].x, p[0].y - tr.scale * 0.6, view.U * 0.04, "#fff", c);
   });
+  // 선수로 인정되지 않은 사람(태블릿 조작하는 사람 등) 표시
+  if (assigner && (state === "ready" || state === "countdown")) {
+    for (const o of assigner.ignored) {
+      const y = Math.max(view.H * 0.36, Math.min(view.H * 0.74, o.cy));
+      outlinedText(ctx, o.near ? "제외 · 카메라에 너무 가까워요" : "제외", Math.max(view.U * 0.2, Math.min(view.W - view.U * 0.2, o.cx)), y, view.U * 0.04, "#eee", "#555");
+    }
+  }
 }
 function drawReady() {
   const { H, U } = view;
@@ -522,7 +537,7 @@ function goFullscreen() {
   try { const r = f && f.call(d); if (r && r.catch) r.catch(() => {}); } catch (e) {}
 }
 
-if (SIM) window.__dbg = { get state() { return state; }, setTime: s => { timeLeft = s; }, players: () => players };
+if (SIM) window.__dbg = { get state() { return state; }, setTime: s => { timeLeft = s; }, players: () => players, scales: () => trackers.map(t => Math.round(t.scale)) };
 
 renderSetup();
 setState("setup");
