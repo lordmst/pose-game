@@ -2,9 +2,9 @@
 // 동그란 경기장 안에서 내 엄지(손을 따라다님)로 상대 엄지를 눌러 '하나, 둘, 셋' 버티면 이김
 // 누르기 = 상대 엄지 위에서 손을 아래로 콱 내리기(또는 주먹 쥐기). 누른 뒤엔 상대가 빠져나가지 못하게 계속 따라가기
 // 상대 엄지가 내 엄지 위로 올라와 누르려 하면(노란 경고) 얼른 빠져나가기. 못 빠져나가면 짐
-import { burst, popup, rr, outlinedText } from "../../fx.js?v=33";
-import { sfx } from "../../audio.js?v=33";
-import { stage, THREE, box, ball as sphere, cyl, mesh, ground, tree, cloud } from "./kit3d.js?v=33";
+import { burst, popup, rr, outlinedText } from "../../fx.js?v=35";
+import { sfx } from "../../audio.js?v=35";
+import { stage, THREE, box, ball as sphere, cyl, mesh, ground, tree, cloud } from "./kit3d.js?v=35";
 
 const PRESS = 1.6;        // 누르기로 치는 손이 아래로 내려가는 빠르기 (어깨너비/초)
 const COUNT = 1.5;        // 하나·둘·셋 (초)

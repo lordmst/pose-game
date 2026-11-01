@@ -1,30 +1,32 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=33";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=33";
-import * as R from "./records.js?v=33";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=33";
-import copy from "./games/copy.js?v=33";
-import math from "./games/math.js?v=33";
-import ice from "./games/ice.js?v=33";
-import star from "./games/star.js?v=33";
-import fruit from "./games/fruit.js?v=33";
-import mole from "./games/mole.js?v=33";
-import wall from "./games/wall.js?v=33";
-import rhythm from "./games/rhythm.js?v=33";
-import goalie from "./games/goalie.js?v=33";
-import { hangul, english } from "./games/word.js?v=33";
-import clockGame from "./games/clock.js?v=33";
-import run from "./games/run.js?v=33";
-import simon from "./games/simon.js?v=33";
-import conductor from "./games/conductor.js?v=33";
-import SPORTS from "./games/sports.js?v=33";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=33";
-import { DIFFS, diffOf } from "./difficulty.js?v=33";
-import { startDemo } from "./demo.js?v=33";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=35";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=35";
+import * as R from "./records.js?v=35";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=35";
+import copy from "./games/copy.js?v=35";
+import math from "./games/math.js?v=35";
+import ice from "./games/ice.js?v=35";
+import star from "./games/star.js?v=35";
+import fruit from "./games/fruit.js?v=35";
+import mole from "./games/mole.js?v=35";
+import wall from "./games/wall.js?v=35";
+import rhythm from "./games/rhythm.js?v=35";
+import goalie from "./games/goalie.js?v=35";
+import { hangul, english } from "./games/word.js?v=35";
+import clockGame from "./games/clock.js?v=35";
+import run from "./games/run.js?v=35";
+import simon from "./games/simon.js?v=35";
+import conductor from "./games/conductor.js?v=35";
+import SPORTS from "./games/sports.js?v=35";
+import LEARN from "./games/learn.js?v=35";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=35";
+import { DIFFS, diffOf } from "./difficulty.js?v=35";
+import { startDemo } from "./demo.js?v=35";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
 for (const g of SPORTS) { GAMES[g.id] = g; GAME_ORDER.push(g.id); }   // 스포츠 탭 (스포츠 리조트 종목들)
+for (const g of LEARN) { GAMES[g.id] = g; GAME_ORDER.push(g.id); }   // 학습 탭에 더한 게임들
 // 카드 하나로 묶는 게임: 카드를 고른 뒤 자리 잡기 화면에서 과목을 고름 (기록·순위는 게임별 그대로)
 const GROUPS = [];   // 예: { id, members: [게임 id...], icon, title, desc, bg, cat }
 const groupOf = id => GROUPS.find(g => g.members.includes(id));
@@ -309,7 +311,7 @@ function renderCards() {
   const ids = cardIds(catTab);
   box.classList.toggle("many", ids.length > 4);
   box.classList.toggle("lots", ids.length > 8 || ids.length === 5);   // 5개나 9개 이상이면 한 줄에 5개
-  box.classList.toggle("tons", ids.length > 12);                         // 13개 이상이면 한 줄에 7개, 작게
+  box.classList.toggle("tons", ids.length > 10);                         // 11개 이상이면 한 줄에 7개, 작게
   for (const id of ids) {
     const grp = GROUPS.find(g => g.id === id), G = grp || GAMES[id], b = document.createElement("button");
     b.type = "button"; b.className = "card"; b.setAttribute("data-hand", ""); b.dataset.game = id; b.style.setProperty("--bg", G.bg);

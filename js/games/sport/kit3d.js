@@ -3,19 +3,25 @@
 import * as THREE from "../../vendor/three.module.min.js";
 export { THREE };
 
-// 화질 단계: 느린 기기면 저절로 낮춤 (그림자 끄기 → 해상도 낮추기). 기기마다 기억하고, 새로 열 때 한 단계 높여서 다시 시도
-const QUALITY = [{ res: 0.8, shadow: true }, { res: 0.8, shadow: false }, { res: 0.62, shadow: false }, { res: 0.48, shadow: false }];
+// 화질 단계: 느린 기기면 저절로 낮추고(그림자 끄기 → 해상도 낮추기), 여유가 생기면 다시 올림. 기기마다 기억
+// res: 화면 실제 화소(기기 화소 배율 포함) 대비 3D를 그리는 비율. 1이면 태블릿 고해상도 화면 그대로라 가장 매끈함
+const QUALITY = [
+  { res: 1.0, shadow: true, shadowMap: 2048 }, { res: 1.0, shadow: true, shadowMap: 1024 }, { res: 0.85, shadow: false },
+  { res: 0.7, shadow: false }, { res: 0.55, shadow: false }, { res: 0.42, shadow: false },
+];
 const SLOW_MS = 30;   // 한 장 그리는 데 평균 이만큼(ms, 약 33장/초) 넘으면 한 단계 낮춤
+const FAST_MS = 15;   // 평균 이만큼(ms, 약 66장/초)보다 빠르면 한 단계 올림
+const MAX_PIXELS = 2.6e6;   // 한 구역을 그리는 최대 화소 수 (너무 큰 화면에서 버벅이지 않게)
 let quality = 0, lastStep = 0;
-try { quality = Math.max(0, Math.min(QUALITY.length - 1, (+localStorage.getItem("posegame.q3d") || 0) - 1)); } catch (e) {}
-const saveQuality = () => { try { localStorage.setItem("posegame.q3d", String(quality)); } catch (e) {} };
+try { quality = Math.max(0, Math.min(QUALITY.length - 1, (+localStorage.getItem("posegame.q3d2") || 0) - 1)); } catch (e) {}
+const saveQuality = () => { try { localStorage.setItem("posegame.q3d2", String(quality)); } catch (e) {} };
 
 /* ---------- 장면 ---------- */
 // opts: { fov, sky: [위색, 아래색], fog: [색, 가까이, 멀리], shadows, pip: "br"|"bl"|false }
 export function stage(env, opts = {}) {
   const z = env.zone, v = env.view;
   const canvas = document.createElement("canvas");
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality < 2, powerPreference: "high-performance" });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });   // 테두리 계단 없애기(MSAA)
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setPixelRatio(1);
   if (opts.shadows !== false) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
@@ -28,7 +34,7 @@ export function stage(env, opts = {}) {
   const hemi = new THREE.HemisphereLight(0xffffff, 0x8db36b, 1.15); scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(8, 18, 10);
   if (opts.shadows !== false) {
-    sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
     const s = opts.shadowSize || 20; Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 80 });
     sun.shadow.bias = -0.0005;
   }
@@ -38,8 +44,9 @@ export function stage(env, opts = {}) {
   function applyQuality() {
     if (applied === quality) return;
     applied = quality;
-    const on = QUALITY[quality].shadow && opts.shadows !== false;
+    const Q = QUALITY[quality], on = Q.shadow && opts.shadows !== false;
     renderer.shadowMap.enabled = on; sun.castShadow = on;
+    if (on && sun.shadow.mapSize.x !== Q.shadowMap) { sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   }
   // 그리는 시간 재기: 계속 느리면 화질을 한 단계 낮춤 (모든 3D 게임이 함께 씀)
   function measure() {
@@ -48,17 +55,59 @@ export function stage(env, opts = {}) {
     frames++; ema = frames < 10 ? dt : ema * 0.92 + dt * 0.08;
     if (frames > 60 && ema > SLOW_MS && now - lastStep > 2500 && quality < QUALITY.length - 1) {
       quality++; lastStep = now; ema = SLOW_MS * 0.8; saveQuality();
+    } else if (frames > 120 && ema < FAST_MS && now - lastStep > 6000 && quality > 0) {   // 여유가 있으면 다시 매끈하게
+      quality--; lastStep = now; ema = SLOW_MS * 0.7; saveQuality();
     }
+  }
+  // 둥근 모양을 더 매끈하게: 공·원기둥·원·고리의 면 수를 늘림 (각 게임이 만든 모양도 처음 그릴 때 한 번 바꿈)
+  const smoothCache = new Map();
+  function smoother(g) {
+    const P = g.parameters, T = g.type;
+    if (!P || g.userData.smooth) return null;
+    const up = (n, min, max = 64) => Math.min(max, Math.max(n, min));
+    let ng = null;
+    if (T === "SphereGeometry" && P.radius > 0.04 && P.widthSegments < 32)
+      ng = new THREE.SphereGeometry(P.radius, up(P.widthSegments * 2, 32), up(P.heightSegments * 2, 20, 40), P.phiStart, P.phiLength, P.thetaStart, P.thetaLength);
+    else if (T === "CylinderGeometry" && Math.max(P.radiusTop, P.radiusBottom) > 0.03 && P.radialSegments < 32)
+      ng = new THREE.CylinderGeometry(P.radiusTop, P.radiusBottom, P.height, up(P.radialSegments * 2, 32), P.heightSegments, P.openEnded, P.thetaStart, P.thetaLength);
+    else if (T === "ConeGeometry" && P.radius > 0.05 && P.radialSegments < 24)
+      ng = new THREE.ConeGeometry(P.radius, P.height, up(P.radialSegments * 2, 24), P.heightSegments, P.openEnded, P.thetaStart, P.thetaLength);
+    else if (T === "CircleGeometry" && P.segments < 40)
+      ng = new THREE.CircleGeometry(P.radius, up(P.segments * 2, 40), P.thetaStart, P.thetaLength);
+    else if (T === "RingGeometry" && P.thetaSegments < 40 && P.thetaLength > Math.PI)
+      ng = new THREE.RingGeometry(P.innerRadius, P.outerRadius, up(P.thetaSegments * 2, 48), P.phiSegments, P.thetaStart, P.thetaLength);
+    else if (T === "TorusGeometry" && (P.tubularSegments < 48 || P.radialSegments < 12))
+      ng = new THREE.TorusGeometry(P.radius, P.tube, up(P.radialSegments, 12, 16), up(P.tubularSegments * 2, 48, 96), P.arc);
+    else if (T === "CapsuleGeometry" && P.radialSegments < 24)
+      ng = new THREE.CapsuleGeometry(P.radius, P.length, up(P.capSegments, 8, 12), 24);
+    if (ng) ng.userData.smooth = true;
+    return ng;
+  }
+  let smoothT = 0;
+  function smoothScene(now) {
+    if (now - smoothT < 1000) return;                      // 새로 생긴 물건도 1초마다 확인
+    smoothT = now;
+    scene.traverse(o => {
+      if (!o.isMesh || !o.geometry || o.geometry.userData.smooth) return;
+      const g = o.geometry;
+      if (!smoothCache.has(g.uuid)) smoothCache.set(g.uuid, smoother(g) || (g.userData.smooth = true, g));
+      const ng = smoothCache.get(g.uuid);
+      if (ng !== g) o.geometry = ng;
+    });
   }
   const api = {
     THREE, scene, camera, renderer, sun, hemi, pipMark: null,
     // 자기 구역에 장면을 그림 (+ 카메라 작은 화면)
     draw(ctx) {
-      measure(); applyQuality();
-      const RES = QUALITY[quality].res;
-      const W = Math.max(2, Math.round(z.w * RES)), H = Math.max(2, Math.round(v.H * RES));
+      measure(); applyQuality(); smoothScene(performance.now());
+      // 기기 화소 배율(태블릿은 2)까지 반영해 화면 실제 화소에 맞춰 그림 → 흐릿하거나 계단지지 않게
+      const dpr = v.dpr || Math.min(window.devicePixelRatio || 1, 2);
+      let k = dpr * QUALITY[quality].res;
+      k = Math.min(k, Math.sqrt(MAX_PIXELS / Math.max(1, z.w * v.H)));
+      const W = Math.max(2, Math.round(z.w * k)), H = Math.max(2, Math.round(v.H * k));
       if (W !== w || H !== h) { w = W; h = H; renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); }
       renderer.render(scene, camera);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
       ctx.drawImage(canvas, z.x0, 0, z.w, v.H);
       if (opts.pip !== false) api.pip(ctx, opts.pip || "br");
     },
@@ -97,8 +146,8 @@ export function mesh(geo, color, o = {}) {
   m.castShadow = o.cast !== false; m.receiveShadow = !!o.receive; return m;
 }
 export const box = (w, h, d, color, o) => mesh(new THREE.BoxGeometry(w, h, d), color, o);
-export const ball = (r, color, o) => mesh(new THREE.SphereGeometry(r, 20, 14), color, o);
-export const cyl = (r1, r2, h, color, o) => mesh(new THREE.CylinderGeometry(r1, r2, h, 18), color, o);
+export const ball = (r, color, o) => mesh(new THREE.SphereGeometry(r, 32, 22), color, o);
+export const cyl = (r1, r2, h, color, o) => mesh(new THREE.CylinderGeometry(r1, r2, h, 32), color, o);
 // 바닥(그림자 받음)
 export function ground(scene, color = "#7cc35a", size = 200, y = 0) {
   const g = mesh(new THREE.PlaneGeometry(size, size), color, { receive: true, cast: false }); g.rotation.x = -Math.PI / 2; g.position.y = y; scene.add(g); return g;
@@ -106,16 +155,17 @@ export function ground(scene, color = "#7cc35a", size = 200, y = 0) {
 // 바다: 파란 면 + 반짝이는 물결 (update(t)로 움직임)
 export function sea(scene, size = 600, y = 0) {
   const geo = new THREE.PlaneGeometry(size, size, 60, 60);
-  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: "#2f9bd6", roughness: 0.25, metalness: 0.1, flatShading: true }));
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: "#2f9bd6", roughness: 0.25, metalness: 0.1 }));
   m.rotation.x = -Math.PI / 2; m.position.y = y; m.receiveShadow = true; scene.add(m);
   const pos = geo.attributes.position, base = pos.array.slice();
-  m.update = t => { for (let i = 0; i < pos.count; i++) { const x = base[i * 3], yy = base[i * 3 + 1]; pos.array[i * 3 + 2] = Math.sin(x * 0.15 + t * 1.6) * 0.18 + Math.cos(yy * 0.12 + t * 1.2) * 0.15; } pos.needsUpdate = true; };
+  let nT = 0;
+  m.update = t => { for (let i = 0; i < pos.count; i++) { const x = base[i * 3], yy = base[i * 3 + 1]; pos.array[i * 3 + 2] = Math.sin(x * 0.15 + t * 1.6) * 0.18 + Math.cos(yy * 0.12 + t * 1.2) * 0.15; } pos.needsUpdate = true; if (t - nT > 0.1) { nT = t; geo.computeVertexNormals(); } };   // 물결 빛 반사가 부드럽게
   return m;
 }
 export function tree(x, z, s = 1, leaf = "#3f9b3f") {
   const g = new THREE.Group();
   const trunk = cyl(0.12 * s, 0.16 * s, 1.2 * s, "#8a5a2b"); trunk.position.y = 0.6 * s;
-  const crown = mesh(new THREE.IcosahedronGeometry(0.85 * s, 1), leaf, { rough: 0.9 }); crown.position.y = 1.7 * s;
+  const crown = mesh(new THREE.SphereGeometry(0.85 * s, 24, 16), leaf, { rough: 0.9 }); crown.scale.y = 0.92; crown.position.y = 1.7 * s;
   g.add(trunk, crown); g.position.set(x, 0, z); return g;
 }
 export function palm(x, z, s = 1) {
@@ -150,8 +200,8 @@ export function textBoard(w, h, opts = {}) {
 const SKINS = ["#ffd7b5", "#f1c27d", "#e0ac69", "#c68642"], HAIRS = ["#3b2414", "#1f1f1f", "#7a4a1f", "#d9a441", "#a33b1f"];
 export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], hair = HAIRS[0], girl = false, scale = 1 } = {}) {
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-  const legs = [-1, 1].map(s => { const p = new THREE.Group(); p.position.set(0.1 * s, 0.78, 0); const l = cyl(0.085, 0.075, 0.74, pants); l.position.y = -0.37; const shoe = box(0.15, 0.08, 0.24, "#ffffff"); shoe.position.set(0, -0.76, 0.04); p.add(l, shoe); body.add(p); return p; });
-  const torso = mesh(new THREE.CapsuleGeometry(0.2, 0.32, 6, 14), shirt); torso.position.y = 1.08; torso.scale.set(1, 1, 0.75); body.add(torso);
+  const legs = [-1, 1].map(s => { const p = new THREE.Group(); p.position.set(0.1 * s, 0.78, 0); const l = mesh(new THREE.CapsuleGeometry(0.08, 0.58, 8, 24), pants); l.position.y = -0.37; const shoe = mesh(new THREE.CapsuleGeometry(0.065, 0.12, 6, 16), "#ffffff"); shoe.rotation.x = Math.PI / 2; shoe.scale.set(1.1, 1, 0.65); /* 둥근 다리·신발 */ shoe.position.set(0, -0.76, 0.04); p.add(l, shoe); body.add(p); return p; });
+  const torso = mesh(new THREE.CapsuleGeometry(0.2, 0.32, 10, 28), shirt); torso.position.y = 1.08; torso.scale.set(1, 1, 0.75); body.add(torso);
   const headG = new THREE.Group(); headG.position.y = 1.56; body.add(headG);
   const head = ball(0.21, skin); head.scale.set(1, 1.08, 1); headG.add(head);
   const hairM = mesh(new THREE.SphereGeometry(0.225, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.52), hair); hairM.position.y = 0.03; hairM.rotation.x = -0.25; headG.add(hairM);
@@ -160,9 +210,9 @@ export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], 
   const mouth = mesh(new THREE.TorusGeometry(0.045, 0.012, 6, 12, Math.PI), "#7a3b1a", { cast: false }); mouth.position.set(0, -0.08, 0.195); mouth.rotation.z = Math.PI; headG.add(mouth);
   const arms = [1, -1].map(s => {        // 캐릭터 자신의 왼팔(+x쪽, 정면 기준)·오른팔
     const sh = new THREE.Group(); sh.position.set(0.27 * s, 1.34, 0); body.add(sh);
-    const up = cyl(0.06, 0.055, 0.3, shirt); up.position.y = -0.15; sh.add(up);
+    const up = mesh(new THREE.CapsuleGeometry(0.06, 0.2, 8, 24), shirt); up.position.y = -0.15; sh.add(up);   // 어깨·팔꿈치가 둥글게
     const el = new THREE.Group(); el.position.y = -0.3; sh.add(el);
-    const fo = cyl(0.05, 0.045, 0.27, skin); fo.position.y = -0.135; el.add(fo);
+    const fo = mesh(new THREE.CapsuleGeometry(0.05, 0.19, 8, 24), skin); fo.position.y = -0.135; el.add(fo);
     const hand = new THREE.Group(); hand.position.y = -0.29; el.add(hand);
     hand.add(ball(0.065, skin));
     return { sh, el, hand, s };
