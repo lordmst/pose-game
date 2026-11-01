@@ -1,6 +1,6 @@
 // 별 따기: 떨어지는 별을 손으로 잡기. 위쪽 금별은 3점, 폭탄은 피하기(-1점)
-import { burst, shake, outlinedText, starPath } from "../fx.js?v=13";
-import { sfx } from "../audio.js?v=13";
+import { burst, shake, outlinedText, starPath } from "../fx.js?v=14";
+import { sfx } from "../audio.js?v=14";
 
 export default {
   id: "star", title: "별 따기", icon: "⭐", sec: 45, cursor: "✋",
@@ -8,11 +8,11 @@ export default {
   create(env) {
     const z = env.zone, v = env.view, widthK = Math.max(0.6, z.w / v.U);
     let stars = [], spawnT = 0.4, t = 0, caught = 0, missed = 0, bombs = 0;
-    function spawn() {
+    function spawn(force) {
       const p = env.progress(), r = Math.random();
-      const kind = p > 0.15 && r < 0.14 * env.diff.bomb ? "bomb" : r < 0.32 ? "gold" : "star";
+      const kind = force ? force.kind : p > 0.15 && r < 0.14 * env.diff.bomb ? "bomb" : r < 0.32 ? "gold" : "star";
       stars.push({
-        kind, fx: 0.12 + Math.random() * 0.76, fy: kind === "gold" ? 0.22 : 0.13, hold: kind === "gold" ? 1.4 : 0,
+        kind, fx: force ? force.fx : 0.12 + Math.random() * 0.76, fy: kind === "gold" ? 0.22 : 0.13, hold: kind === "gold" ? 1.4 : 0,
         ph: Math.random() * 6, vy: (0.1 + 0.08 * p) * env.diff.speed * (kind === "gold" ? 0.75 : 1) * (env.fever() ? 1.2 : 1),
         trail: [], dead: false, born: 0, x: 0, y: 0,
       });
@@ -81,6 +81,9 @@ export default {
         }
       },
       result: () => `잡은 별 ${caught} · 놓침 ${missed} · 폭탄 ${bombs}`,
+      // 설명 시연용
+      get stars() { return stars; },
+      forceSpawn(kind, fx) { spawn({ kind, fx }); },
     };
   },
 };

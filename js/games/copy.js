@@ -1,6 +1,6 @@
 // 따라쟁이: 카드 속 자세를 0.6초 유지하면 성공, 2초 안에 해내면 2점
-import { burst, popup, rr, outlinedText } from "../fx.js?v=13";
-import { sfx } from "../audio.js?v=13";
+import { burst, popup, rr, outlinedText } from "../fx.js?v=14";
+import { sfx } from "../audio.js?v=14";
 
 const HOLD = 0.6;
 const ang = (a, b, c) => {
@@ -102,6 +102,7 @@ export default {
         if (hold > 0) { ctx.fillStyle = "#2fd36b"; rr(ctx, c.x, by, c.w * Math.min(1, hold / (HOLD * env.diff.hold)), bh, bh / 2); ctx.fill(); }
       },
       result: () => `성공한 자세 ${done}개`,
+      get current() { return cur.id; },   // 설명 시연용
     };
   },
 };

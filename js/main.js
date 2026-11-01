@@ -1,13 +1,14 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=13";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=13";
-import * as R from "./records.js?v=13";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=13";
-import copy from "./games/copy.js?v=13";
-import math, { LEVELS } from "./games/math.js?v=13";
-import ice from "./games/ice.js?v=13";
-import star from "./games/star.js?v=13";
-import { DIFFS, diffOf } from "./difficulty.js?v=13";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=14";
+import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=14";
+import * as R from "./records.js?v=14";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=14";
+import copy from "./games/copy.js?v=14";
+import math, { LEVELS } from "./games/math.js?v=14";
+import ice from "./games/ice.js?v=14";
+import star from "./games/star.js?v=14";
+import { DIFFS, diffOf } from "./difficulty.js?v=14";
+import { startDemo } from "./demo.js?v=14";
 
 const GAMES = { copy, math, ice, star };
 const GAME_ORDER = ["copy", "math", "ice", "star"];
@@ -53,7 +54,7 @@ let rankView = { game: "copy", level: "add10" }, rankBackTo = "setup", justSaved
 const saved = R.getSettings();
 for (const k of ["sfx", "bgm", "tts"]) if (typeof saved[k] === "boolean") settings[k] = saved[k];
 sel = (saved.lastSel || []).filter(id => !id.startsWith("guest") && R.players().some(p => p.id === id)).slice(0, 2);
-function saveSettings() { R.setSettings({ sfx: settings.sfx, bgm: settings.bgm, tts: settings.tts, lastSel: sel }); }
+function saveSettings() { R.setSettings({ ...R.getSettings(), sfx: settings.sfx, bgm: settings.bgm, tts: settings.tts, lastSel: sel }); }
 
 /* ---------- 화면 크기 ---------- */
 function resize() {
@@ -75,7 +76,7 @@ window.addEventListener("resize", resize);
 resize();
 
 /* ---------- 화면 전환 ---------- */
-const SCREENS = { setup: "scr-setup", select: "scr-select", ready: "scr-ready", result: "scr-result", ranking: "scr-ranking" };
+const SCREENS = { setup: "scr-setup", select: "scr-select", demo: "scr-demo", ready: "scr-ready", result: "scr-result", ranking: "scr-ranking" };
 function setState(s) {
   state = s;
   $$(".screen").forEach(el => el.classList.toggle("on", el.id === SCREENS[s]));
@@ -229,7 +230,11 @@ $("#btnSetup").onclick = backToSetup;
 /* ---------- 3. 자리 잡기 ---------- */
 let readyCache = "";
 function chooseGame(id) {
-  gameId = id; const g = GAMES[id];
+  gameId = id;
+  if (needDemo(id)) openDemo(); else goReady();
+}
+function goReady() {
+  const g = GAMES[gameId];
   $("#readyTitle").textContent = `${g.icon} ${g.title}`;
   $("#readyHow").textContent = g.how;
   $("#readyHint").textContent = slots.length === 2
@@ -255,6 +260,37 @@ function renderReadyStat(ok) {
 $("#btnGo").onclick = () => beginCountdown(3);
 $("#btnGo5").onclick = () => beginCountdown(5);      // 태블릿을 누른 사람이 자리로 갈 시간
 $("#btnReadyBack").onclick = () => setState("select");
+$("#btnDemo").onclick = () => openDemo();
+
+/* ---------- 게임 설명 시연 (선수별로 게임마다 처음 한 번, 이후엔 '설명 보기') ---------- */
+let demo = null, demoCap = "";
+const sessionSeen = new Set();       // 이름 없는 손님은 이번 접속 동안만 기억
+function needDemo(id) {
+  const seen = R.getSettings().demoSeen || {};
+  return slots.some(s => s.profileId ? !(seen[s.profileId] || []).includes(id) : !sessionSeen.has(s.id + ":" + id));
+}
+function markDemo(id) {
+  const st = R.getSettings(), seen = { ...(st.demoSeen || {}) };
+  slots.forEach(s => {
+    if (s.profileId) { const a = (seen[s.profileId] || []).slice(); if (!a.includes(id)) a.push(id); seen[s.profileId] = a; }
+    else sessionSeen.add(s.id + ":" + id);
+  });
+  R.setSettings({ ...st, demoSeen: seen });
+}
+function openDemo() {
+  const g = GAMES[gameId];
+  clearFx(); stopSpeak();
+  demo = startDemo(gameId, g, view); demoCap = "";
+  $("#demoTitle").textContent = `${g.icon} ${g.title}`;
+  $("#demoCap").textContent = ""; $("#demoProg").style.width = "0%";
+  setState("demo");
+}
+function finishDemo() {
+  if (!demo) return;
+  demo = null; markDemo(gameId); clearFx(); stopSpeak();
+  goReady();
+}
+$("#btnSkip").onclick = finishDemo;
 
 /* ---------- 4. 카운트다운 · 게임 ---------- */
 function beginCountdown(sec = 3) {
@@ -440,7 +476,12 @@ function frame(now) {
   drawCursors();
 }
 function tick(dt) {
-  if (state === "ready") {
+  if (state === "demo" && demo) {
+    demo.update(dt);
+    if (demo.caption !== demoCap) { demoCap = demo.caption; $("#demoCap").textContent = demoCap; }
+    $("#demoProg").style.width = (demo.progress * 100).toFixed(1) + "%";
+    if (demo.done) finishDemo();
+  } else if (state === "ready") {
     const g = GAMES[gameId], noShape = shapeUnavailable();
     if (g.oneHand) trackers.forEach((tr, i) => {
       const a = tr.present && tr.activeHand;
@@ -477,6 +518,7 @@ function draw(t) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const [sx, sy] = shakeOffset();
   ctx.save(); ctx.translate(sx, sy);
+  if (state === "demo" && demo) { demo.draw(ctx); drawFx(ctx); ctx.restore(); return; }
   cam.draw(ctx, W, H);
   ctx.fillStyle = "rgba(0,0,0,0.15)"; ctx.fillRect(-20, -20, W + 40, H + 40);
   if (fever && state === "play") {
@@ -628,7 +670,7 @@ function goFullscreen() {
   try { const r = f && f.call(d); if (r && r.catch) r.catch(() => {}); } catch (e) {}
 }
 
-if (SIM) window.__dbg = { get state() { return state; }, setTime: s => { timeLeft = s; }, players: () => players, scales: () => trackers.map(t => Math.round(t.scale)) };
+if (SIM) window.__dbg = { get demo() { return demo; }, get state() { return state; }, setTime: s => { timeLeft = s; }, players: () => players, scales: () => trackers.map(t => Math.round(t.scale)) };
 
 renderSetup();
 setState("setup");

@@ -182,3 +182,14 @@ body:not(.live) .overlay { background: var(--y); }
 .tut-card small { font-size: clamp(12px, 1.9vmin, 17px); opacity: .7; }
 .tut-try { font-size: clamp(13px, 2.1vmin, 20px); }
 .tut-note { font-size: clamp(12px, 1.8vmin, 16px); color: #b06000; min-height: 1em; }
+
+/* 게임 설명 시연 */
+#scr-demo { flex-direction: column; justify-content: space-between; align-items: center; pointer-events: none; padding: 2vmin max(16px, 2vmin); }
+.demo-top { display: flex; align-items: center; gap: 1.6vmin; background: rgba(255, 255, 255, .85); border: max(3px, .5vmin) solid var(--b); border-radius: 4vmin; padding: .8vmin 2.6vmin; font-size: clamp(18px, 3.6vmin, 36px); }
+.demo-tag { background: var(--hot); color: #fff; border-radius: 3vmin; padding: .2vmin 1.4vmin; font-size: .7em; }
+.demo-bottom { display: flex; flex-direction: column; align-items: center; gap: 1.2vmin; width: min(94vw, 1000px); }
+.demo-cap { background: rgba(255, 255, 255, .94); border: max(3px, .6vmin) solid var(--b); border-radius: 3vmin; padding: 1.4vmin 3vmin; font-size: clamp(20px, 4.6vmin, 46px); text-align: center; min-height: 1.6em; box-shadow: 0 1vmin 0 rgba(0, 0, 0, .2); }
+.demo-cap:empty { visibility: hidden; }
+.demo-bar { width: 60%; height: max(6px, 1vmin); background: rgba(0, 0, 0, .15); border-radius: 1vmin; overflow: hidden; }
+#demoProg { display: block; height: 100%; width: 0; background: var(--hot); }
+#scr-demo .pill { pointer-events: auto; }

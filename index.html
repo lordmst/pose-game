@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=13">
+<link rel="stylesheet" href="css/style.css?v=14">
 </head>
 <body>
 <video id="video" playsinline muted autoplay></video>
@@ -63,6 +63,16 @@
   </div>
 </section>
 
+<!-- 2-1. 게임 설명 시연 -->
+<section id="scr-demo" class="screen">
+  <div class="demo-top"><span class="demo-tag">게임 설명</span><b id="demoTitle"></b></div>
+  <div class="demo-bottom">
+    <div id="demoCap" class="demo-cap"></div>
+    <div class="demo-bar"><i id="demoProg"></i></div>
+    <button class="pill" type="button" data-hand id="btnSkip">건너뛰기</button>
+  </div>
+</section>
+
 <!-- 3. 자리 잡기 -->
 <section id="scr-ready" class="screen">
   <div class="readybar panel">
@@ -82,6 +92,7 @@
     <div class="row">
       <button class="pill" type="button" data-hand id="btnGo">바로 시작</button>
       <button class="pill go5" type="button" id="btnGo5">5초 후 시작</button>
+      <button class="pill ghost" type="button" id="btnDemo">설명 보기</button>
       <button class="pill ghost" type="button" id="btnReadyBack">뒤로</button>
     </div>
   </div>
@@ -136,6 +147,6 @@
     setTimeout(function () { if (!window.__appReady) show("게임을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요."); }, 8000);
   })();
 </script>
-<script type="module" src="js/main.js?v=13"></script>
+<script type="module" src="js/main.js?v=14"></script>
 </body>
 </html>

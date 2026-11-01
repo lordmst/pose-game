@@ -1,6 +1,6 @@
 // 수학 풍선: 정답이 적힌 풍선을 손으로 터뜨리기 (손을 잠깐 대거나 빠르게 치면 터짐)
-import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=13";
-import { sfx } from "../audio.js?v=13";
+import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=14";
+import { sfx } from "../audio.js?v=14";
 
 export const LEVELS = { add10: "덧셈 (10까지)", addsub20: "덧셈·뺄셈 (20까지)", mul: "구구단", mix: "사칙 혼합" };
 const OPS = { add10: ["+"], addsub20: ["+", "-"], mul: ["×"], mix: ["+", "-", "×", "÷"] };
@@ -96,7 +96,8 @@ export default {
           b.hover = b === target;
           b.dwell = b.hover ? b.dwell + dt : Math.max(0, b.dwell - dt * 2);
         }
-        if (target && (target.dwell >= DWELL || h.bodySpeed > 4)) pop(target);   // 프레임마다 최대 하나만 터짐
+        // 항상 잠깐(DWELL) 대고 있어야 터짐. 빠르게 휘두르다 스친 풍선은 안 터짐. 프레임마다 최대 하나만
+        if (target && target.dwell >= DWELL) pop(target);
       },
       draw(ctx) {
         const r = R();
@@ -113,7 +114,10 @@ export default {
         outlinedText(ctx, txt, bx.x + jx + bx.w / 2, bx.y + bx.h * 0.54, Math.min(bx.h * 0.62, bx.w / (txt.length * 0.55)), "#222", "#fff", 2);
       },
       result: () => `정답 ${correct} · 틀림 ${wrong}`,
-      get balloons() { return balloons; },   // 점검용
+      // 설명 시연·점검용
+      get balloons() { return balloons; },
+      get answer() { return prob.ans; },
+      get phase() { return phase; },
     };
   },
 };

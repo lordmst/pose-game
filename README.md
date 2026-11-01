@@ -26,6 +26,8 @@ js/pose.js          카메라, 자세 인식(MediaPipe), 손 위치·속도 추�
 js/audio.js         효과음·배경음악 합성, 음성 읽기
 js/fx.js            파티클·점수 팝업·화면 흔들림
 js/records.js       선수 목록, 기록, 순위
+js/demo.js          게임 설명 시연 (만화 캐릭터가 실제 게임을 해 보임)
+js/difficulty.js    난이도별 배수
 js/games/*.js       게임별 규칙과 그리기
 v1/                 이전 단일 파일 버전
 ```
