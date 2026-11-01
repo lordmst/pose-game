@@ -310,8 +310,13 @@ $("again").onclick = () => { $("result").style.display = "none"; startGame(G.gam
 async function startGame(game) {
   if (!landmarker) return;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    // Safari(iPhone/iPad/Mac)는 세부 해상도 옵션을 거부하는 경우가 있어 단계적으로 완화
+    let stream = null;
+    for (const c of [{ facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, { facingMode: "user" }, true]) {
+      try { stream = await navigator.mediaDevices.getUserMedia({ video: c, audio: false }); break; } catch (e) { if (c === true) throw e; }
+    }
     video.srcObject = stream;
+    await video.play().catch(() => {});
     await new Promise(r => video.onloadedmetadata = r);
     canvas.width = video.videoWidth; canvas.height = video.videoHeight;
   } catch (e) { $("status").textContent = "카메라를 열 수 없습니다: " + e.message + " (HTTPS 주소에서 열어야 합니다)"; return; }
