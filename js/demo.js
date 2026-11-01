@@ -295,21 +295,22 @@ const SCRIPTS = {
     },
   },
   conductor: {
-    dur: 18,
+    dur: 16,
     run(T, g, p, S, say) {
       p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
-      if (T < 4) say("지휘자! 오케스트라를 지휘해요");
-      else if (T < 9) say("원이 작아져 딱 맞을 때 손으로 지나가요. 아래, 왼쪽, 오른쪽, 위");
-      else if (T < 15.5) say("조명이 비춘 악기는 손으로 가리켜요. 브라보!");
+      if (T < 4.5) say("지휘자! 금색 삼각형이 내려와요");
+      else if (T < 9.5) say("가로선에 닿는 순간, 삼각형 방향으로 손을 휘둘러요");
+      else if (T < 14) say("아래, 안쪽, 바깥쪽, 위! 박자에 맞춰 지휘해요");
       else say("이제 직접 해 봐요!");
-      const cue = g.cue;
-      if (cue) { p.reach(cue.x < p.cx ? 0 : 1, cue.x, cue.y, 1.4); p.rest(cue.x < p.cx ? 1 : 0, "down", 0.8); return; }
-      // 다음 박자 원으로 박자에 맞춰 손 옮기기
-      const b = g.beats.sort((a, c) => a.time - c.time)[0];
-      if (!b) { p.rest(1, "guard", 0.8); p.rest(0, "down", 0.6); return; }
-      const k = b.x < p.cx - p.u * 0.5 ? 0 : 1, left = Math.max(0.05, b.time - g.now), d = Math.hypot(b.x - p.hands[k].x, b.y - p.hands[k].y);
-      p.reach(k, b.x, b.y, Math.min(3, Math.max(0.4, d / p.v.U / left)));   // 왼쪽 원은 왼손, 나머지는 오른손
-      p.rest(1 - k, "guard", 0.8);
+      const u = p.u, now = g.now;
+      [0, 1].forEach(k => {
+        const sh = p.pts[11 + k], side = k ? 1 : -1, cx = sh.x + side * 0.9 * u, cy = sh.y + 0.5 * u, A = 0.85 * u;
+        const n = g.notes.filter(n => n.hands.includes(k) && !n.parts[k] && n.time - now > -0.1).sort((a, b) => a.time - b.time)[0];
+        if (!n) return;
+        const d = g.dir(n.key, k), t = n.time - now;
+        if (t > 0.12) p.reach(k, cx - d[0] * A, cy - d[1] * A, 2.2);       // 휘두르기 전에 반대쪽으로 준비
+        else p.reach(k, cx + d[0] * A, cy + d[1] * A, 4);                   // 박자에 맞춰 휘두르기
+      });
     },
   },
   goalie: {
