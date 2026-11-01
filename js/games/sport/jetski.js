@@ -1,12 +1,14 @@
 // 수상오토바이 (스포츠 리조트처럼 3D): 내 캐릭터 뒤에서 파도치는 바다를 달리며 부표 사이로 통과
-// 두 손을 앞으로 내밀어 손잡이를 잡은 것처럼. 방향 = 손잡이 돌리기(오른쪽으로 가려면 오른손을 내리고 왼손을 올림)
-// 속도 = 두 손을 가슴 높이로 들고 있으면 출발, 내리면 멈춤. 빨강·노랑 부표 사이로 통과하면 점수, 별도 모으고 바위는 피하기
+// 두 손을 앞으로 내밀어 손잡이를 잡은 것처럼 들고 있으면 출발, 내리면 멈춤. 방향 = 몸을 왼쪽·오른쪽으로 옮기기(내 몸 위치 = 수상오토바이 위치)
+// 다음 부표 문 가운데를 물 위 점선·점선 원·방향 글자·카메라 작은 창 세로 점선으로 안내. 빨강·노랑 부표 사이로 통과하면 점수, 별도 모으고 바위는 피하기
 import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=32";
 import { sfx } from "../../audio.js?v=32";
-import { stage, THREE, sea, palm, cloud, box, ball as sphere, cyl, mesh, playerAvatar } from "./kit3d.js?v=32";
+import { stage, THREE, sea, palm, cloud, box, ball as sphere, cyl, mesh, playerAvatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=32";
 
 const TOP = 60;                         // 최고 속도(km/h, 보통)
 const JS = 6, ZD = 80;                  // 게임 좌표 → 3D(m): 옆 1 = 6m, 앞 1 = 80m
+const XMAX = 1.4;                       // 좌우 끝(게임 좌표)
+const GUIDE_Z = -7;                     // 안내 점선을 그릴 곳(앞쪽, m)
 const waveY = (x, zz, t) => Math.sin(x * 0.15 + t * 1.6) * 0.18 + Math.cos(-zz * 0.12 + t * 1.2) * 0.15;   // kit3d sea()와 같은 물결
 
 function jetski(color) {
@@ -48,8 +50,8 @@ function rock() {
 }
 
 export default {
-  id: "jetski", title: "수상오토바이", icon: "🚤", sec: 50, cursor: "", cat: "sport", bg: "#66a6ff", desc: "손잡이 돌려 부표 통과", scene3d: true,
-  how: "두 손을 가슴 앞으로 들어 손잡이를 잡아요(들고 있으면 출발). 오른쪽으로 가려면 오른손을 내리고 왼손을 올려요. 부표 사이로 통과하고, 바위는 피해요!",
+  id: "jetski", title: "수상오토바이", icon: "🚤", sec: 50, cursor: "", cat: "sport", bg: "#66a6ff", desc: "좌우로 움직여 부표 통과", scene3d: true,
+  how: "두 손을 가슴 앞으로 들어 손잡이를 잡아요(들고 있으면 출발). 몸을 왼쪽·오른쪽으로 옮기면 수상오토바이도 따라가요. 점선 자리로 가서 부표 사이를 통과하고, 바위는 피해요!",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff;
     const st = stage(env, { fov: 58, sky: ["#3aa6f2", "#e2f5ff"], fog: ["#d6efff", 90, 330], shadowSize: 16 });
@@ -76,6 +78,10 @@ export default {
     const wakeGeo = new THREE.PlaneGeometry(1, 1);
     const wake = Array.from({ length: 26 }, () => { const m = new THREE.Mesh(wakeGeo, wakeMat.clone()); m.rotation.x = -Math.PI / 2; m.visible = false; scene.add(m); return { m, life: 0 }; });
     let si = 0, wi = 0, wakeT = 0;
+    // 이동 안내: 물결에 묻히지 않게 조금 띄운 묶음에 그림
+    const guideHold = new THREE.Group(); guideHold.position.y = 0.42; scene.add(guideHold);
+    const mover = bodyMover(env, XMAX), guideM = moveGuide(guideHold);
+    let goalG = null, prevX = 0, gxNow = null;
 
     let X = 0, speed = 0, steer = 0, t = 0, dist = 0, objs = [], spawnT = 0.5, gateX = 0, safe = 0, holding = false, sprayT = 0;
     let gates = 0, missedG = 0, stars = 0, bumps = 0;
@@ -102,11 +108,11 @@ export default {
         // 손잡이: 두 손이 보이고 엉덩이보다 위(가슴 앞)에 있으면 잡은 것
         const hipY = p && p[23].v && p[24].v ? (p[23].y + p[24].y) / 2 : (p && p[11].v ? p[11].y + sc * 1.7 : v.H);
         holding = hs[0].vis && hs[1].vis && hs[0].y < hipY - sc * 0.15 && hs[1].y < hipY - sc * 0.15;
-        if (holding) steer += (clamp((hs[1].y - hs[0].y) / sc / 0.7, -1, 1) - steer) * Math.min(1, dt * 7);
-        else steer *= 0.9;
         const top = TOP * D.speed;
         speed = holding ? Math.min(top, speed + dt * 30) : Math.max(0, speed - dt * 25);
-        X = clamp(X + steer * 1.3 * dt * (0.3 + speed / top), -1.4, 1.4);
+        // 좌우: 내 몸 위치를 그대로 따라감. steer는 옆으로 움직이는 빠르기(손잡이·몸 기울기 모양에만 씀)
+        X = clamp(mover.follow(X, dt), -XMAX, XMAX);
+        steer += (clamp((X - prevX) / Math.max(dt, 1e-3) * 0.6, -1, 1) - steer) * Math.min(1, dt * 7); prevX = X;
         const zr = speed / 60 * 0.42;
         dist += zr * dt;
         if (speed > 5) { spawnT -= dt; if (spawnT <= 0) spawn(); }
@@ -127,6 +133,18 @@ export default {
           }
         }
         objs = objs.filter(o => { if (o.z > -0.12) return true; drop(o); return false; });
+        // 가야 할 자리: 다음 부표 문 가운데 (바위가 문 가운데와 겹치면 바위 반대쪽으로 조금)
+        goalG = objs.filter(o => o.kind === "gate" && !o.done && o.z > 0.01).sort((a, b) => a.z - b.z)[0] || null;
+        let gx = null;
+        if (goalG) {
+          gx = goalG.x;
+          const rk = objs.find(o => o.kind === "rock" && !o.done && o.z > 0 && o.z < goalG.z && Math.abs(o.x - gx) < 0.3);
+          if (rk) gx = clamp(gx + (gx >= rk.x ? 1 : -1) * goalG.w * 0.6, -XMAX, XMAX);
+        }
+        gxNow = gx;
+        const okG = gx != null && Math.abs(X - gx) < goalG.w * 0.8;
+        if (gx != null) guideM.show(X * JS, gx * JS, GUIDE_Z, okG, t); else guideM.hide();
+        st.pipMark = gx != null ? { x: mover.toScreenX(gx), ok: okG } : null;
         // 3D 반영: 물체
         for (const o of objs) {
           if (o.kind === "gate") {
@@ -175,30 +193,31 @@ export default {
         ctx.fillStyle = "rgba(8,60,110,.8)"; rr(ctx, z.cx - bw / 2, top, bw, bh, U * 0.02); ctx.fill();
         outlinedText(ctx, `${Math.round(speed)} km/h · 통과 ${gates} · ⭐ ${stars}`, z.cx, top + bh / 2, Math.min(U * 0.038, z.w / 15), "#fff", "#0b3c6e", 3);
         if (!holding) outlinedText(ctx, "두 손을 가슴 앞으로 들어 손잡이를 잡아요!", z.cx, v.H * 0.8, Math.min(U * 0.042, z.w / 20), "#fff", "#b04a00", 4);
+        if (gxNow != null && goalG) {   // 어디로 얼마나
+          const ok = Math.abs(X - gxNow) < goalG.w * 0.8;
+          outlinedText(ctx, moveText((gxNow - X) * JS, ok, "좋아요! 그대로", 3), z.cx, top + bh + U * 0.06, Math.min(U * 0.045, z.w / 13), "#fff", ok ? "#2f8f2f" : "#c07800", 4);
+        }
       },
       stop() { st.dispose(); },
       result: () => `부표 통과 ${gates} · 놓침 ${missedG} · 별 ${stars} · 바위 ${bumps}`,
       // 설명 시연용
       get X() { return X; }, get speed() { return speed; },
+      get moveTo() { return gxNow == null ? null : mover.toScreenX(gxNow); },
       get objs() { return objs.filter(o => !o.done && o.z > 0); },
     };
   },
   demo: {
     dur: 16,
     run(T, g, p, S, say) {
-      p.hands.forEach(h => { h.shape = "closed"; }); p.active = -1; p.tcx = p.v.W / 2;
+      p.hands.forEach(h => { h.shape = "closed"; }); p.active = -1; p.walk = 1.6;
+      if (g.moveTo != null) p.tcx = g.moveTo;                                   // 점선 자리로 옆걸음
       if (T < 4) say("수상오토바이! 두 손을 가슴 앞으로 들면 출발해요");
-      else if (T < 10) say("오른쪽은 오른손을 내리고, 왼쪽은 왼손을 내려요");
+      else if (T < 10) say("몸을 옆으로 옮기면 그쪽으로 가요. 점선 자리로!");
       else if (T < 14) say("빨강·노랑 부표 사이로 통과하면 점수! 바위는 피해요");
       else say("이제 직접 해 봐요!");
       const u = p.u, cx = p.cx, y = p.shoulderY + 1.0 * u;
-      const os = g.objs.sort((a, b) => a.z - b.z), gate = os.find(o => o.kind === "gate");
-      let target = gate ? gate.x : 0;
-      const star = os.find(o => o.kind === "star" && (!gate || o.z < gate.z + 0.25));
-      if (star && star.z < 0.5) target = star.x;
-      const wheel = T < 1 ? 0 : clamp((target - g.X) * 3, -1, 1);
-      p.reach(0, cx - 0.85 * u, y - wheel * 0.45 * u, 1.5);   // 오른쪽으로 갈 땐 왼손을 올리고
-      p.reach(1, cx + 0.85 * u, y + wheel * 0.45 * u, 1.5);   // 오른손을 내림
+      p.reach(0, cx - 0.85 * u, y, 1.5);   // 두 손으로 손잡이를 잡은 모양
+      p.reach(1, cx + 0.85 * u, y, 1.5);
     },
   },
 };

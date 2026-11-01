@@ -1,9 +1,9 @@
 // 탁구 (스포츠 리조트처럼 3D): 실내 경기장, 내 캐릭터 뒤에서 탁구대를 봄
 // 상대가 친 공이 내 쪽 탁구대에 한 번 튀고 오면 팔을 휘둘러 받아치기. 아주 세게 휘두르면 스매시(상대가 잘 못 받음)
-// 캐릭터는 공 쪽으로 저절로 움직임. 11점 먼저 내면 게임(2점 차)
+// 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임. 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받아칠 수 있음. 11점 먼저 내면 게임(2점 차)
 import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=32";
 import { sfx } from "../../audio.js?v=32";
-import { stage, THREE, box, cyl, ball as sphere, mesh, playerAvatar, randomAvatar, racket } from "./kit3d.js?v=32";
+import { stage, THREE, box, cyl, ball as sphere, mesh, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=32";
 
 const FLIGHT = 1.1;    // 공이 상대에게서 나에게 오는 시간(초, 보통)
 const BACK = 0.75;     // 받아친 공이 상대에게 가는 시간(초)
@@ -13,6 +13,10 @@ const WIN0 = 0.72, WIN1 = 1.15;
 const CPU_RETURN = { easy: 0.55, normal: 0.7, hard: 0.82 };
 const TL = 1.37, TW = 0.76, TH = 0.76;   // 탁구대 반 길이·반 너비·높이(m)
 const KB = 0.58;                          // 비행 중 탁구대에 튀는 순간(비율)
+const RANGE = 1.0;     // 내 캐릭터가 움직일 수 있는 좌우 범위(m)
+const REACH = 0.35;    // 표시한 자리에서 이만큼(m) 안에 있으면 받아칠 수 있음
+const FORE = 0.4;      // 공이 몸 오른쪽(포핸드)에 오도록 자리와 공 사이 거리(m)
+const GS = 0.45;       // 이동 안내(점선) 크기 비율 (탁구대에 맞게 작게)
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const arc = (a, b, h, u) => new THREE.Vector3(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u + 4 * h * u * (1 - u), a.z + (b.z - a.z) * u);
@@ -47,8 +51,8 @@ function arena(scene) {
 }
 
 export default {
-  id: "pingpong", title: "탁구", icon: "🏓", sec: 60, cursor: "", cat: "sport", bg: "#ffc3a0", desc: "통통 튀는 공 받아치기", scene3d: true,
-  how: "공이 탁구대에 튀고 내 쪽으로 오면 팔을 휘둘러 받아쳐요. 아주 세게 휘두르면 스매시! 캐릭터는 저절로 움직여요",
+  id: "pingpong", title: "탁구", icon: "🏓", sec: 60, cursor: "", cat: "sport", bg: "#ffc3a0", desc: "좌우로 움직여 받아치기", scene3d: true,
+  how: "몸을 좌우로 움직이면 캐릭터도 움직여요. 공이 오면 점선 자리로 가서, 공이 튀고 오면 팔을 휘둘러 받아쳐요. 아주 세게 휘두르면 스매시!",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff;
     const st = stage(env, { fov: 48, sky: ["#141c33", "#141c33"], shadowSize: 6 });
@@ -64,8 +68,19 @@ export default {
     const hide = () => { pb.visible = shadow.visible = ring.visible = false; ghosts.forEach(g => { g.visible = false; }); };
     hide();
     const trail = [];
+    // 몸으로 좌우 이동 + 이동 안내 (점선은 탁구대 크기에 맞게 줄인 묶음 안에 그림)
+    const mover = bodyMover(env, RANGE), guideG = new THREE.Group(); guideG.scale.setScalar(GS); scene.add(guideG);
+    guideG.position.y = TH + 0.004;   // 발밑은 화면 아래로 가려서, 탁구대 내 쪽 가장자리 위에 표시
+    const guideM = moveGuide(guideG), FEET_Z = TL - 0.2;
 
-    let B = null, wait = 1.0, sMe = 0, sCpu = 0, gMe = 0, gCpu = 0, returns = 0, smashes = 0, winners = 0, t = 0, myX = 0, cheer = 0;
+    let B = null, wait = 1.0, sMe = 0, sCpu = 0, gMe = 0, gCpu = 0, returns = 0, smashes = 0, winners = 0, t = 0, myX = 0, cheer = 0, camX = 0;
+    const near = () => !!B && B.dir === 1 && Math.abs(myX - B.spot) <= REACH * D.reach;
+    // 지금 자리에서 lo~hi(m) 떨어진 자리 (범위 안쪽으로)
+    function spotFrom(lo, hi, min, max) {
+      let sd = Math.random() < 0.5 ? -1 : 1;
+      if (myX + sd * (lo + hi) / 2 > max || myX + sd * (lo + hi) / 2 < min) sd = -sd;
+      return clamp(myX + sd * (lo + Math.random() * (hi - lo)), min, max);
+    }
     let swingT = 9, swingDir = 1, swingHard = false, oppSwing = 9;
     // 비행: p0 → 탁구대에 튐(bnc) → p1. 높이 h1·h2
     function at(b) {
@@ -73,9 +88,9 @@ export default {
       return { k, p: k < KB ? arc(b.p0, b.bnc, b.h1, k / KB) : arc(b.bnc, b.p1, b.h2, (k - KB) / (1 - KB)) };
     }
     function send() {   // 상대가 공을 보냄
-      const side = Math.random() < 0.5 ? -1 : 1, hx = clamp(myX + side * (0.2 + Math.random() * 0.45), -TW - 0.2, TW + 0.2);
+      const spot = spotFrom(0.45, 0.95, -RANGE, TW + 0.2 - FORE), hx = spot + FORE;   // 몸을 옮겨야 칠 수 있는 곳으로
       const p0 = opp.position.clone().add(V(-0.25, 0.95, 0.45));
-      B = { dir: 1, p0, bnc: V(hx * 0.8, TH + 0.035, 0.45 + Math.random() * 0.6), p1: V(hx, TH + 0.3, TL + 0.45), h1: 0.28, h2: 0.22, t: 0, T: FLIGHT * (1 - 0.2 * env.progress()) / D.speed, hx };
+      B = { dir: 1, p0, bnc: V(hx * 0.8, TH + 0.035, 0.45 + Math.random() * 0.6), p1: V(hx, TH + 0.3, TL + 0.45), h1: 0.28, h2: 0.22, t: 0, T: FLIGHT * (1 - 0.2 * env.progress()) / D.speed, hx, spot };
       oppSwing = 0; sfx.pop(); trail.length = 0;
     }
     function point(mine) {
@@ -99,8 +114,10 @@ export default {
         t += dt; swingT += dt; oppSwing += dt; cheer = Math.max(0, cheer - dt);
         const hands = env.tracker.hands, fast = hands.find(h => h.vis && h.bodySpeed >= SWING * D.punch);
         if (fast && swingT > 0.4) { swingT = 0; swingDir = fast.vx > 0 ? 1 : -1; swingHard = fast.bodySpeed >= SMASH * D.punch; }
-        const goal = B && B.dir === 1 ? clamp(B.hx - 0.4, -1.0, 0.9) : 0;
-        myX += (goal - myX) * Math.min(1, dt * 4); me.position.x = myX;
+        myX = mover.follow(myX, dt); me.position.x = myX;                      // 좌우는 내 몸으로
+        const guide = !!B && B.dir === 1 && !B.swung;
+        if (guide) guideM.show(myX / GS, B.spot / GS, FEET_Z / GS, near(), t); else guideM.hide();
+        st.pipMark = guide ? { x: mover.toScreenX(B.spot), ok: near() } : null;
         if (!swingPose(me, swingT, swingDir, swingHard)) { me.body.rotation.y *= 0.8; me.mimic(env.tracker.pts, true); }
         me.idle(t);
         if (!swingPose(opp, oppSwing, -1, false)) { opp.body.rotation.y *= 0.8; opp.arm(1, 0.5, 0.8, 1.0); opp.arm(0, 0.3, 0.4, 0.6); }
@@ -117,7 +134,10 @@ export default {
         if (k > KB - 0.02 && !B.bounced) { B.bounced = true; sfx.tick(); }
         if (B.dir === 1) {
           ring.visible = k < KB; if (ring.visible) { ring.position.x = B.bnc.x; ring.position.z = B.bnc.z; }
-          if (k > WIN0 && k < WIN1 && swingT < 0.12 && !B.swung) {
+          if (k > WIN0 && k < WIN1 && swingT < 0.12 && !B.swung && !near() && !B.whiff) {   // 너무 멀리서 휘두름
+            B.whiff = true; popup(z.cx, v.H * 0.62, "닿지 않아요! 점선 자리로", { size: v.U * 0.04, color: "#fff", stroke: "#d07a00", life: 0.9 });
+          }
+          if (k > WIN0 && k < WIN1 && swingT < 0.12 && !B.swung && near()) {
             B.swung = true;
             const smash = swingHard;
             returns++; if (smash) smashes++;
@@ -143,28 +163,36 @@ export default {
       draw(ctx) {
         // 카메라: 내 캐릭터 뒤 위쪽에서 탁구대를 내려다봄
         const narrow = camera.aspect < 1.2 ? 1 : 0;   // 2인 화면(좁은 구역)은 조금 뒤에서
-        camera.position.set(myX * 0.75 + 0.3, 3.1 + narrow * 0.5, TL + 3.1 + narrow * 1.3); camera.lookAt(myX * 0.3, 0.6, -1.0);
+        const cx = B && B.dir === 1 && !B.swung ? (myX + B.spot) / 2 : myX;   // 내 캐릭터와 가야 할 자리가 함께 보이게
+        camX += (cx - camX) * 0.12;
+        camera.position.set(camX * 0.75 + 0.3, 3.1 + narrow * 0.5, TL + 3.1 + narrow * 1.3); camera.lookAt(camX * 0.3, 0.6, -1.0);
         st.draw(ctx);
         const U = v.U, bw = Math.min(z.w * 0.86, U * 0.7), by = v.H * 0.11, bh = U * 0.075;
         ctx.fillStyle = "rgba(120,30,10,.85)"; rr(ctx, z.cx - bw / 2, by, bw, bh, U * 0.02); ctx.fill();
         outlinedText(ctx, `나 ${sMe} - ${sCpu} 상대  ·  게임 ${gMe}:${gCpu}`, z.cx, by + bh / 2, Math.min(U * 0.038, z.w / 15), "#fff", "#4a1004", 3);
-        if (B && B.dir === 1 && B.t / B.T > 0.4 && !B.swung) outlinedText(ctx, "휘둘러요!", z.cx, v.H * 0.27, Math.min(U * 0.05, z.w / 10), "#fff", "#d06a00", 4);
+        if (B && B.dir === 1 && !B.swung) {
+          const ok = near();
+          if (!ok) outlinedText(ctx, moveText((B.spot - myX) * 3, false), z.cx, v.H * 0.27, Math.min(U * 0.05, z.w / 12), "#fff", "#c07800", 4);   // 어디로 얼마나
+          else if (B.t / B.T > 0.4) outlinedText(ctx, "휘둘러요!", z.cx, v.H * 0.27, Math.min(U * 0.05, z.w / 10), "#fff", "#d06a00", 4);
+          else outlinedText(ctx, "좋아요! 그 자리", z.cx, v.H * 0.27, Math.min(U * 0.045, z.w / 12), "#fff", "#2f8f2f", 4);
+        }
       },
       stop() { st.dispose(); },
       result: () => `받아친 공 ${returns} · 스매시 ${smashes} · 득점 ${winners} · 게임 ${gMe}:${gCpu}`,
-      get ball() { return B ? { incoming: B.dir === 1, k: B.t / B.T } : null; },
+      get ball() { return B ? { incoming: B.dir === 1, k: B.t / B.T, moveTo: B.dir === 1 ? mover.toScreenX(B.spot) : null, near: near() } : null; },
     };
   },
   demo: {
     dur: 14,
     run(T, g, p, S, say) {
-      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
-      if (T < 4.5) say("탁구! 공이 탁구대에 튀고 오면 팔을 휘둘러요");
+      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.walk = 1.6;
+      if (T < 4.5) say("탁구! 몸을 좌우로 움직여 점선 자리로 가요");
       else if (T < 9) say("아주 세게 휘두르면 스매시! 상대가 잘 못 받아요");
       else if (T < 12.5) say("상대가 못 받으면 내 점수");
       else say("이제 직접 해 봐요!");
       const b = g.ball, u = p.u, s = p.pts && p.pts[12], fast = T > 4.5 && T < 9;
-      if (!b || !b.incoming || !s) { p.rest(0, "guard", 1); p.rest(1, "guard", 1); return; }
+      if (b && b.incoming && b.moveTo != null) p.tcx = b.moveTo;            // 점선 자리로 걸어감
+      if (!b || !b.incoming || !s || !b.near) { p.rest(0, "guard", 1); p.rest(1, "guard", 1); return; }
       p.rest(0, "guard", 1);
       if (b.k < (fast ? 0.86 : 0.8)) p.reach(1, s.x + 1.4 * u, s.y + 0.6 * u, 1.6);       // 뒤로 빼기
       else p.reach(1, s.x - 1.6 * u, s.y + 0.2 * u, fast ? 4.5 : 0.9);                    // 보통은 살살, 스매시 구간은 아주 세게
