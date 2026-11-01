@@ -51,7 +51,7 @@ export function stage(env, opts = {}) {
     }
   }
   const api = {
-    THREE, scene, camera, renderer, sun, hemi,
+    THREE, scene, camera, renderer, sun, hemi, pipMark: null,
     // 자기 구역에 장면을 그림 (+ 카메라 작은 화면)
     draw(ctx) {
       measure(); applyQuality();
@@ -66,7 +66,7 @@ export function stage(env, opts = {}) {
     pip(ctx, where = "br") {
       const pw = Math.min(z.w * 0.24, v.U * 0.3), ph = pw * 1.25, m = v.U * 0.02;
       const x = where.includes("l") ? z.x0 + m : z.x1 - pw - m, y = where.includes("t") ? v.H * 0.12 : v.H - ph - v.U * 0.085;   // 아래 버튼(음성 크게 등)을 가리지 않게
-      if (env.pip) env.pip(ctx, x, y, pw, ph);
+      if (env.pip) env.pip(ctx, x, y, pw, ph, api.pipMark);   // pipMark: 몸을 옮길 자리(화면 x) 점선 표시
     },
     // 3D 위치 → 화면 좌표 (글자·효과를 2D로 얹을 때)
     get quality() { return quality; },
@@ -215,3 +215,4 @@ export function racket(color = "#ff6b6b", paddle = false) {
   if (!paddle) { const net = mesh(new THREE.CircleGeometry(0.14, 20), "#ffffff", { opacity: 0.5 }); net.position.y = -0.38; g.add(net); }
   return g;
 }
+

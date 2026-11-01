@@ -1,9 +1,9 @@
 // 배구 (스포츠 리조트처럼 3D 비치발리볼 2:2): 내 캐릭터 뒤에서 코트를 봄
 // 리시브(두 손 모아 아래로) → 같은 편 토스 → 스파이크(높이 들었다 세게 내려치기) → 상대가 받아 공격하면 블로킹(두 손 번쩍)
 // 캐릭터는 공 쪽으로 저절로 움직임. 블로킹을 못 하면 상대 스파이크가 내 쪽으로 와서 다시 리시브
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=30";
-import { sfx } from "../../audio.js?v=30";
-import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, playerAvatar, randomAvatar } from "./kit3d.js?v=30";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=31";
+import { sfx } from "../../audio.js?v=31";
+import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, playerAvatar, randomAvatar } from "./kit3d.js?v=31";
 
 const SERVE = 1.6;     // 상대 서브가 나에게 오는 시간(초, 보통)
 const SPIKE = 3.0;     // 스파이크로 인정하는 손 속도(어깨너비/초, 아래 방향)

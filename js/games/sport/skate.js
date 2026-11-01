@@ -1,10 +1,10 @@
 // 스케이트보드 (스포츠 리조트처럼 3D): 내 캐릭터 뒤에서 바닷가 내리막길을 달리며 동전 모으기
 // 방향 = 몸을 왼쪽·오른쪽으로 기울이기(또는 몸을 옆으로 옮기기), 속도 = 제자리에서 무릎 들기(발 구르기)
 // 점프 = 두 손을 머리 위로 번쩍(또는 제자리 점프). 고깔·울타리는 피하거나 점프, 점프대에서 점프하면 트릭 보너스
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=30";
-import { sfx } from "../../audio.js?v=30";
-import { makeStepCounter } from "../run.js?v=30";
-import { stage, THREE, sea, palm, cloud, tree, box, cyl, mesh, playerAvatar } from "./kit3d.js?v=30";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=31";
+import { sfx } from "../../audio.js?v=31";
+import { makeStepCounter } from "../run.js?v=31";
+import { stage, THREE, sea, palm, cloud, tree, box, cyl, mesh, playerAvatar } from "./kit3d.js?v=31";
 
 const AIR = 0.8;                         // 점프 시간(초)
 const RS = 2.2, ZD = 70;                 // 게임 좌표 → 3D(m): 옆 1 = 2.2m, 앞 1 = 70m

@@ -1,8 +1,8 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=30";
-import { DIFFS } from "./difficulty.js?v=30";
-import { speak } from "./audio.js?v=30";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=31";
+import { DIFFS } from "./difficulty.js?v=31";
+import { speak } from "./audio.js?v=31";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
@@ -387,11 +387,17 @@ export function startDemo(id, game, view) {
     miss: (x, y, label) => { me.combo = 0; stats.miss++; if (label) popup(x, y, label, { size: view.U * 0.04, color: "#eee", stroke: "#555" }); },
     penalty: (n, x, y, label) => { me.combo = 0; stats.pen++; popup(x, y, `${label} -${n * DIFFS.normal.points}`, { size: view.U * 0.06, color: "#fff", stroke: "#d02020" }); },
     // 3D 스포츠의 카메라 작은 화면 자리에 도우미 캐릭터를 줄여서 그림
-    pip: (c, x, y, w, h) => {
-      const s = h / view.H, P = p.pts, cx = P ? (P[11].x + P[12].x) / 2 : view.W / 2;
+    pip: (c, x, y, w, h, mark) => {
+      const s = h / view.H, P = p.pts, U = view.U;
+      let cx = P ? (P[11].x + P[12].x) / 2 : view.W / 2;
+      if (mark) cx = (cx + mark.x) / 2;
       c.save(); c.beginPath(); c.roundRect(x, y, w, h, view.U * 0.02); c.clip();
       const g = c.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, "#5b6f80"); g.addColorStop(1, "#2b3540"); c.fillStyle = g; c.fillRect(x, y, w, h);
       c.translate(x + w / 2, y); c.scale(s, s); c.translate(-cx, 0); p.draw(c);
+      if (mark) {   // 몸을 옮길 자리: 세로 점선 (가까우면 초록)
+        c.save(); c.setLineDash([U * 0.03 / s, U * 0.022 / s]); c.lineWidth = U * 0.012 / s; c.strokeStyle = mark.ok ? "#37d67a" : "#ffe14d";
+        c.beginPath(); c.moveTo(mark.x, view.H * 0.04); c.lineTo(mark.x, view.H); c.stroke(); c.restore();
+      }
       c.restore(); c.lineWidth = view.U * 0.006; c.strokeStyle = "#fff"; c.beginPath(); c.roundRect(x, y, w, h, view.U * 0.02); c.stroke();
     },
   };

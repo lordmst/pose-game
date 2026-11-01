@@ -1,9 +1,9 @@
 // 깡통 맞추기 (스포츠 리조트 탁구 '깡통 챌린지'처럼 3D): 탁구대 끝에 쌓인 깡통 피라미드를 탁구공으로 무너뜨리기
 // 공 기계가 보낸 공이 내 쪽에 바운드되어 오면 타이밍 맞춰 휘둘러 받아침. 손을 휘두른 방향(옆)과 손 높이(위·아래)로 노리는 곳이 정해짐
 // 깡통 하나에 1점, 받침이 없어진 깡통은 같이 무너짐. 다 쓰러뜨리면 보너스
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=30";
-import { sfx } from "../../audio.js?v=30";
-import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, playerAvatar, racket } from "./kit3d.js?v=30";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=31";
+import { sfx } from "../../audio.js?v=31";
+import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, playerAvatar, racket } from "./kit3d.js?v=31";
 
 const FLIGHT = 1.2;    // 공이 나에게 오는 시간(초, 보통)
 const SHOT = 0.55;     // 받아친 공이 깡통까지 가는 시간(초)

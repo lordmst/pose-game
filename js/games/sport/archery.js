@@ -1,8 +1,8 @@
 // 양궁 (스포츠 리조트처럼 3D 야외 사로): 내 캐릭터 어깨 뒤에서 과녁을 봄. 한 팔은 옆으로 쭉 뻗고(활), 다른 손은 가슴·얼굴 쪽으로 당기면(시위) 화면이 과녁으로 확대되고 조준점이 나타남
 // 활 든 팔을 위아래로, 몸을 옆으로 움직여 조준점을 과녁 가운데로 → 당긴 손을 휙 놓으면(빠르게 떼면) 발사. 화살이 날아가 꽂힘. 바람(깃발)도 계산!
-import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=30";
-import { sfx } from "../../audio.js?v=30";
-import { stage, THREE, ground, box, ball as sphere, mesh, cyl, tree, cloud, sea, palm, playerAvatar } from "./kit3d.js?v=30";
+import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=31";
+import { sfx } from "../../audio.js?v=31";
+import { stage, THREE, ground, box, ball as sphere, mesh, cyl, tree, cloud, sea, palm, playerAvatar } from "./kit3d.js?v=31";
 
 const RINGS = ["#ffffff", "#ffffff", "#2b2b2b", "#2b2b2b", "#3d8bff", "#3d8bff", "#ff4d4d", "#ff4d4d", "#ffd400", "#ffd400"];
 const RELEASE = 2.2;                 // 놓기로 인정하는 당긴 손 속도(어깨너비/초)

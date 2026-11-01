@@ -1,6 +1,6 @@
 // 따라쟁이: 카드 속 자세를 0.6초 유지하면 성공, 2초 안에 해내면 2점
-import { burst, popup, rr, outlinedText } from "../fx.js?v=30";
-import { sfx } from "../audio.js?v=30";
+import { burst, popup, rr, outlinedText } from "../fx.js?v=31";
+import { sfx } from "../audio.js?v=31";
 
 const HOLD = 0.6;
 const ang = (a, b, c) => {
