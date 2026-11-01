@@ -32,7 +32,13 @@ detectorP.catch(() => {});
 
 let state = "setup";
 let sel = [];
-const guestLevels = { guest1: "add10", guest2: "add10" };
+// 고정 선수(지울 수 없음)와 손님 자리. 손님 이름은 이번 접속 동안만 유지
+const FIXED = ["아빠", "엄마", "우영", "연제"];
+const MAX_GUESTS = 6;
+const guests = [{ id: "guest1", n: 1, name: "", level: "add10" }, { id: "guest2", n: 2, name: "", level: "add10" }];
+const guestOf = id => guests.find(g => g.id === id);
+const guestName = g => g.name.trim() || `손님 ${g.n}`;
+FIXED.forEach(n => R.addPlayer(n));
 let slots = [], trackers = [], players = [], insts = [];
 let gameId = "copy";
 let timeLeft = 0, fever = false, readyT = 0, cdT = 0, goT = 0;
@@ -42,7 +48,7 @@ let rankView = { game: "copy", level: "add10" }, rankBackTo = "setup", justSaved
 /* ---------- 설정 불러오기 ---------- */
 const saved = R.getSettings();
 for (const k of ["sfx", "bgm", "tts"]) if (typeof saved[k] === "boolean") settings[k] = saved[k];
-sel = (saved.lastSel || []).filter(id => id.startsWith("guest") || R.players().some(p => p.id === id)).slice(0, 2);
+sel = (saved.lastSel || []).filter(id => !id.startsWith("guest") && R.players().some(p => p.id === id)).slice(0, 2);
 function saveSettings() { R.setSettings({ sfx: settings.sfx, bgm: settings.bgm, tts: settings.tts, lastSel: sel }); }
 
 /* ---------- 화면 크기 ---------- */
@@ -81,19 +87,24 @@ function toast(t) { const el = $("#toast"); el.textContent = t; el.hidden = fals
 
 /* ---------- 1. 선수 고르기 ---------- */
 function allChoices() {
-  return [...R.players().map(p => ({ id: p.id, name: p.name, guest: false })),
-    { id: "guest1", name: "손님 1", guest: true }, { id: "guest2", name: "손님 2", guest: true }];
+  const ps = R.players();
+  const fixed = FIXED.map(n => ps.find(p => p.name === n)).filter(Boolean).map(p => ({ id: p.id, name: p.name, kind: "fixed" }));
+  const others = ps.filter(p => !FIXED.includes(p.name)).map(p => ({ id: p.id, name: p.name, kind: "saved" }));   // 이전에 추가해 둔 선수(지울 수 있음)
+  return [...fixed, ...others, ...guests.map(g => ({ id: g.id, name: guestName(g), kind: "guest" }))];
 }
-const nameOf = id => (allChoices().find(c => c.id === id) || { name: "?" }).name;
-const levelOf = id => id.startsWith("guest") ? guestLevels[id] : ((R.players().find(p => p.id === id) || {}).level || "add10");
+function nameOf(id) { const g = guestOf(id); if (g) return guestName(g); return (R.players().find(p => p.id === id) || { name: "?" }).name; }
+function levelOf(id) { const g = guestOf(id); if (g) return g.level; return (R.players().find(p => p.id === id) || {}).level || "add10"; }
+// 손님은 이름을 적었을 때만 그 이름으로 기록 저장
+function profileOf(id) { const g = guestOf(id); if (!g) return id; return g.name.trim() ? "guest:" + g.name.trim() : null; }
 
-function renderSetup() {
+function renderSetup() { renderChips(); renderSlots(); }
+function renderChips() {
   const chips = $("#chips"); chips.innerHTML = "";
   for (const c of allChoices()) {
     const i = sel.indexOf(c.id);
     const b = document.createElement("button");
-    b.type = "button"; b.className = "chip" + (i >= 0 ? ` picked p${i + 1}` : "") + (c.guest ? " guest" : "");
-    b.innerHTML = `${i >= 0 ? `<span class="badge">${i + 1}P</span>` : ""}<span class="nm">${esc(c.name)}</span>${c.guest ? "" : '<span class="del" aria-label="삭제">×</span>'}`;
+    b.type = "button"; b.className = "chip" + (i >= 0 ? ` picked p${i + 1}` : "") + (c.kind === "guest" ? " guest" : "");
+    b.innerHTML = `${i >= 0 ? `<span class="badge">${i + 1}P</span>` : ""}<span class="nm">${esc(c.name)}</span>${c.kind === "saved" ? '<span class="del" aria-label="삭제">×</span>' : ""}`;
     b.onclick = e => {
       if (e.target.classList.contains("del")) {
         if (confirm(`'${c.name}' 선수를 목록에서 지울까요? 이미 저장된 기록은 순위에 남습니다.`)) { R.removePlayer(c.id); sel = sel.filter(x => x !== c.id); saveSettings(); renderSetup(); }
@@ -103,34 +114,44 @@ function renderSetup() {
       else if (sel.length < 2) sel.push(c.id);
       else { toast("최대 2명까지 함께할 수 있어요"); return; }
       saveSettings(); renderSetup();
+      if (c.kind === "guest" && i < 0) { const inp = $(`#slotRows input[data-guest="${c.id}"]`); if (inp && !guestOf(c.id).name) inp.focus(); }
     };
     chips.appendChild(b);
   }
+  if (guests.length < MAX_GUESTS) {
+    const add = document.createElement("button");
+    add.type = "button"; add.className = "chip addguest"; add.textContent = "+ 손님";
+    add.onclick = () => { const n = Math.max(...guests.map(g => g.n)) + 1; guests.push({ id: "guest" + n, n, name: "", level: "add10" }); renderChips(); };
+    chips.appendChild(add);
+  }
+}
+function renderSlots() {
   const rows = $("#slotRows"); rows.innerHTML = "";
   sel.forEach((id, i) => {
+    const g = guestOf(id);
     const row = document.createElement("div");
     row.className = `slotrow p${i + 1}`;
     const pos = sel.length === 2 ? (i === 0 ? "화면 왼쪽에 서기" : "화면 오른쪽에 서기") : "화면 가운데 서기";
-    row.innerHTML = `<span class="badge">${i + 1}P</span><b class="nm">${esc(nameOf(id))}</b><span class="pos">${pos}</span><label>수학 풍선 <select></select></label>`;
+    const nameEl = g
+      ? `<input class="gname" data-guest="${id}" maxlength="8" placeholder="손님 ${g.n} 이름 입력" value="${esc(g.name)}">`
+      : `<b class="nm">${esc(nameOf(id))}</b>`;
+    row.innerHTML = `<span class="badge">${i + 1}P</span>${nameEl}<span class="pos">${pos}</span><label>수학 풍선 <select></select></label>` +
+      (g ? `<span class="gnote">이름을 적으면 기록이 저장돼요</span>` : "");
+    if (g) {
+      const inp = row.querySelector("input");
+      inp.oninput = () => { g.name = inp.value.slice(0, 8); renderChips(); };
+      inp.onkeydown = e => { if (e.key === "Enter") inp.blur(); };
+    }
     const s = row.querySelector("select");
     for (const [k, v] of Object.entries(LEVELS)) s.add(new Option(v, k));
     s.value = levelOf(id);
-    s.onchange = () => { if (id.startsWith("guest")) guestLevels[id] = s.value; else R.setLevel(id, s.value); };
+    s.onchange = () => { if (g) g.level = s.value; else R.setLevel(id, s.value); };
     rows.appendChild(row);
   });
   const btn = $("#btnStart");
   btn.disabled = sel.length === 0;
   btn.textContent = sel.length === 0 ? "선수를 골라 주세요" : sel.length === 1 ? "혼자 하기 시작" : "둘이 대결 시작";
 }
-
-$("#addForm").onsubmit = e => {
-  e.preventDefault();
-  const inp = $("#newName"), p = R.addPlayer(inp.value);
-  if (!p) return;
-  inp.value = ""; inp.blur();
-  if (!sel.includes(p.id) && sel.length < 2) sel.push(p.id);
-  saveSettings(); renderSetup();
-};
 for (const k of ["tts", "sfx", "bgm"]) {
   const el = $("#opt-" + k); el.checked = settings[k];
   el.onchange = () => { settings[k] = el.checked; saveSettings(); };
@@ -141,7 +162,7 @@ $("#btnReset").onclick = () => { if (confirm("모든 순위 기록을 지울까�
 $("#btnStart").onclick = async () => {
   if (!sel.length) return;
   unlock(); goFullscreen();
-  slots = sel.map((id, i) => ({ id, profileId: id.startsWith("guest") ? null : id, name: nameOf(id), level: levelOf(id), color: SLOT_COLORS[i] }));
+  slots = sel.map((id, i) => ({ id, profileId: profileOf(id), name: nameOf(id), level: levelOf(id), color: SLOT_COLORS[i] }));
   setMsg("카메라를 켜는 중...");
   try { await cam.open(); }
   catch (e) { setMsg(cameraErrorText(e), true); return; }
@@ -313,7 +334,7 @@ function renderResult(results) {
       `<div class="rname">${decided && p.score === top ? "👑 " : ""}${i + 1}P ${esc(p.name)}</div>` +
       `<div class="rscore">${p.score}<small>점</small></div>` +
       (badge ? `<div class="rbadge">${badge}</div>` : "") +
-      `<div class="rmeta">${rec ? `전체 ${rec.rank}위 (기록 ${rec.total}개 중)` : "손님 기록은 저장되지 않아요"}</div>` +
+      `<div class="rmeta">${rec ? `전체 ${rec.rank}위 (기록 ${rec.total}개 중)` : "손님 이름을 적으면 다음부터 기록이 저장돼요"}</div>` +
       `<div class="rmeta">${esc(extra)}${extra ? " · " : ""}최대 콤보 ${p.maxCombo}</div>` +
       `<div class="rmeta">손이 움직인 거리 약 ${meters}m</div>`;
     box.appendChild(col);
