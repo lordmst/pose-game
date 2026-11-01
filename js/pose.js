@@ -112,25 +112,33 @@ export class Tracker {
   get lowerSeen() { return this.lowerT > 0; }
 }
 
-/* ---------- 선수 배정: 태블릿 조작하는 사람 제외 ----------
-   1) 새로 잡을 때: 어깨와 엉덩이가 모두 보이고, 카메라에 너무 가깝지 않은 사람만 선수로 인정
-      (태블릿을 들고 있는 사람은 얼굴·상체만 크게 잡히므로 제외됨)
-   2) 한 번 잡은 선수는 위치를 따라가며 고정 → 다른 사람이 화면에 들어와도 바뀌지 않음
-   3) 고정된 선수가 2초 넘게 안 보이면 해제하고 다시 찾음 */
-export const TOO_CLOSE = 0.45;     // 어깨너비가 화면 높이의 45%를 넘으면 '너무 가까움'
+/* ---------- 선수 배정: '만세'를 한 사람만 선수로 인정 ----------
+   1) 어깨·엉덩이가 보이는 사람이 두 손을 머리 위로 올려 CLAIM_SEC 동안 유지하면 그 자리의 선수가 됨
+      (태블릿을 들고 있는 사람, 구경하는 사람은 만세를 하지 않으므로 선수가 되지 않음)
+   2) 한 번 잡힌 선수는 위치를 따라가며 고정 → 다른 사람이 화면에 들어와도 바뀌지 않음
+   3) 게임 밖(메뉴·자리 잡기)에서는 다른 사람이 같은 구역에서 만세하면 선수가 바뀜. 게임 중에는 안 바뀜
+   4) 선수가 2초 넘게 안 보이면 해제 → 다시 만세하면 인식 */
+export const CLAIM_SEC = 0.7;
 const LOST_SEC = 2.0;
 export class Assigner {
-  constructor(n) { this.n = n; this.locks = Array.from({ length: n }, () => null); this.ignored = []; }
-  reset() { this.locks = this.locks.map(() => null); }
-  assign(raws, cam, view, dt, visSupported) {
+  constructor(n) {
+    this.n = n; this.locks = Array.from({ length: n }, () => null);
+    this.claims = Array.from({ length: n }, () => ({ t: 0, x: 0, y: 0, sc: 0 }));   // 만세 진행 중인 사람
+    this.ignored = [];
+  }
+  reset() { this.locks = this.locks.map(() => null); this.claims.forEach(c => { c.t = 0; }); }
+  claimProgress(i) { return Math.min(1, this.claims[i].t / CLAIM_SEC); }
+  assign(raws, cam, view, dt, visSupported, allowTakeover) {
     const vis = p => p.x > -0.02 && p.x < 1.02 && p.y > -0.02 && p.y < 1.02 && (!visSupported || (p.visibility == null ? 1 : p.visibility) > VIS);
     const cands = raws.map(r => {
       const a = cam.toScreen(r[11]), b = cam.toScreen(r[12]);
-      const sc = Math.hypot(a.x - b.x, a.y - b.y), near = sc > view.H * TOO_CLOSE;
-      return { r, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, sc, near, ok: !near && [11, 12, 23, 24].every(i => vis(r[i])), used: false };
+      const body = [11, 12, 23, 24].every(i => vis(r[i]));
+      // 만세: 두 손목이 코보다 위 (영상 좌표는 y가 작을수록 위)
+      const up = body && [0, 15, 16].every(i => vis(r[i])) && r[15].y < r[0].y && r[16].y < r[0].y;
+      return { r, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, sc: Math.hypot(a.x - b.x, a.y - b.y), up, used: false };
     });
     const out = this.locks.map(() => null);
-    // 1) 이미 잡아 둔 선수 따라가기 (직전 위치에서 가장 가까운 사람)
+    // 1) 이미 잡힌 선수 따라가기
     this.locks.forEach((L, i) => {
       if (!L) return;
       let best = null, bd = Infinity;
@@ -142,22 +150,30 @@ export class Assigner {
       if (best) { best.used = true; out[i] = best.r; L.x = best.cx; L.y = best.cy; L.sc = L.sc * 0.8 + best.sc * 0.2; L.lostT = 0; }
       else if ((L.lostT += dt) > LOST_SEC) this.locks[i] = null;
     });
-    // 2) 빈자리 새로 잡기: 자격 있는 사람 중 자기 구역 가운데에 가장 가까운 사람
-    this.locks.forEach((L, i) => {
-      if (L) return;
-      const x0 = view.W * i / this.n, x1 = view.W * (i + 1) / this.n, zc = (x0 + x1) / 2;
+    // 2) 만세 하는 사람 찾기 (빈자리, 또는 게임 밖이면 선수 교체)
+    this.claims.forEach((C, i) => {
+      if (this.locks[i] && !allowTakeover) { C.t = 0; return; }
+      const x0 = view.W * i / this.n, x1 = view.W * (i + 1) / this.n;
       let best = null, bd = Infinity;
       for (const c of cands) {
-        if (c.used || !c.ok) continue;
+        if (c.used || !c.up) continue;
         if (this.n === 2 && (c.cx < x0 || c.cx > x1)) continue;
-        const d = Math.abs(c.cx - zc);
+        const d = C.t > 0 ? Math.hypot(c.cx - C.x, c.cy - C.y) : Math.abs(c.cx - (x0 + x1) / 2);
         if (d < bd) { best = c; bd = d; }
       }
-      if (best) { best.used = true; out[i] = best.r; this.locks[i] = { x: best.cx, y: best.cy, sc: best.sc, lostT: 0 }; }
+      if (!best) { C.t = Math.max(0, C.t - dt * 2); return; }
+      if (C.t > 0 && Math.hypot(best.cx - C.x, best.cy - C.y) > Math.max(C.sc, view.U * 0.1)) C.t = 0;   // 다른 사람이면 처음부터
+      C.t += dt; C.x = best.cx; C.y = best.cy; C.sc = best.sc;
+      if (C.t >= CLAIM_SEC) {
+        best.used = true; out[i] = best.r; C.t = 0;
+        this.locks[i] = { x: best.cx, y: best.cy, sc: best.sc, lostT: 0, fresh: true };
+      }
     });
-    this.ignored = cands.filter(c => !c.used).map(c => ({ cx: c.cx, cy: c.cy, sc: c.sc, near: c.near }));
+    this.ignored = cands.filter(c => !c.used).map(c => ({ cx: c.cx, cy: c.cy, sc: c.sc, up: c.up }));
     return out;
   }
+  // 이번 프레임에 새로 잡힌 선수 번호 목록 (효과음용)
+  takeFresh() { const f = []; this.locks.forEach((L, i) => { if (L && L.fresh) { f.push(i); L.fresh = false; } }); return f; }
 }
 
 /* ---------- 가상 선수 (점검용) ---------- */
@@ -165,7 +181,7 @@ class SimDetector {
   constructor(n) {
     this.people = Array.from({ length: n }, (_, i) => new SimPerson(n === 1 ? 0.5 : (i === 0 ? 0.72 : 0.28)));
     // &op=1 : 카메라 바로 앞에서 태블릿을 조작하는 사람(크게 보이고 엉덩이는 화면 밖)을 맨 앞에 추가
-    if (/op=1/.test(location.search)) this.op = new SimPerson(0.45, 0.26, 0.7);
+    if (/op=1/.test(location.search)) { this.op = new SimPerson(0.45, 0.26, 0.7); this.op.op = true; }
   }
   detect(video, ts) { const t = ts / 1000; const L = this.people.map(p => p.landmarks(t)); if (this.op) L.unshift(this.op.landmarks(t)); return L; }
 }
@@ -174,7 +190,10 @@ class SimPerson {
   landmarks(t) {
     const dt = this.lastT == null ? 0.016 : Math.min(0.1, Math.max(0.001, t - this.lastT)); this.lastT = t;
     const k = this.sw / 0.07;
+    if (this.t0 == null) this.t0 = t;
+    const cheer = !this.op && !/nocheer=1/.test(location.search) && t - this.t0 < 1.5;           // 처음 1.5초는 만세(선수 인식용)
     for (const h of this.hands) {
+      if (cheer) { h.x = h.tx = this.cx + (h === this.hands[0] ? 0.05 : -0.05); h.y = h.ty = this.sy - 0.25 * k; h.next = t; continue; }
       if (t > h.next) { h.tx = this.cx + (Math.random() - 0.5) * 0.44 * k; h.ty = this.sy - 0.2 * k + Math.random() * 0.72 * k; h.sp = Math.random() < 0.4 ? 3.2 : 0.6; h.next = t + 0.3 + Math.random() * 0.9; }
       const dx = h.tx - h.x, dy = h.ty - h.y, d = Math.hypot(dx, dy), step = Math.min(d, h.sp * dt);
       if (d > 1e-4) { h.x += dx / d * step; h.y += dy / d * step; }

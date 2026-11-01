@@ -160,3 +160,4 @@ body:not(.live) .overlay { background: var(--y); }
 #toast { position: absolute; left: 50%; bottom: 6vmin; transform: translateX(-50%); z-index: 40; background: var(--b); color: #fff; padding: 12px 22px; border-radius: 30px; font-size: 18px; max-width: 90vw; text-align: center; }
 .pill.go5 { background: var(--b); color: #fff; }
 .readybar .opnote { font-size: clamp(12px, 1.9vmin, 17px); opacity: .7; }
+.badge-lg.off { background: linear-gradient(90deg, var(--c) calc(var(--k, 0) * 100%), rgba(255, 255, 255, .88) 0); color: #222; text-shadow: 0 0 3px #fff, 0 0 3px #fff; border-color: var(--c); border-style: dashed; }

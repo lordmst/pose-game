@@ -1,12 +1,12 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=6";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=6";
-import * as R from "./records.js?v=6";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=6";
-import copy from "./games/copy.js?v=6";
-import math, { LEVELS } from "./games/math.js?v=6";
-import ice from "./games/ice.js?v=6";
-import star from "./games/star.js?v=6";
+import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=7";
+import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=7";
+import * as R from "./records.js?v=7";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=7";
+import copy from "./games/copy.js?v=7";
+import math, { LEVELS } from "./games/math.js?v=7";
+import ice from "./games/ice.js?v=7";
+import star from "./games/star.js?v=7";
 
 const GAMES = { copy, math, ice, star };
 const GAME_ORDER = ["copy", "math", "ice", "star"];
@@ -193,8 +193,21 @@ function backToSetup() {
 
 /* ---------- 2. 게임 고르기 ---------- */
 function renderSelect() {
-  const el = $("#selPlayers"); el.innerHTML = "";
-  slots.forEach((s, i) => { const b = document.createElement("span"); b.className = "badge-lg"; b.style.setProperty("--c", s.color); b.textContent = `${i + 1}P ${s.name}`; el.appendChild(b); });
+  const el = $("#selPlayers"); el.innerHTML = ""; selCache = "";
+  slots.forEach((s, i) => { const b = document.createElement("span"); b.className = "badge-lg"; b.style.setProperty("--c", s.color); el.appendChild(b); });
+  updateSelBadges();
+}
+let selCache = "";
+function updateSelBadges() {
+  // 만세 진행 정도를 배지 안 막대로 표시 (게임 고르기 화면에서는 카드에 가려 링이 안 보임)
+  $$("#selPlayers .badge-lg").forEach((b, i) => b.style.setProperty("--k", assigner && !(trackers[i] && trackers[i].present) ? assigner.claimProgress(i).toFixed(2) : 0));
+  const st = trackers.map(tr => tr.present ? 1 : 0).join("");
+  if (st === selCache) return; selCache = st;
+  $$("#selPlayers .badge-lg").forEach((b, i) => {
+    const on = trackers[i] && trackers[i].present;
+    b.classList.toggle("off", !on);
+    b.textContent = `${i + 1}P ${slots[i].name} · ${on ? "인식됨" : "만세 해 주세요"}`;
+  });
 }
 $$(".card[data-game]").forEach(c => { c.onclick = () => { unlock(); chooseGame(c.dataset.game); }; });
 $("#btnRank").onclick = () => openRanking("select");
@@ -207,14 +220,16 @@ function chooseGame(id) {
   $("#readyTitle").textContent = `${g.icon} ${g.title}`;
   $("#readyHow").textContent = g.how;
   $("#readyHint").textContent = slots.length === 2
-    ? "1P는 화면 왼쪽, 2P는 오른쪽에 서서 머리부터 허리, 두 팔이 다 보이게 해 주세요"
-    : "화면 가운데에 서서 머리부터 허리, 두 팔이 다 보이게 해 주세요";
+    ? "1P는 화면 왼쪽, 2P는 오른쪽에 서서 두 손을 머리 위로 올려(만세) 주세요"
+    : "화면 가운데에 서서 두 손을 머리 위로 올려(만세) 주세요";
   readyT = 0; readyCache = "";
-  if (assigner) assigner.reset();      // 게임마다 선수를 새로 확인 (조작하던 사람이 잘못 잡혀 있었어도 풀림)
   setState("ready");
 }
 function renderReadyStat(ok) {
-  const html = slots.map((s, i) => `<span class="rs${ok[i] ? " ok" : ""}" style="--c:${s.color}">${i + 1}P ${esc(s.name)} · ${ok[i] ? "준비 완료" : "몸이 다 안 보여요"}</span>`).join("");
+  const html = slots.map((s, i) => {
+    const msg = ok[i] ? "준비 완료" : !trackers[i].present ? "만세 해 주세요" : "몸이 다 안 보여요";
+    return `<span class="rs${ok[i] ? " ok" : ""}" style="--c:${s.color}">${i + 1}P ${esc(s.name)} · ${msg}</span>`;
+  }).join("");
   if (html !== readyCache) { $("#readyStat").innerHTML = html; readyCache = html; }
 }
 $("#btnGo").onclick = () => beginCountdown(3);
@@ -389,8 +404,14 @@ function frame(now) {
   let raws = [];
   if (detector && cam.ready) { try { raws = detector.detect(video, now); } catch (e) { console.warn(e); } }
   if (!visSupported && raws.some(r => r.some(p => p.visibility > 0.01))) visSupported = true;
-  const as = assigner ? assigner.assign(raws, cam, view, dt, visSupported) : [];
+  const inGame = state === "play" || state === "countdown";
+  const as = assigner ? assigner.assign(raws, cam, view, dt, visSupported, !inGame) : [];
   trackers.forEach((tr, i) => tr.update(as[i], cam, dt, t, visSupported));
+  if (assigner) for (const i of assigner.takeFresh()) {
+    const L = assigner.locks[i];
+    sfx.select(); popup(L.x, L.y, `${i + 1}P ${slots[i].name} 인식!`, { size: view.U * 0.06, color: "#fff", stroke: slots[i].color, life: 1.2 });
+  }
+  if (state === "select") updateSelBadges();
   tick(dt);
   updateFx(dt);
   draw(t);
@@ -399,7 +420,7 @@ function frame(now) {
 }
 function tick(dt) {
   if (state === "ready") {
-    const ok = trackers.map(tr => tr.fullBody);
+    const ok = trackers.map(tr => tr.present && tr.fullBody);
     readyT = ok.every(Boolean) ? readyT + dt : 0;
     renderReadyStat(ok);
     if (readyT >= 1.2) beginCountdown(3);
@@ -460,22 +481,33 @@ function drawSkeletons() {
     }
     else if (slots.length === 2) outlinedText(ctx, `${i + 1}P`, p[0].x, p[0].y - tr.scale * 0.6, view.U * 0.04, "#fff", c);
   });
-  // 선수로 인정되지 않은 사람(태블릿 조작하는 사람 등) 표시
-  if (assigner && (state === "ready" || state === "countdown")) {
-    for (const o of assigner.ignored) {
-      const y = Math.max(view.H * 0.36, Math.min(view.H * 0.74, o.cy));
-      outlinedText(ctx, o.near ? "제외 · 카메라에 너무 가까워요" : "제외", Math.max(view.U * 0.2, Math.min(view.W - view.U * 0.2, o.cx)), y, view.U * 0.04, "#eee", "#555");
-    }
+  if (!assigner || !(state === "ready" || state === "countdown" || state === "select")) return;
+  // 만세 인식 진행 링
+  assigner.claims.forEach((C, i) => {
+    const k = assigner.claimProgress(i);
+    if (k <= 0) return;
+    const r = Math.max(view.U * 0.06, C.sc * 0.7);
+    ctx.lineWidth = view.U * 0.014; ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.beginPath(); ctx.arc(C.x, C.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = slots[i].color; ctx.beginPath(); ctx.arc(C.x, C.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.stroke();
+    outlinedText(ctx, `${i + 1}P ${slots[i].name} 인식 중`, C.x, C.y + r + view.U * 0.04, view.U * 0.04, "#fff", slots[i].color);
+  });
+  // 선수가 아닌 사람: 빈자리가 있으면 참가 방법, 다 찼으면 '제외'
+  const open = assigner.locks.some(L => !L);
+  for (const o of assigner.ignored) {
+    if (o.up) continue;
+    const y = Math.max(view.H * 0.36, Math.min(view.H * 0.74, o.cy));
+    outlinedText(ctx, open ? "선수는 만세!" : "제외", Math.max(view.U * 0.2, Math.min(view.W - view.U * 0.2, o.cx)), y, view.U * 0.04, "#eee", "#555");
   }
 }
 function drawReady() {
   const { H, U } = view;
   zones.forEach((z, i) => {
-    const ok = trackers[i] && trackers[i].fullBody;
+    const ok = trackers[i] && trackers[i].present && trackers[i].fullBody;
     const w = Math.min(z.w * 0.6, U * 0.75), x = z.cx - w / 2, y = H * 0.24, h = H * 0.72;
     ctx.save(); ctx.setLineDash(ok ? [] : [U * 0.025, U * 0.018]); ctx.lineWidth = U * 0.01;
     ctx.strokeStyle = ok ? "#2fd36b" : "rgba(255,255,255,.85)"; rr(ctx, x, y, w, h, U * 0.04); ctx.stroke(); ctx.restore();
-    outlinedText(ctx, ok ? "좋아요!" : `${i + 1}P ${slots[i].name} 여기`, z.cx, y + h - U * 0.05, U * 0.05, "#fff", ok ? "#1d8f47" : slots[i].color);
+    const label = ok ? "좋아요!" : trackers[i] && trackers[i].present ? "몸이 다 보이게" : `${i + 1}P ${slots[i].name} 여기서 만세!`;
+    outlinedText(ctx, label, z.cx, y + h - U * 0.05, U * 0.05, "#fff", ok ? "#1d8f47" : slots[i].color);
   });
 }
 function drawLost() {
@@ -483,7 +515,7 @@ function drawLost() {
     if (tr.lostT < 0.6) return;
     const z = zones[i];
     outlinedText(ctx, `${i + 1}P ${slots[i].name}`, z.cx, view.H * 0.45, view.U * 0.06, "#fff", slots[i].color);
-    outlinedText(ctx, "화면 안으로 들어와요", z.cx, view.H * 0.53, view.U * 0.045, "#fff", "#333");
+    outlinedText(ctx, "화면 안으로 들어와서 만세!", z.cx, view.H * 0.53, view.U * 0.045, "#fff", "#333");
   });
 }
 
