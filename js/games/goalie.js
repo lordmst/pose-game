@@ -1,6 +1,6 @@
 // 골키퍼: 멀리서 날아오는 공을 손으로 막기. 공이 도착할 자리에 그림자가 미리 보임
-import { burst, popup, shake, outlinedText, FONT, rnd } from "../fx.js?v=15";
-import { sfx } from "../audio.js?v=15";
+import { burst, popup, shake, outlinedText, FONT, rnd } from "../fx.js?v=16";
+import { sfx } from "../audio.js?v=16";
 
 const FLIGHT = 1.5;    // 공이 날아오는 시간(초, 보통)
 

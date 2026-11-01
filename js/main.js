@@ -1,21 +1,21 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=15";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=15";
-import * as R from "./records.js?v=15";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=15";
-import copy from "./games/copy.js?v=15";
-import math from "./games/math.js?v=15";
-import ice from "./games/ice.js?v=15";
-import star from "./games/star.js?v=15";
-import fruit from "./games/fruit.js?v=15";
-import mole from "./games/mole.js?v=15";
-import wall from "./games/wall.js?v=15";
-import rhythm from "./games/rhythm.js?v=15";
-import goalie from "./games/goalie.js?v=15";
-import word from "./games/word.js?v=15";
-import clockGame from "./games/clock.js?v=15";
-import { DIFFS, diffOf } from "./difficulty.js?v=15";
-import { startDemo } from "./demo.js?v=15";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=16";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes } from "./audio.js?v=16";
+import * as R from "./records.js?v=16";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=16";
+import copy from "./games/copy.js?v=16";
+import math from "./games/math.js?v=16";
+import ice from "./games/ice.js?v=16";
+import star from "./games/star.js?v=16";
+import fruit from "./games/fruit.js?v=16";
+import mole from "./games/mole.js?v=16";
+import wall from "./games/wall.js?v=16";
+import rhythm from "./games/rhythm.js?v=16";
+import goalie from "./games/goalie.js?v=16";
+import word from "./games/word.js?v=16";
+import clockGame from "./games/clock.js?v=16";
+import { DIFFS, diffOf } from "./difficulty.js?v=16";
+import { startDemo } from "./demo.js?v=16";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, word, clock: clockGame };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "goalie", "math", "word", "clock"];
@@ -63,8 +63,9 @@ let rankView = { game: "copy", level: null }, rankBackTo = "setup", justSaved = 
 /* ---------- 설정 불러오기 ---------- */
 const saved = R.getSettings();
 for (const k of ["sfx", "bgm", "tts"]) if (typeof saved[k] === "boolean") settings[k] = saved[k];
+if (saved.vol) for (const k of ["sfx", "bgm", "voice"]) if (typeof saved.vol[k] === "number") settings.vol[k] = saved.vol[k];
 sel = (saved.lastSel || []).filter(id => !id.startsWith("guest") && R.players().some(p => p.id === id)).slice(0, 2);
-function saveSettings() { R.setSettings({ ...R.getSettings(), sfx: settings.sfx, bgm: settings.bgm, tts: settings.tts, lastSel: sel }); }
+function saveSettings() { R.setSettings({ ...R.getSettings(), sfx: settings.sfx, bgm: settings.bgm, tts: settings.tts, vol: { ...settings.vol }, lastSel: sel }); }
 
 /* ---------- 화면 크기 ---------- */
 function resize() {
@@ -92,6 +93,7 @@ function setState(s) {
   $$(".screen").forEach(el => el.classList.toggle("on", el.id === SCREENS[s]));
   const inGame = s === "countdown" || s === "play";
   $("#hud").hidden = !inGame; $("#btnQuit").hidden = !inGame;
+  $("#btnVoice").hidden = !(inGame || s === "demo" || s === "ready");
   if (s !== "countdown") $("#cd").hidden = true;
   $$("[data-hand]").forEach(el => { el._d = 0; el.style.setProperty("--p", 0); el.classList.remove("hover"); });
   uiCool = 0.7;
@@ -182,10 +184,37 @@ function renderSlots() {
   btn.disabled = sel.length === 0;
   btn.textContent = sel.length === 0 ? "선수를 골라 주세요" : sel.length === 1 ? "혼자 하기 시작" : "둘이 대결 시작";
 }
-for (const k of ["tts", "sfx", "bgm"]) {
-  const el = $("#opt-" + k); el.checked = settings[k];
-  el.onchange = () => { settings[k] = el.checked; saveSettings(); };
+/* ---------- 소리 크기 ---------- */
+const VOL_KEY = { tts: "voice", sfx: "sfx", bgm: "bgm" };
+function syncSoundUI() {
+  for (const k of ["tts", "sfx", "bgm"]) { $("#opt-" + k).checked = settings[k]; $("#vol-" + VOL_KEY[k]).value = Math.round(settings.vol[VOL_KEY[k]] * 100); }
+  updateVoiceBtn();
 }
+for (const k of ["tts", "sfx", "bgm"]) {
+  const el = $("#opt-" + k), sl = $("#vol-" + VOL_KEY[k]);
+  el.onchange = () => { settings[k] = el.checked; if (k === "tts" && !el.checked) stopSpeak(); applyVolumes(); saveSettings(); updateVoiceBtn(); };
+  sl.oninput = () => { settings.vol[VOL_KEY[k]] = sl.value / 100; if (sl.value > 0 && !settings[k]) { settings[k] = true; el.checked = true; } applyVolumes(); };
+  // 손을 떼면 그 크기로 들려줌
+  sl.onchange = () => {
+    saveSettings(); updateVoiceBtn(); unlock(); applyVolumes();
+    if (k === "tts") speak("이 크기로 읽어 줄게요"); else if (k === "sfx") sfx.catch(4); else { bgm.stop(); bgm.start(); setTimeout(() => { if (state === "setup") bgm.stop(); }, 1800); }
+  };
+}
+// 게임 중·설명 중 음성 크기 바로 바꾸기: 크게 → 보통 → 작게 → 끔
+const VOICE_STEPS = [{ v: 1, label: "크게" }, { v: 0.6, label: "보통" }, { v: 0.3, label: "작게" }, { v: 0, label: "끔" }];
+function updateVoiceBtn() {
+  const off = !settings.tts || settings.vol.voice === 0;
+  const cur = off ? VOICE_STEPS[3] : VOICE_STEPS.reduce((a, b) => Math.abs(b.v - settings.vol.voice) < Math.abs(a.v - settings.vol.voice) ? b : a);
+  $("#btnVoice").textContent = `${off ? "🔇" : "🔊"} 음성 ${cur.label}`;
+}
+$("#btnVoice").onclick = () => {
+  const off = !settings.tts || settings.vol.voice === 0;
+  const i = off ? 3 : VOICE_STEPS.findIndex(s => Math.abs(s.v - settings.vol.voice) < 0.05);
+  const next = VOICE_STEPS[(i < 0 ? 0 : i + 1) % VOICE_STEPS.length];
+  if (next.v === 0) { settings.tts = false; stopSpeak(); } else { settings.tts = true; settings.vol.voice = next.v; speak(`음성 ${next.label}`); }
+  saveSettings(); syncSoundUI();
+};
+syncSoundUI();
 $("#btnRankSetup").onclick = () => openRanking("setup");
 $("#btnReset").onclick = () => { if (confirm("모든 순위 기록을 지울까요? 되돌릴 수 없습니다.")) { R.clearRecords(); toast("기록을 모두 지웠어요"); } };
 

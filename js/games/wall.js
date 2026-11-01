@@ -1,7 +1,7 @@
 // 벽 통과: 사람 모양 구멍이 뚫린 벽이 다가옴. 벽이 닿을 때 구멍 모양대로 자세를 잡고 있으면 통과
-import { burst, popup, shake, outlinedText } from "../fx.js?v=15";
-import { sfx } from "../audio.js?v=15";
-import { POSES, figData, poseMatches } from "./copy.js?v=15";
+import { burst, popup, shake, outlinedText } from "../fx.js?v=16";
+import { sfx } from "../audio.js?v=16";
+import { POSES, figData, poseMatches } from "./copy.js?v=16";
 
 const TRAVEL = 4.2;    // 벽이 멀리서 닿기까지 걸리는 시간(초, 보통)
 const GAP = 0.9;       // 벽 사이 쉬는 시간

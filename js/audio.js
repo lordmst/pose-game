@@ -1,5 +1,13 @@
 // 효과음 · 배경음악 · 음성 (외부 파일 없이 브라우저에서 합성)
-export const settings = { sfx: true, bgm: true, tts: true };
+// 켜기/끄기와 크기(0~1)를 따로 둠. 음성은 기기 음성 엔진으로 나가므로 크기는 말할 때마다 전달
+export const settings = { sfx: true, bgm: true, tts: true, vol: { sfx: 0.8, bgm: 0.5, voice: 0.8 } };
+let sfxBus = null, musicBus = null;
+export function applyVolumes() {
+  if (!ac) return;
+  const t = ac.currentTime;
+  sfxBus.gain.setTargetAtTime(settings.sfx ? settings.vol.sfx : 0, t, 0.03);
+  musicBus.gain.setTargetAtTime(settings.bgm ? settings.vol.bgm * 1.6 : 0, t, 0.03);
+}
 let ac = null, master = null, noiseBuf = null, bgmGain = null;
 
 export function unlock() {
@@ -7,6 +15,9 @@ export function unlock() {
     if (!ac) {
       ac = new (window.AudioContext || window.webkitAudioContext)();
       master = ac.createGain(); master.gain.value = 0.9; master.connect(ac.destination);
+      sfxBus = ac.createGain(); sfxBus.connect(master);        // 효과음 크기
+      musicBus = ac.createGain(); musicBus.connect(master);    // 배경음악·리듬 반주 크기
+      applyVolumes();
       const len = ac.sampleRate; noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
       const d = noiseBuf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     }
@@ -23,13 +34,13 @@ function tone(freq, t0, dur, { type = "sine", vol = 0.3, slide = 0, attack = 0.0
   g.gain.setValueAtTime(0.0001, t0);
   g.gain.exponentialRampToValueAtTime(vol, t0 + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  o.connect(g); g.connect(dest || master); o.start(t0); o.stop(t0 + dur + 0.03);
+  o.connect(g); g.connect(dest || sfxBus); o.start(t0); o.stop(t0 + dur + 0.03);
 }
 function noise(t0, dur, { vol = 0.3, type = "bandpass", freq = 1000, q = 1, dest } = {}) {
   const s = ac.createBufferSource(); s.buffer = noiseBuf;
   const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
   const g = ac.createGain(); g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  s.connect(f); f.connect(g); g.connect(dest || master); s.start(t0, Math.random() * 0.5); s.stop(t0 + dur + 0.03);
+  s.connect(f); f.connect(g); g.connect(dest || sfxBus); s.start(t0, Math.random() * 0.5); s.stop(t0 + dur + 0.03);
 }
 const midi = n => 440 * Math.pow(2, (n - 69) / 12);
 const PENTA = [0, 2, 4, 7, 9];
@@ -79,7 +90,7 @@ function schedule() {
 export const bgm = {
   start() {
     if (!settings.bgm || !ac || timer) return;
-    bgmGain = ac.createGain(); bgmGain.gain.value = 0.55; bgmGain.connect(master);
+    bgmGain = ac.createGain(); bgmGain.gain.value = 0.55; bgmGain.connect(musicBus);
     step = 0; nextT = ac.currentTime + 0.05; timer = setInterval(schedule, 25);
   },
   stop() {
@@ -94,7 +105,7 @@ export function speak(text, queue = false, lang = "ko-KR") {
   if (!settings.tts || !("speechSynthesis" in window)) return;
   try {
     if (!queue) speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.lang = lang; u.rate = lang === "ko-KR" ? 1.0 : 0.8;
+    const u = new SpeechSynthesisUtterance(text); u.lang = lang; u.rate = lang === "ko-KR" ? 1.0 : 0.8; u.volume = settings.vol.voice;   // 아이폰·아이패드는 크기 지정이 무시됨
     speechSynthesis.speak(u);
   } catch (e) {}
 }
@@ -127,7 +138,7 @@ export const rhythm = {
     rSpb = 60 / bpm; rSeed = 1 + Math.floor(Math.random() * 1e6);
     rStart = clock() + 0.15;
     if (ac && (settings.bgm || settings.sfx)) {
-      rGain = ac.createGain(); rGain.gain.value = 0.6; rGain.connect(master);
+      rGain = ac.createGain(); rGain.gain.value = 0.6; rGain.connect(settings.bgm ? musicBus : sfxBus);   // 배경음악을 꺼도 박자는 들리게
       rStep = 0; rNext = rStart; rTimer = setInterval(rSchedule, 25);
     }
     return rStart;

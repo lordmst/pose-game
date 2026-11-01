@@ -1,6 +1,6 @@
 // 리듬 박자: 반주에 맞춰 위에서 내려오는 음표가 동그라미에 닿는 순간 손을 넣기
-import { burst, popup, outlinedText, FONT } from "../fx.js?v=15";
-import { sfx, rhythm, clock } from "../audio.js?v=15";
+import { burst, popup, outlinedText, FONT } from "../fx.js?v=16";
+import { sfx, rhythm, clock } from "../audio.js?v=16";
 
 const BPM = 100;
 const PERFECT = 0.09, GOOD = 0.22;     // 판정 시간 폭(초)

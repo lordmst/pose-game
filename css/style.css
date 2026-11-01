@@ -207,3 +207,11 @@ body:not(.live) .overlay { background: var(--y); }
 .slotrow .lvls label { margin-left: 0; }
 .cards.many { display: grid; grid-template-columns: repeat(4, auto); justify-content: center; }
 @media (max-width: 640px) { .cards.many { grid-template-columns: repeat(3, auto); } }
+
+/* 소리 크기 */
+.opts.vols { flex-direction: column; align-items: stretch; gap: 8px; width: min(520px, 100%); margin: 0 auto; }
+.opts .vol { display: grid; grid-template-columns: 24px 9em 1fr; align-items: center; gap: 10px; font-size: 17px; }
+.vol span { white-space: nowrap; }
+.vol input[type=range] { width: 100%; accent-color: var(--b); }
+.volnote { font-size: 13px; opacity: .65; text-align: center; }
+#btnVoice { position: absolute; right: max(12px, 1.6vmin); bottom: max(12px, 1.6vmin); z-index: 16; padding: 8px 16px; border-radius: 20px; background: rgba(255, 255, 255, .88); border: 3px solid var(--b); font-size: 16px; }
