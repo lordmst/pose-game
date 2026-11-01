@@ -1,0 +1,151 @@
+// 카메라 · 자세 인식 · 선수별 손 추적
+const MP_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+const VIS = 0.5;                 // 이 값보다 신뢰도가 낮은 관절은 '안 보임'으로 처리
+
+// ?sim=1 / ?sim=2 : 카메라 없이 가상 선수로 동작 (개발·점검용)
+export const SIM = (() => { const m = location.search.match(/sim=(\d)/); return m ? Math.min(2, +m[1]) : 0; })();
+
+export async function createDetector() {
+  if (SIM) return new SimDetector(SIM);
+  const { PoseLandmarker, FilesetResolver } = await import(MP_URL);
+  const vision = await FilesetResolver.forVisionTasks(MP_URL + "/wasm");
+  const opts = delegate => ({
+    baseOptions: { modelAssetPath: MODEL, delegate },
+    runningMode: "VIDEO", numPoses: 2,
+    minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.5,
+  });
+  let lm;
+  try { lm = await PoseLandmarker.createFromOptions(vision, opts("GPU")); }
+  catch (e) { lm = await PoseLandmarker.createFromOptions(vision, opts("CPU")); }
+  let lastTs = 0;
+  return {
+    detect(video, ts) {
+      if (ts <= lastTs) ts = lastTs + 1;
+      lastTs = ts;
+      return lm.detectForVideo(video, ts).landmarks || [];
+    },
+  };
+}
+
+export class Camera {
+  constructor(video) { this.video = video; this.stream = null; this.vw = 1280; this.vh = 720; this.m = { s: 1, ox: 0, oy: 0, W: 0 }; this.sim = !!SIM; }
+  async open() {
+    if (this.sim) return;
+    let err = null;
+    // Safari는 세부 해상도 조건을 거부하는 경우가 있어 단계적으로 완화
+    for (const c of [{ facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, { facingMode: "user" }, true]) {
+      try { this.stream = await navigator.mediaDevices.getUserMedia({ video: c, audio: false }); break; }
+      catch (e) { err = e; if (e && e.name === "NotAllowedError") break; }
+    }
+    if (!this.stream) throw err || new Error("camera");
+    this.video.srcObject = this.stream;
+    await new Promise(r => { if (this.video.readyState >= 1) r(); else this.video.onloadedmetadata = () => r(); });
+    await this.video.play().catch(() => {});
+  }
+  close() { if (this.stream) this.stream.getTracks().forEach(t => t.stop()); this.stream = null; this.video.srcObject = null; }
+  get ready() { return this.sim || (this.video.readyState >= 2 && this.video.videoWidth > 0); }
+  layout(W, H) {
+    if (!this.sim && this.video.videoWidth) { this.vw = this.video.videoWidth; this.vh = this.video.videoHeight; }
+    const s = Math.max(W / this.vw, H / this.vh);   // 화면을 꽉 채우도록(넘치는 부분은 잘림)
+    this.m = { s, ox: (W - this.vw * s) / 2, oy: (H - this.vh * s) / 2, W };
+  }
+  // 영상 좌표(0~1) → 화면 좌표(px), 거울처럼 좌우 반전
+  toScreen(p) { const m = this.m; return { x: m.W - (m.ox + p.x * this.vw * m.s), y: m.oy + p.y * this.vh * m.s }; }
+  draw(ctx, W, H) {
+    if (this.sim) {
+      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#5b6f80"); g.addColorStop(1, "#2b3540");
+      ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40); return;
+    }
+    if (!this.ready) { ctx.fillStyle = "#111"; ctx.fillRect(0, 0, W, H); return; }
+    const m = this.m;
+    ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1);
+    ctx.drawImage(this.video, m.ox, m.oy, this.vw * m.s, this.vh * m.s);
+    ctx.restore();
+  }
+}
+
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+export class Hand {
+  constructor() { this.vis = false; this.x = 0; this.y = 0; this.vx = 0; this.vy = 0; this.speed = 0; this.bodySpeed = 0; this.hist = []; }
+  lose() { this.vis = false; this.hist.length = 0; this.speed = 0; this.bodySpeed = 0; this.vx = this.vy = 0; }
+  update(x, y, t, dt, scale) {
+    if (!this.vis) { this.x = x; this.y = y; this.hist.length = 0; }
+    else { const a = 1 - Math.exp(-dt / 0.035); this.x += (x - this.x) * a; this.y += (y - this.y) * a; }   // 떨림 완화
+    this.vis = true;
+    this.hist.push({ t, x: this.x, y: this.y });
+    while (this.hist.length > 2 && t - this.hist[1].t >= 0.1) this.hist.shift();     // 최근 0.1초 구간으로 속도 계산
+    const o = this.hist[0], d = t - o.t;
+    if (d > 0.02) { this.vx = (this.x - o.x) / d; this.vy = (this.y - o.y) / d; } else { this.vx = this.vy = 0; }
+    this.speed = Math.hypot(this.vx, this.vy);
+    this.bodySpeed = this.speed / scale;       // 어깨너비/초 단위 → 카메라와의 거리에 상관없이 비교 가능
+  }
+}
+
+export class Tracker {
+  constructor(slot) { this.slot = slot; this.pts = null; this.present = false; this.lostT = 9; this.hands = [new Hand(), new Hand()]; this.scale = 0; this.fullBody = false; this.lowerT = 0; this.meters = 0; }
+  update(raw, cam, dt, t, visSupported) {
+    if (!raw) { this.present = false; this.lostT += dt; this.pts = null; this.fullBody = false; this.hands.forEach(h => h.lose()); this.lowerT = Math.max(0, this.lowerT - dt); return; }
+    this.present = true; this.lostT = 0;
+    const pts = raw.map(p => {
+      const s = cam.toScreen(p);
+      const inFrame = p.x > -0.02 && p.x < 1.02 && p.y > -0.02 && p.y < 1.02;
+      s.v = inFrame && (!visSupported || (p.visibility == null ? 1 : p.visibility) > VIS);
+      return s;
+    });
+    this.pts = pts;
+    const sc = Math.max(dist(pts[11], pts[12]), dist(mid(pts[11], pts[12]), mid(pts[23], pts[24])) * 0.7, 20);
+    this.scale = this.scale ? this.scale * 0.85 + sc * 0.15 : sc;
+    this.fullBody = [11, 12, 15, 16, 23, 24].every(i => pts[i].v);
+    this.lowerT = [25, 26].every(i => pts[i].v) ? 2 : Math.max(0, this.lowerT - dt);
+    [[15, 13], [16, 14]].forEach(([w, e], k) => {
+      const W = pts[w], E = pts[e], h = this.hands[k];
+      if (!W.v) { h.lose(); return; }
+      // 손목에서 팔꿈치 반대 방향으로 조금 연장 → 주먹 중심
+      const x = E.v ? W.x + (W.x - E.x) * 0.3 : W.x, y = E.v ? W.y + (W.y - E.y) * 0.3 : W.y;
+      h.update(x, y, t, dt, this.scale);
+      if (h.bodySpeed > 0.6) this.meters += h.bodySpeed * dt * 0.4;   // 어깨너비 ≈ 0.4m 가정
+    });
+  }
+  get lowerSeen() { return this.lowerT > 0; }
+}
+
+// 감지된 사람들을 1P/2P 에 배정: 혼자면 가장 가까운(큰) 사람, 둘이면 화면 왼쪽=1P, 오른쪽=2P
+export function assign(raws, trackers, cam, W) {
+  const out = trackers.map(() => null);
+  if (!raws.length || !trackers.length) return out;
+  const items = raws.map(r => { const a = cam.toScreen(r[11]), b = cam.toScreen(r[12]); return { r, cx: (a.x + b.x) / 2, sc: Math.hypot(a.x - b.x, a.y - b.y) }; });
+  if (trackers.length === 1) { items.sort((a, b) => b.sc - a.sc); out[0] = items[0].r; return out; }
+  items.sort((a, b) => a.cx - b.cx);
+  if (items.length >= 2) { out[0] = items[0].r; out[1] = items[items.length - 1].r; }
+  else out[items[0].cx < W / 2 ? 0 : 1] = items[0].r;
+  return out;
+}
+
+/* ---------- 가상 선수 (점검용) ---------- */
+class SimDetector {
+  constructor(n) { this.people = Array.from({ length: n }, (_, i) => new SimPerson(n === 1 ? 0.5 : (i === 0 ? 0.72 : 0.28))); }
+  detect(video, ts) { const t = ts / 1000; return this.people.map(p => p.landmarks(t)); }
+}
+class SimPerson {
+  constructor(cx) { this.cx = cx; this.lastT = null; this.hands = [0.1, -0.1].map(o => ({ x: cx + o, y: 0.5, tx: cx + o, ty: 0.5, sp: 0.5, next: 0 })); }
+  landmarks(t) {
+    const dt = this.lastT == null ? 0.016 : Math.min(0.1, Math.max(0.001, t - this.lastT)); this.lastT = t;
+    for (const h of this.hands) {
+      if (t > h.next) { h.tx = this.cx + (Math.random() - 0.5) * 0.44; h.ty = 0.12 + Math.random() * 0.72; h.sp = Math.random() < 0.4 ? 3.2 : 0.6; h.next = t + 0.3 + Math.random() * 0.9; }
+      const dx = h.tx - h.x, dy = h.ty - h.y, d = Math.hypot(dx, dy), step = Math.min(d, h.sp * dt);
+      if (d > 1e-4) { h.x += dx / d * step; h.y += dy / d * step; }
+    }
+    const c = this.cx, sw = 0.07, L = [];
+    const set = (i, x, y) => { L[i] = { x, y, z: 0, visibility: 0.95 }; };
+    for (let i = 0; i < 33; i++) set(i, c, 0.2);
+    set(11, c + sw, 0.32); set(12, c - sw, 0.32); set(23, c + sw * 0.7, 0.58); set(24, c - sw * 0.7, 0.58);
+    set(25, c + sw * 0.75, 0.75); set(26, c - sw * 0.75, 0.75); set(27, c + sw * 0.8, 0.92); set(28, c - sw * 0.8, 0.92);
+    const [hl, hr] = this.hands;
+    set(15, hl.x, hl.y); set(13, (L[11].x + hl.x) / 2 + 0.03, (L[11].y + hl.y) / 2 + 0.03);
+    set(16, hr.x, hr.y); set(14, (L[12].x + hr.x) / 2 - 0.03, (L[12].y + hr.y) / 2 + 0.03);
+    return L;
+  }
+}

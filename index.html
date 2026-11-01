@@ -2,474 +2,126 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>몸으로 놀기 - 자세 따라하기 · 수학 풍선</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #f7b733; font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; user-select: none; -webkit-user-select: none; }
-  button { font-family: inherit; }
-
-  /* ---------- 메뉴 ---------- */
-  #menu { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #f7b733; padding: 20px; }
-  #menu h1 { font-size: 44px; color: #4a3000; }
-  #menu p { font-size: 18px; color: #6b4a00; }
-  .cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
-  .card { width: 180px; height: 210px; border-radius: 28px; border: 6px solid #4a3000; background: #fff; display: flex; flex-direction: column; overflow: hidden; cursor: pointer; transition: transform .1s; }
-  .card:active { transform: scale(.95); }
-  .card .top { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 76px; }
-  .card .label { height: 60px; display: flex; align-items: center; justify-content: center; font-size: 21px; font-weight: 700; color: #4a3000; background: #fff; border-top: 4px solid #4a3000; }
-  .card.disabled { opacity: .4; cursor: default; }
-  .levels { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; margin-top: 4px; }
-  .levels span { font-size: 17px; color: #4a3000; font-weight: 700; margin-right: 6px; }
-  .lv { font-size: 17px; padding: 8px 16px; border-radius: 30px; border: 3px solid #4a3000; background: #fff; color: #4a3000; cursor: pointer; }
-  .lv.on { background: #4a3000; color: #fff; }
-  .opts { display: flex; gap: 16px; font-size: 16px; color: #4a3000; }
-  #status { font-size: 15px; color: #8a5a00; min-height: 20px; }
-
-  /* ---------- 게임 ---------- */
-  #game { position: absolute; inset: 0; display: none; background: #000; }
-  #video { display: none; }
-  #canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  .hud { position: absolute; left: 0; right: 0; top: 0; padding: 16px 24px; display: flex; align-items: flex-start; gap: 20px; pointer-events: none; }
-  .score { background: #fff; border: 5px solid #333; border-radius: 60px; padding: 8px 24px; font-size: 40px; font-weight: 800; color: #333; display: flex; align-items: center; gap: 10px; }
-  .score .dot { width: 30px; height: 30px; border-radius: 50%; background: #ff3b3b; }
-  .score small { font-size: 20px; font-weight: 600; }
-  .center { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-  .stars { font-size: 36px; letter-spacing: 6px; color: #ffd400; text-shadow: 0 0 4px #333; }
-  .timer { width: 340px; max-width: 40vw; height: 32px; background: #fff; border: 4px solid #333; border-radius: 20px; overflow: hidden; position: relative; }
-  .timer .fill { height: 100%; background: #37d67a; width: 100%; transition: width .2s linear; }
-  .timer .txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 800; color: #222; }
-  .miss { background: #fff; border: 5px solid #333; border-radius: 60px; padding: 8px 20px; font-size: 26px; font-weight: 800; color: #888; display: none; align-items: center; gap: 8px; }
-
-  /* 따라쟁이 전용 */
-  #target { position: absolute; left: 24px; top: 50%; transform: translateY(-50%); width: 280px; height: 300px; background: #fff; border: 8px solid #2fe0a0; border-radius: 30px; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 8px; transition: border-color .15s, background .15s; }
-  #target.hit { border-color: #ffb800; background: #fff6d6; }
-  #target .name { font-size: 24px; font-weight: 800; color: #333; }
-  #target svg { width: 180px; height: 200px; }
-  #hold { position: absolute; left: 24px; right: 24px; bottom: 24px; height: 28px; background: #fff; border: 4px solid #333; border-radius: 18px; overflow: hidden; display: none; }
-  #hold .fill { height: 100%; width: 0%; background: #ff5a5a; }
-
-  /* 수학 풍선 전용 */
-  #problem { position: absolute; left: 50%; top: 120px; transform: translateX(-50%); background: #fff; border: 6px solid #333; border-radius: 30px; padding: 10px 40px; font-size: 64px; font-weight: 900; color: #222; display: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  #problem.ok { background: #d8ffe6; border-color: #2fb65a; }
-  #problem.bad { background: #ffe0e0; border-color: #e04040; animation: shake .3s; }
-  @keyframes shake { 25% { transform: translateX(-50%) translateX(-10px); } 75% { transform: translateX(-50%) translateX(10px); } }
-
-  #back { position: absolute; left: 24px; top: 20px; width: 54px; height: 54px; border-radius: 16px; border: 4px solid #333; background: #fff; font-size: 26px; cursor: pointer; z-index: 5; }
-  #result { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 18px; background: rgba(0,0,0,.65); color: #fff; z-index: 6; }
-  #result h2 { font-size: 52px; }
-  #result .big { font-size: 84px; color: #ffd400; }
-  #result .sub { font-size: 28px; }
-  #result button { font-size: 24px; padding: 12px 36px; border-radius: 40px; border: 4px solid #fff; background: #37d67a; color: #fff; cursor: pointer; }
-  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .2s; }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f7b733">
+<title>몸으로 놀기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<video id="video" playsinline muted autoplay></video>
+<canvas id="canvas"></canvas>
 
-<!-- ===== 메뉴 ===== -->
-<div id="menu">
-  <h1>어떤 게임을 할까요?</h1>
-  <p>카드를 눌러 시작해요 (카메라 허용 필요) · 얼음은 손을 빠르게 휘둘러 3번, 별은 손으로 잡아요</p>
-  <div class="cards">
-    <div class="card" data-game="copy" style="background:#b39ddb"><div class="top">🙆</div><div class="label">따라쟁이</div></div>
-    <div class="card" data-game="math" style="background:#ff7675"><div class="top">🎈</div><div class="label">수학 풍선</div></div>
-    <div class="card" data-game="ice" style="background:#74b9ff"><div class="top">🧊</div><div class="label">얼음 깨기</div></div>
-    <div class="card" data-game="star" style="background:#55efc4"><div class="top">⭐</div><div class="label">별 따기</div></div>
-  </div>
-  <div class="levels">
-    <span>수학 풍선 난이도</span>
-    <button class="lv on" data-lv="add10">덧셈 (10까지)</button>
-    <button class="lv" data-lv="addsub20">덧셈·뺄셈 (20까지)</button>
-    <button class="lv" data-lv="mul">구구단</button>
-    <button class="lv" data-lv="mix">사칙 혼합</button>
-  </div>
-  <div class="opts">
-    <label><input type="checkbox" id="tts" checked> 문제 읽어주기</label>
-    <label><input type="checkbox" id="sound" checked> 효과음</label>
-  </div>
-  <div id="status">모델 로딩 중...</div>
-</div>
-
-<!-- ===== 게임 ===== -->
-<div id="game">
-  <video id="video" autoplay playsinline muted></video>
-  <canvas id="canvas"></canvas>
-  <button id="back">←</button>
-  <div class="hud">
-    <div style="width:70px"></div>
-    <div class="score"><span class="dot"></span><small>1P</small><span id="score">0</span></div>
-    <div class="center">
-      <div class="stars" id="stars">☆☆☆☆☆☆</div>
-      <div class="timer"><div class="fill" id="tfill"></div><div class="txt" id="ttxt">30</div></div>
+<!-- 1. 선수 고르기 (카메라 켜기 전) -->
+<section id="scr-setup" class="screen on">
+  <div class="setup">
+    <h1 class="logo">몸으로 놀기</h1>
+    <p class="sub">카메라 앞에서 몸을 움직여 노는 게임 · 혼자 또는 둘이 대결</p>
+    <div class="panel">
+      <h3>누가 할까요? <small>누른 순서대로 1P · 2P (최대 2명)</small></h3>
+      <div id="chips" class="chips"></div>
+      <form id="addForm" class="add" autocomplete="off">
+        <input id="newName" maxlength="8" placeholder="새 선수 이름 (예: 아빠, 지우)">
+        <button type="submit">추가</button>
+      </form>
+      <div id="slotRows" class="slotrows"></div>
     </div>
-    <div class="miss" id="missbox">실수 <span id="miss">0</span></div>
+    <div class="opts">
+      <label><input type="checkbox" id="opt-tts"> 문제 읽어주기</label>
+      <label><input type="checkbox" id="opt-sfx"> 효과음</label>
+      <label><input type="checkbox" id="opt-bgm"> 배경음악</label>
+    </div>
+    <div class="actions">
+      <button id="btnStart" class="big" type="button">선수를 골라 주세요</button>
+      <button id="btnRankSetup" class="pill" type="button">순위 보기</button>
+    </div>
+    <p id="setupMsg" class="msg"></p>
+    <p class="hint">TV로 보기: 안드로이드는 Smart View, 아이패드·아이폰은 화면 미러링(AirPlay). 태블릿은 TV 아래에 세워 두고 2~3m 떨어져서 해요.</p>
+    <div class="foot">
+      <button id="btnReset" type="button">기록 모두 지우기</button>
+      <a href="v1/">이전 버전</a>
+    </div>
   </div>
-  <div id="target"><div id="tsvg"></div><div class="name" id="tname">-</div></div>
-  <div id="hold"><div class="fill" id="hfill"></div></div>
-  <div id="problem">7 + 5 = ?</div>
-  <div id="flash"></div>
-  <div id="result">
-    <h2>끝!</h2>
-    <div class="big" id="rstars">★★★</div>
-    <div class="sub" id="rtext">0개 성공</div>
-    <button id="again">다시 하기</button>
+</section>
+
+<!-- 2. 게임 고르기 -->
+<section id="scr-select" class="screen overlay">
+  <div class="sel">
+    <h2>어떤 게임을 할까요?</h2>
+    <p class="sub">손을 카드 위에 1초 동안 대고 있거나 화면을 눌러요</p>
+    <div class="cards">
+      <button class="card" type="button" data-hand data-game="copy" style="--bg:#b39ddb"><span class="ico">🙆</span><span class="lbl">따라쟁이</span><span class="desc">그림 자세 따라하기</span></button>
+      <button class="card" type="button" data-hand data-game="math" style="--bg:#ff7675"><span class="ico">🎈</span><span class="lbl">수학 풍선</span><span class="desc">정답 풍선 터뜨리기</span></button>
+      <button class="card" type="button" data-hand data-game="ice" style="--bg:#74b9ff"><span class="ico">🧊</span><span class="lbl">얼음 깨기</span><span class="desc">빠르게 쳐서 깨기</span></button>
+      <button class="card" type="button" data-hand data-game="star" style="--bg:#55efc4"><span class="ico">⭐</span><span class="lbl">별 따기</span><span class="desc">별 잡고 폭탄 피하기</span></button>
+    </div>
+    <div id="selPlayers" class="selplayers"></div>
+    <div class="row">
+      <button class="pill" type="button" data-hand id="btnRank">순위 보기</button>
+      <button class="pill ghost" type="button" id="btnSetup">선수 바꾸기</button>
+    </div>
   </div>
+</section>
+
+<!-- 3. 자리 잡기 -->
+<section id="scr-ready" class="screen">
+  <div class="readybar panel">
+    <h2 id="readyTitle"></h2>
+    <p id="readyHow" class="how"></p>
+    <p id="readyHint"></p>
+    <div id="readyStat"></div>
+    <div class="row">
+      <button class="pill" type="button" data-hand id="btnGo">바로 시작</button>
+      <button class="pill ghost" type="button" id="btnReadyBack">뒤로</button>
+    </div>
+  </div>
+</section>
+
+<!-- 4. 게임 중 -->
+<div id="hud" hidden>
+  <div class="pbox" id="pb0"><span class="pn"></span><span class="ps">0</span><span class="pc"></span></div>
+  <div class="mid">
+    <div class="timer"><i id="tfill"></i><span id="ttxt"></span></div>
+    <div class="fever-tag">피버 타임 · 점수 2배</div>
+  </div>
+  <div class="pbox" id="pb1"><span class="pn"></span><span class="ps">0</span><span class="pc"></span></div>
 </div>
+<button id="btnQuit" type="button" hidden>그만하기</button>
+<div id="cd" hidden></div>
 
-<script type="module">
-import { PoseLandmarker, FilesetResolver, DrawingUtils } from
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+<!-- 5. 결과 -->
+<section id="scr-result" class="screen overlay">
+  <div class="res panel">
+    <h2 id="resTitle"></h2>
+    <div id="resCols"></div>
+    <div class="row">
+      <button class="pill" type="button" data-hand id="btnAgain">다시 하기</button>
+      <button class="pill" type="button" data-hand id="btnOther">다른 게임</button>
+      <button class="pill" type="button" data-hand id="btnResRank">순위 보기</button>
+    </div>
+  </div>
+</section>
 
-/* ================= 공통 설정 ================= */
-const STAR_STEP = 2;                 // 성공 N개당 별 1개
-const $ = id => document.getElementById(id);
-const video = $("video"), canvas = $("canvas"), ctx = canvas.getContext("2d");
-const drawer = new DrawingUtils(ctx);
-if (!ctx.roundRect) ctx.roundRect = function (x, y, w, h, r) { this.moveTo(x + r, y); this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r); this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r); this.closePath(); };  // 구형 브라우저 대비
+<!-- 6. 순위 -->
+<section id="scr-ranking" class="screen overlay">
+  <div class="rank panel">
+    <h2>순위</h2>
+    <div id="rankTabs" class="tabs"></div>
+    <div id="rankSub" class="tabs sub" hidden></div>
+    <div class="rankbody">
+      <ol id="rankList"></ol>
+      <div id="rankBests"></div>
+    </div>
+    <button class="pill" type="button" data-hand id="btnRankBack">돌아가기</button>
+  </div>
+</section>
 
-/* ================= 모델 로드 ================= */
-let landmarker = null;
-try {
-  const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
-  landmarker = await PoseLandmarker.createFromOptions(vision, {
-    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task", delegate: "GPU" },
-    runningMode: "VIDEO", numPoses: 1
-  });
-  $("status").textContent = "준비 완료! 카드를 눌러 시작하세요";
-} catch (e) { $("status").textContent = "모델 로드 실패: " + e.message; }
-
-/* ================= 효과음 (외부 파일 없이 합성) ================= */
-let actx = null;
-function beep(freq, dur = .12, type = "sine", vol = .3) {
-  if (!$("sound").checked) return;
-  try {
-    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-    const o = actx.createOscillator(), g = actx.createGain();
-    o.type = type; o.frequency.value = freq; g.gain.value = vol;
-    o.connect(g); g.connect(actx.destination); o.start();
-    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur); o.stop(actx.currentTime + dur);
-  } catch (e) {}
-}
-const sfxGood = () => { beep(660, .1); setTimeout(() => beep(990, .18), 90); };
-const sfxBad  = () => beep(180, .25, "square", .15);
-function speak(text) {
-  if (!$("tts").checked || !("speechSynthesis" in window)) return;
-  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = "ko-KR"; u.rate = .95; speechSynthesis.speak(u); } catch (e) {}
-}
-
-/* ================= 관절 각도 유틸 =================
-   MediaPipe 번호: 0 코 11/12 어깨 13/14 팔꿈치 15/16 손목 19/20 검지 23/24 엉덩이 25/26 무릎 27/28 발목 (홀수=왼쪽) */
-function angle(a, b, c) {
-  const v1 = { x: a.x - b.x, y: a.y - b.y }, v2 = { x: c.x - b.x, y: c.y - b.y };
-  const d = v1.x * v2.x + v1.y * v2.y, m = Math.hypot(v1.x, v1.y) * Math.hypot(v2.x, v2.y);
-  return Math.acos(Math.max(-1, Math.min(1, d / (m || 1)))) * 180 / Math.PI;
-}
-function analyze(l) {
-  return {
-    lsAng: angle(l[13], l[11], l[23]), rsAng: angle(l[14], l[12], l[24]),
-    leAng: angle(l[11], l[13], l[15]), reAng: angle(l[12], l[14], l[16]),
-    lkAng: angle(l[23], l[25], l[27]), rkAng: angle(l[24], l[26], l[28]),
-  };
-}
-const inR = (v, lo, hi) => v >= lo && v <= hi;
-
-/* ================= 게임 1: 따라쟁이 ================= */
-const HOLD_SEC = 0.6;
-const POSES = [
-  { name: "만세!", icon: fig(-150, -150), check: a => a.lsAng > 140 && a.rsAng > 140 },
-  { name: "양팔 벌리기", icon: fig(-90, -90), check: a => inR(a.lsAng, 65, 115) && inR(a.rsAng, 65, 115) && a.leAng > 140 && a.reAng > 140 },
-  { name: "왼손 들기", icon: fig(-150, -20), check: a => a.lsAng > 140 && a.rsAng < 50 },
-  { name: "오른손 들기", icon: fig(-20, -150), check: a => a.rsAng > 140 && a.lsAng < 50 },
-  { name: "스쿼트!", icon: fig(-90, -90, true), check: a => a.lkAng < 130 && a.rkAng < 130 },
-  { name: "손 허리에", icon: fig(-45, -45, false, true), check: a => inR(a.lsAng, 20, 60) && inR(a.rsAng, 20, 60) && a.leAng < 110 && a.reAng < 110 },
-];
-function fig(lArm, rArm, squat = false, hips = false) {
-  const hipY = squat ? 120 : 110, armLen = 60;
-  const arm = (x, y, deg, flip) => {
-    if (hips) { const ex = x + (flip ? -1 : 1) * 28, ey = y + 50; return `<polyline points="${x},${y} ${ex},${ey} ${x + (flip ? -1 : 1) * 8},${ey + 20}" />`; }
-    const r = deg * Math.PI / 180, ex = x + Math.sin(r) * armLen * (flip ? -1 : 1), ey = y + Math.cos(r) * armLen;
-    return `<line x1="${x}" y1="${y}" x2="${ex}" y2="${ey}" />`;
-  };
-  const leg = (x, y, flip) => squat
-    ? `<polyline points="${x},${y} ${x + (flip ? -30 : 30)},${y + 30} ${x + (flip ? -20 : 20)},${y + 70}" />`
-    : `<line x1="${x}" y1="${y}" x2="${x + (flip ? -12 : 12)}" y2="${y + 70}" />`;
-  return `<svg viewBox="0 0 200 220" fill="none" stroke="#333" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="100" cy="35" r="24" fill="#ffd27f" stroke="#333"/><line x1="100" y1="60" x2="100" y2="${hipY}" />
-    ${arm(100, 70, lArm, true)}${arm(100, 70, rArm, false)}${leg(100, hipY, true)}${leg(100, hipY, false)}</svg>`;
-}
-const copyGame = {
-  sec: 30, cur: null, holdT: 0,
-  start() { $("target").style.display = "flex"; $("hold").style.display = "block"; this.next(); },
-  stop() { $("target").style.display = "none"; $("hold").style.display = "none"; },
-  next() {
-    let p; do { p = POSES[Math.floor(Math.random() * POSES.length)]; } while (p === this.cur);
-    this.cur = p; this.holdT = 0; $("tsvg").innerHTML = p.icon; $("tname").textContent = p.name; $("target").classList.remove("hit");
-  },
-  update(dt, lm) {
-    const matched = lm ? this.cur.check(analyze(lm)) : false;
-    if (matched) {
-      this.holdT += dt; $("target").classList.add("hit");
-      if (this.holdT >= HOLD_SEC) { G.score++; sfxGood(); flash(); this.next(); }
-    } else { this.holdT = Math.max(0, this.holdT - dt * 2); $("target").classList.remove("hit"); }
-    $("hfill").style.width = (this.holdT / HOLD_SEC * 100) + "%";
-  },
-  resultText: () => `${G.score}개 성공`
-};
-
-/* ================= 게임 2: 수학 풍선 ================= */
-const BALLOON_R = 0.085;      // 풍선 반지름 (화면 높이 비율)
-const DWELL = 0.22;           // 손이 풍선 안에 머물러야 하는 시간(초) — 지나가다 터지는 것 방지
-const RISE = 0.045;           // 상승 속도 (화면 높이/초)
-const COLORS = ["#ff5a5a", "#4da6ff", "#ffcc33", "#8e6bff", "#37d67a"];
-const rnd = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
-function makeProblem(level) {
-  let a, b, op, ans;
-  const pick = { add10: ["+"], addsub20: ["+", "-"], mul: ["×"], mix: ["+", "-", "×", "÷"] }[level];
-  op = pick[Math.floor(Math.random() * pick.length)];
-  if (op === "+") { const max = level === "add10" ? 10 : 20; a = rnd(1, max - 1); b = rnd(1, max - a); ans = a + b; }
-  else if (op === "-") { a = rnd(2, 20); b = rnd(1, a - 1); ans = a - b; }
-  else if (op === "×") { a = rnd(2, 9); b = rnd(1, 9); ans = a * b; }
-  else { b = rnd(2, 9); ans = rnd(1, 9); a = b * ans; }
-  const read = { "+": "더하기", "-": "빼기", "×": "곱하기", "÷": "나누기" }[op];
-  // 오답 2개: 정답 근처에서 중복·음수 없이
-  const wrongs = new Set();
-  while (wrongs.size < 2) { const w = ans + rnd(-3, 3); if (w !== ans && w >= 0) wrongs.add(w); }
-  return { text: `${a} ${op} ${b} = ?`, speech: `${a} ${read} ${b}는?`, ans, choices: shuffle([ans, ...wrongs]) };
-}
-function shuffle(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
-
-const mathGame = {
-  sec: 60, level: "add10", prob: null, balloons: [], miss: 0, lock: 0,
-  start() { this.miss = 0; $("problem").style.display = "block"; $("missbox").style.display = "flex"; $("miss").textContent = 0; this.next(); },
-  stop() { $("problem").style.display = "none"; $("missbox").style.display = "none"; try { speechSynthesis.cancel(); } catch (e) {} },
-  next() {
-    this.prob = makeProblem(this.level);
-    $("problem").textContent = this.prob.text; $("problem").className = "";
-    speak(this.prob.speech);
-    const lanes = shuffle([0.22, 0.5, 0.78]);
-    this.balloons = this.prob.choices.map((v, i) => ({
-      v, x: lanes[i] + (Math.random() - .5) * .06, y: 1.1 + i * 0.12, r: BALLOON_R,
-      color: COLORS[(i + Math.floor(Math.random() * 5)) % 5], dwell: 0, dead: false, pop: 0
-    }));
-    this.lock = 0.4; // 새 문제 직후 잠깐 터치 무시
-  },
-  update(dt, lm, W, H) {
-    this.lock = Math.max(0, this.lock - dt);
-    // 손 위치 (좌우 반전된 화면 기준): 손목 15/16, 검지 19/20
-    const hands = lm ? [15, 16, 19, 20].map(i => ({ x: (1 - lm[i].x) * W, y: lm[i].y * H })) : [];
-    for (const b of this.balloons) {
-      if (b.dead) { b.pop += dt; continue; }
-      b.y -= RISE * dt; if (b.y < -0.15) b.y = 1.1;           // 위로 빠져나가면 아래서 다시
-      const bx = b.x * W, by = b.y * H, br = b.r * H;
-      const inside = this.lock === 0 && hands.some(h => Math.hypot(h.x - bx, h.y - by) < br * 1.15);
-      b.dwell = inside ? b.dwell + dt : Math.max(0, b.dwell - dt * 2);
-      if (b.dwell >= DWELL) {
-        b.dead = true; b.pop = 0;
-        if (b.v === this.prob.ans) {
-          G.score++; sfxGood(); flash(); $("problem").className = "ok"; $("problem").textContent = this.prob.text.replace("?", this.prob.ans);
-          setTimeout(() => this.next(), 700); this.lock = 9;
-        } else { this.miss++; $("miss").textContent = this.miss; sfxBad(); $("problem").className = "bad"; }
-      }
-    }
-    this.draw(W, H);
-  },
-  draw(W, H) {
-    for (const b of this.balloons) {
-      const bx = b.x * W, by = b.y * H, br = b.r * H;
-      if (b.dead) {                                            // 터지는 애니메이션
-        if (b.pop > .35) continue;
-        ctx.strokeStyle = b.v === this.prob.ans ? "#ffd400" : "#999"; ctx.lineWidth = 6; ctx.globalAlpha = 1 - b.pop / .35;
-        for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4, d = br * (1 + b.pop * 3); ctx.beginPath(); ctx.moveTo(bx + Math.cos(a) * br * .6, by + Math.sin(a) * br * .6); ctx.lineTo(bx + Math.cos(a) * d, by + Math.sin(a) * d); ctx.stroke(); }
-        ctx.globalAlpha = 1; continue;
-      }
-      // 줄
-      ctx.strokeStyle = "#555"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bx, by + br); ctx.quadraticCurveTo(bx + 10, by + br * 1.6, bx - 6, by + br * 2.2); ctx.stroke();
-      // 몸통
-      ctx.fillStyle = b.color; ctx.beginPath(); ctx.ellipse(bx, by, br * .92, br, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "#333"; ctx.lineWidth = 5; ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.beginPath(); ctx.ellipse(bx - br * .35, by - br * .4, br * .18, br * .3, -0.5, 0, Math.PI * 2); ctx.fill();
-      // 숫자
-      ctx.fillStyle = "#fff"; ctx.strokeStyle = "#333"; ctx.lineWidth = 7; ctx.lineJoin = "round";
-      ctx.font = `900 ${Math.round(br * 1.05)}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.strokeText(b.v, bx, by + 2); ctx.fillText(b.v, bx, by + 2);
-      // 손 머무름 게이지
-      if (b.dwell > 0) { ctx.strokeStyle = "#ffd400"; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(bx, by, br * 1.15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * b.dwell / DWELL); ctx.stroke(); }
-    }
-  },
-  resultText() { return `${G.score}문제 정답 · 실수 ${this.miss}번`; }
-};
-
-/* ================= 공통: 손 위치·속도 추적 ================= */
-const hands = { prev: null, list: [] };
-function trackHands(lm, W, H, dt) {
-  if (!lm) { hands.prev = null; hands.list = []; return; }
-  const cur = [15, 16].map(i => ({ x: (1 - lm[i].x) * W, y: lm[i].y * H }));     // 손목 좌우
-  const idx = [19, 20].map(i => ({ x: (1 - lm[i].x) * W, y: lm[i].y * H }));     // 검지
-  cur.forEach((h, k) => { h.speed = hands.prev && dt > 0 ? Math.hypot(h.x - hands.prev[k].x, h.y - hands.prev[k].y) / dt / H : 0; });  // 화면높이/초
-  hands.prev = cur;
-  hands.list = [...cur, ...idx.map((h, k) => ({ ...h, speed: cur[k].speed }))];
-}
-
-/* ================= 게임 3: 얼음 깨기 ================= */
-const ICE_HITS = 3;            // 깨는 데 필요한 타격 수
-const PUNCH_SPEED = 1.2;       // 타격으로 인정하는 손 속도 (화면높이/초)
-const ICE_SLOTS = [[0.2, 0.35], [0.5, 0.28], [0.8, 0.35], [0.2, 0.68], [0.5, 0.75], [0.8, 0.68]];
-const iceGame = {
-  sec: 45, blocks: [],
-  start() { this.blocks = ICE_SLOTS.map(([x, y]) => this.make(x, y)); },
-  stop() {},
-  make(x, y) { return { x, y, w: 0.16, hits: 0, cool: 0, dead: false, pop: 0, respawn: 0, shake: 0 }; },
-  update(dt, lm, W, H) {
-    trackHands(lm, W, H, dt);
-    for (const b of this.blocks) {
-      b.cool = Math.max(0, b.cool - dt); b.shake = Math.max(0, b.shake - dt);
-      if (b.dead) { b.pop += dt; b.respawn -= dt; if (b.respawn <= 0) Object.assign(b, this.make(b.x, b.y)); continue; }
-      const bx = b.x * W, by = b.y * H, hw = b.w * H;
-      const hit = b.cool === 0 && hands.list.some(h => Math.abs(h.x - bx) < hw && Math.abs(h.y - by) < hw && h.speed > PUNCH_SPEED);
-      if (hit) {
-        b.hits++; b.cool = 0.35; b.shake = 0.2; beep(300 + b.hits * 150, .08, "triangle", .25);
-        if (b.hits >= ICE_HITS) { b.dead = true; b.pop = 0; b.respawn = 1.2 + Math.random(); G.score++; sfxGood(); flash(); }
-      }
-    }
-    this.draw(W, H);
-  },
-  draw(W, H) {
-    for (const b of this.blocks) {
-      const hw = b.w * H, bx = b.x * W + (b.shake > 0 ? (Math.random() - .5) * 12 : 0), by = b.y * H;
-      if (b.dead) {                                                 // 파편 흩어짐
-        if (b.pop > .5) continue;
-        ctx.globalAlpha = 1 - b.pop * 2; ctx.fillStyle = "#cfefff";
-        for (let k = 0; k < 10; k++) { const a = k * Math.PI / 5, d = hw * (0.3 + b.pop * 3); ctx.beginPath(); ctx.arc(bx + Math.cos(a) * d, by + Math.sin(a) * d + b.pop * b.pop * 400, hw * .12, 0, Math.PI * 2); ctx.fill(); }
-        ctx.globalAlpha = 1; continue;
-      }
-      ctx.fillStyle = "rgba(190,230,255,.85)"; ctx.strokeStyle = "#2a7bb5"; ctx.lineWidth = 6;
-      ctx.beginPath(); ctx.roundRect(bx - hw, by - hw, hw * 2, hw * 2, 14); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.roundRect(bx - hw * .8, by - hw * .8, hw * .5, hw * .25, 6); ctx.fill();
-      ctx.strokeStyle = "#1b5b8a"; ctx.lineWidth = 4; ctx.lineCap = "round";                     // 금 (타격 수만큼)
-      const cracks = [[[-.3, -.9], [-.1, -.2], [-.5, .3]], [[.9, -.4], [.2, 0], [.6, .8]], [[-.9, .6], [-.2, .4], [.3, .9]]];
-      for (let i = 0; i < b.hits; i++) { ctx.beginPath(); cracks[i].forEach(([px, py], j) => j ? ctx.lineTo(bx + px * hw, by + py * hw) : ctx.moveTo(bx + px * hw, by + py * hw)); ctx.stroke(); }
-      ctx.fillStyle = "#1b5b8a"; ctx.font = `900 ${Math.round(hw * .5)}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(ICE_HITS - b.hits, bx, by + hw * .55);
-    }
-  },
-  resultText: () => `얼음 ${G.score}개 깨뜨림`
-};
-
-/* ================= 게임 4: 별 따기 ================= */
-const STAR_FALL = 0.12;        // 낙하 속도 (화면높이/초)
-const STAR_EVERY = 1.1;        // 별 생성 간격(초)
-const starGame = {
-  sec: 45, stars: [], timer: 0, missed: 0,
-  start() { this.stars = []; this.timer = 0; this.missed = 0; $("missbox").style.display = "flex"; $("miss").textContent = 0; },
-  stop() { $("missbox").style.display = "none"; },
-  spawn() {
-    const gold = Math.random() < 0.25;
-    this.stars.push({ x: 0.12 + Math.random() * 0.76, y: gold ? -0.05 : 0.05, r: 0.06, gold, spin: Math.random() * 6, dead: false, pop: 0, hold: gold ? 1.2 : 0 });
-  },
-  update(dt, lm, W, H) {
-    trackHands(lm, W, H, dt);
-    this.timer += dt; if (this.timer >= STAR_EVERY && this.stars.filter(s => !s.dead).length < 4) { this.timer = 0; this.spawn(); }
-    for (const s of this.stars) {
-      if (s.dead) { s.pop += dt; continue; }
-      if (s.hold > 0) s.hold -= dt; else s.y += STAR_FALL * dt * (s.gold ? 0.7 : 1);   // 금별은 위에서 잠시 머문 뒤 천천히 낙하
-      s.spin += dt * 2;
-      if (s.y > 0.95) { s.dead = true; s.pop = 9; this.missed++; $("miss").textContent = this.missed; sfxBad(); continue; }
-      const sx = s.x * W, sy = s.y * H, sr = s.r * H;
-      if (hands.list.some(h => Math.hypot(h.x - sx, h.y - sy) < sr * 1.3)) {
-        s.dead = true; s.pop = 0; G.score += s.gold ? 3 : 1; sfxGood(); if (s.gold) flash();
-      }
-    }
-    this.stars = this.stars.filter(s => !s.dead || s.pop < .4);
-    this.draw(W, H);
-  },
-  draw(W, H) {
-    for (const s of this.stars) {
-      const sx = s.x * W, sy = s.y * H, sr = s.r * H;
-      if (s.dead) { if (s.pop > .4) continue; ctx.globalAlpha = 1 - s.pop * 2.5; ctx.strokeStyle = "#fff"; ctx.lineWidth = 4;
-        for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3, d = sr * (1 + s.pop * 4); ctx.beginPath(); ctx.moveTo(sx + Math.cos(a) * sr, sy + Math.sin(a) * sr); ctx.lineTo(sx + Math.cos(a) * d, sy + Math.sin(a) * d); ctx.stroke(); }
-        ctx.globalAlpha = 1; continue; }
-      ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.sin(s.spin) * 0.25);
-      ctx.fillStyle = s.gold ? "#ffb400" : "#ffe35c"; ctx.strokeStyle = "#8a5a00"; ctx.lineWidth = 5; ctx.lineJoin = "round";
-      ctx.beginPath();
-      for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, d = k % 2 ? sr * .45 : sr; k ? ctx.lineTo(Math.cos(a) * d, Math.sin(a) * d) : ctx.moveTo(Math.cos(a) * d, Math.sin(a) * d); }
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      if (s.gold) { ctx.fillStyle = "#fff"; ctx.font = `900 ${Math.round(sr * .7)}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("3", 0, sr * .1); }
-      ctx.restore();
-    }
-  },
-  resultText() { return `별 ${G.score}점 · 놓침 ${this.missed}개`; }
-};
-
-/* ================= 공통 게임 루프 ================= */
-const GAMES = { copy: copyGame, math: mathGame, ice: iceGame, star: starGame };
-const G = { game: null, running: false, score: 0, timeLeft: 0, lastT: 0, raf: 0 };
-
-document.querySelectorAll(".card[data-game]").forEach(c => c.onclick = () => startGame(GAMES[c.dataset.game]));
-document.querySelectorAll(".lv").forEach(b => b.onclick = () => { document.querySelectorAll(".lv").forEach(x => x.classList.remove("on")); b.classList.add("on"); mathGame.level = b.dataset.lv; });
-$("back").onclick = stopGame;
-$("again").onclick = () => { $("result").style.display = "none"; startGame(G.game); };
-
-async function startGame(game) {
-  if (!landmarker) return;
-  try {
-    // Safari(iPhone/iPad/Mac)는 세부 해상도 옵션을 거부하는 경우가 있어 단계적으로 완화
-    let stream = null;
-    for (const c of [{ facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, { facingMode: "user" }, true]) {
-      try { stream = await navigator.mediaDevices.getUserMedia({ video: c, audio: false }); break; } catch (e) { if (c === true) throw e; }
-    }
-    video.srcObject = stream;
-    await video.play().catch(() => {});
-    await new Promise(r => video.onloadedmetadata = r);
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-  } catch (e) { $("status").textContent = "카메라를 열 수 없습니다: " + e.message + " (HTTPS 주소에서 열어야 합니다)"; return; }
-  $("menu").style.display = "none"; $("game").style.display = "block"; $("result").style.display = "none";
-  G.game = game; G.score = 0; G.timeLeft = game.sec; G.lastT = performance.now(); G.running = true;
-  game.start(); updateHud();
-  G.raf = requestAnimationFrame(loop);
-}
-function stopGame() {
-  G.running = false; cancelAnimationFrame(G.raf); G.game?.stop();
-  video.srcObject?.getTracks().forEach(t => t.stop());
-  $("game").style.display = "none"; $("menu").style.display = "flex";
-}
-function updateHud() {
-  $("score").textContent = G.score;
-  const n = Math.min(6, Math.floor(G.score / STAR_STEP));
-  $("stars").textContent = "★".repeat(n) + "☆".repeat(6 - n);
-  $("tfill").style.width = (G.timeLeft / G.game.sec * 100) + "%";
-  $("ttxt").textContent = Math.ceil(G.timeLeft);
-}
-function loop(now) {
-  if (!G.running) return;
-  const dt = Math.min(0.1, (now - G.lastT) / 1000); G.lastT = now;
-  G.timeLeft -= dt;
-  if (G.timeLeft <= 0) { finish(); return; }
-
-  const W = canvas.width, H = canvas.height;
-  const res = landmarker.detectForVideo(video, now);
-  // 화면을 거울처럼 좌우 반전해서 그림 (글자는 반전되지 않도록 비디오만 뒤집음)
-  ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1); ctx.drawImage(video, 0, 0, W, H); ctx.restore();
-
-  let lm = null;
-  if (res.landmarks && res.landmarks[0]) {
-    lm = res.landmarks[0];
-    const mirrored = lm.map(p => ({ ...p, x: 1 - p.x }));
-    drawer.drawConnectors(mirrored, PoseLandmarker.POSE_CONNECTIONS, { color: "#ff3b3b", lineWidth: 6 });
-    drawer.drawLandmarks(mirrored, { color: "#fff", radius: 5 });
-  }
-  G.game.update(dt, lm, W, H);
-  updateHud();
-  G.raf = requestAnimationFrame(loop);
-}
-function flash() { const f = $("flash"); f.style.opacity = .6; setTimeout(() => f.style.opacity = 0, 120); }
-function finish() {
-  G.running = false; G.game.stop();
-  video.srcObject?.getTracks().forEach(t => t.stop());
-  const n = Math.min(6, Math.floor(G.score / STAR_STEP));
-  $("rstars").textContent = "★".repeat(n) + "☆".repeat(6 - n);
-  $("rtext").textContent = G.game.resultText();
-  $("result").style.display = "flex";
-}
-</script>
+<div id="cursors"></div>
+<div id="toast" hidden></div>
+<script type="module" src="js/main.js"></script>
 </body>
 </html>

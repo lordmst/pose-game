@@ -1,0 +1,96 @@
+// 효과음 · 배경음악 · 음성 (외부 파일 없이 브라우저에서 합성)
+export const settings = { sfx: true, bgm: true, tts: true };
+let ac = null, master = null, noiseBuf = null, bgmGain = null;
+
+export function unlock() {
+  try {
+    if (!ac) {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      master = ac.createGain(); master.gain.value = 0.9; master.connect(ac.destination);
+      const len = ac.sampleRate; noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (ac.state === "suspended") ac.resume();
+  } catch (e) {}
+  // iOS는 첫 터치 때 한 번 말해 둬야 이후 음성이 나옴
+  try { if ("speechSynthesis" in window) { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } } catch (e) {}
+}
+
+function tone(freq, t0, dur, { type = "sine", vol = 0.3, slide = 0, attack = 0.005, dest } = {}) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t0);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * slide), t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(dest || master); o.start(t0); o.stop(t0 + dur + 0.03);
+}
+function noise(t0, dur, { vol = 0.3, type = "bandpass", freq = 1000, q = 1, dest } = {}) {
+  const s = ac.createBufferSource(); s.buffer = noiseBuf;
+  const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  const g = ac.createGain(); g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  s.connect(f); f.connect(g); g.connect(dest || master); s.start(t0, Math.random() * 0.5); s.stop(t0 + dur + 0.03);
+}
+const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+const PENTA = [0, 2, 4, 7, 9];
+const comboNote = i => { i = Math.min(i, 14); return 523.25 * Math.pow(2, (12 * Math.floor(i / 5) + PENTA[i % 5]) / 12); };
+const play = fn => { if (!settings.sfx || !ac) return; try { if (ac.state === "suspended") ac.resume(); fn(ac.currentTime); } catch (e) {} };
+
+export const sfx = {
+  pop: () => play(t => { noise(t, 0.12, { vol: 0.7, type: "highpass", freq: 1400 }); tone(190, t, 0.12, { vol: 0.5, slide: 0.4 }); }),
+  hit: (n = 1) => play(t => { noise(t, 0.08, { vol: 0.5, freq: 2600, q: 2 }); tone(1600 + n * 450, t, 0.09, { type: "triangle", vol: 0.15 }); tone(130, t, 0.1, { vol: 0.45, slide: 0.5 }); }),
+  shatter: () => play(t => {
+    noise(t, 0.5, { vol: 0.7, type: "highpass", freq: 1800 }); tone(95, t, 0.22, { vol: 0.55, slide: 0.5 });
+    for (let i = 0; i < 10; i++) tone(2200 + Math.random() * 3800, t + Math.random() * 0.35, 0.08, { vol: 0.1 });
+  }),
+  catch: (combo = 0) => play(t => { const f = comboNote(combo); tone(f, t, 0.12, { type: "triangle", vol: 0.26 }); tone(f * 2, t + 0.06, 0.18, { vol: 0.14 }); }),
+  bad: () => play(t => { tone(240, t, 0.28, { type: "square", vol: 0.1, slide: 0.5 }); }),
+  bomb: () => play(t => { noise(t, 0.7, { vol: 0.9, type: "lowpass", freq: 700 }); tone(75, t, 0.55, { vol: 0.6, slide: 0.4 }); }),
+  tick: () => play(t => tone(880, t, 0.12, { type: "square", vol: 0.12 })),
+  go: () => play(t => { tone(1320, t, 0.4, { type: "square", vol: 0.13 }); tone(660, t, 0.4, { type: "triangle", vol: 0.22 }); }),
+  select: () => play(t => { tone(660, t, 0.08, { type: "triangle", vol: 0.22 }); tone(990, t + 0.07, 0.12, { type: "triangle", vol: 0.22 }); }),
+  fever: () => play(t => [0, 4, 7, 12, 16, 19].forEach((s, i) => tone(523.25 * Math.pow(2, s / 12), t + i * 0.06, 0.2, { type: "square", vol: 0.09 }))),
+  fanfare: () => play(t => {
+    [[0, 0], [4, 0.13], [7, 0.26], [12, 0.39]].forEach(([s, d]) => tone(523.25 * Math.pow(2, s / 12), t + d, 0.3, { type: "triangle", vol: 0.25 }));
+    tone(1046.5, t + 0.52, 0.7, { type: "triangle", vol: 0.22 }); tone(1318.5, t + 0.52, 0.7, { vol: 0.12 });
+  }),
+};
+
+/* ---------- 배경음악: 32스텝 반복 ---------- */
+const BASS = [48, 0, 48, 0, 55, 0, 55, 0, 53, 0, 53, 0, 55, 0, 52, 0];
+const LEAD = [72, 0, 74, 76, 0, 79, 76, 0, 74, 0, 72, 74, 0, 76, 0, 0, 79, 0, 81, 79, 0, 76, 74, 0, 72, 0, 74, 0, 72, 0, 0, 0];
+let timer = null, step = 0, nextT = 0, tempo = 1;
+function schedule() {
+  if (!ac || !bgmGain) return;
+  const spb = 60 / (132 * tempo) / 2;
+  while (nextT < ac.currentTime + 0.12) {
+    const i = step % 32, b = BASS[i % 16], l = LEAD[i];
+    if (b) tone(midi(b), nextT, spb * 1.6, { type: "triangle", vol: 0.16, dest: bgmGain });
+    if (l) tone(midi(l), nextT, spb * 0.9, { type: "square", vol: 0.04, dest: bgmGain });
+    if (i % 2 === 0) noise(nextT, 0.03, { vol: 0.05, type: "highpass", freq: 7000, dest: bgmGain });
+    nextT += spb; step++;
+  }
+}
+export const bgm = {
+  start() {
+    if (!settings.bgm || !ac || timer) return;
+    bgmGain = ac.createGain(); bgmGain.gain.value = 0.55; bgmGain.connect(master);
+    step = 0; nextT = ac.currentTime + 0.05; timer = setInterval(schedule, 25);
+  },
+  stop() {
+    clearInterval(timer); timer = null;
+    if (bgmGain && ac) { const g = bgmGain; g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.08); setTimeout(() => { try { g.disconnect(); } catch (e) {} }, 600); }
+    bgmGain = null; tempo = 1;
+  },
+  setTempo(m) { tempo = m; },
+};
+
+export function speak(text, queue = false) {
+  if (!settings.tts || !("speechSynthesis" in window)) return;
+  try {
+    if (!queue) speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text); u.lang = "ko-KR"; u.rate = 1.0;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+export function stopSpeak() { try { speechSynthesis.cancel(); } catch (e) {} }
