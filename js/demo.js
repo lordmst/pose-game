@@ -1,15 +1,15 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=21";
-import { DIFFS } from "./difficulty.js?v=21";
-import { speak } from "./audio.js?v=21";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=22";
+import { DIFFS } from "./difficulty.js?v=22";
+import { speak } from "./audio.js?v=22";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
    다리: 엉덩이 기준 무릎·발목 위치, drop = 몸이 내려가는 정도 */
 const ARM = { up: [0.25, -2.0], wide: [2.0, 0], down: [0.35, 1.9], hips: [0.15, 1.6], heart: [-0.5, -1.7], guard: [0.45, 0.85], cheer: [0.9, -1.7],
-  head: [-0.35, -0.9], shoulders: [0.15, 0.25], cross: [-1.1, 0.2], clap: [-0.62, 0.8] };
-const LEG = { stand: { drop: 0, k: [0.05, 1.3], a: [0.1, 2.6] }, squat: { drop: 0.9, k: [0.5, 0.4], a: [0.4, 1.7] }, raise: { drop: 0, k: [0.25, 0.15], a: [0.25, 1.1] } };
+  head: [-0.35, -0.9], shoulders: [0.15, 0.25], cross: [-1.1, 0.2], clap: [-0.62, 0.8], diag: [0.95, -1.7] };
+const LEG = { stand: { drop: 0, k: [0.05, 1.3], a: [0.1, 2.6] }, squat: { drop: 0.9, k: [0.5, 0.4], a: [0.4, 1.7] }, raise: { drop: 0, k: [0.25, 0.15], a: [0.25, 1.1] }, out: { drop: 0.1, k: [0.45, 1.2], a: [0.95, 2.4] } };
 const POSE = {
   rest: ["down", "down"], up: ["up", "up"], wide: ["wide", "wide"], left: ["up", "down"], right: ["down", "up"],
   hips: ["hips", "hips"], heart: ["heart", "heart"], squat: ["wide", "wide", "squat", "squat"],
@@ -280,25 +280,18 @@ const SCRIPTS = {
     },
   },
   rhythm: {
-    dur: 16,
+    dur: 17,
     run(T, g, p, S, say) {
-      p.hands.forEach(h => { h.shape = "open"; }); p.active = -1; p.tcx = p.v.W / 2;
-      if (T < 4.2) say("리듬 박자! 펌프처럼 화살표가 아래에서 올라와요");
-      else if (T < 8.4) say("화살표가 위 판에 겹치는 순간 그 판에 손을 넣어요");
-      else if (T < 13.4) say("긴 막대는 끝날 때까지 손을 그대로 대고 있어요");
+      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
+      if (T < 4.4) say("리듬 박자! 화살표가 아래에서 올라와요");
+      else if (T < 9) say("↖ 왼손은 11시, ↗ 오른손은 1시로 쭉 뻗어요");
+      else if (T < 14) say("↙ 왼발은 7시, ↘ 오른발은 5시로 내디뎌요");
       else say("이제 직접 해 봐요!");
-      const P = g.pads, now = g.now, want = [null, null];
-      for (const n of g.notes) {        // 홀드 중이면 그 손은 판에 그대로
-        if (!n.holding) continue;
-        const k = n.lane < 2 ? 0 : n.lane > 2 ? 1 : (want[0] ? 1 : 0); want[k] = P[n.lane];
-      }
-      for (const n of g.notes) {
-        if (n.done || n.holding || n.time - now > 0.16 || n.time - now < -0.1) continue;
-        let k = n.lane < 2 ? 0 : n.lane > 2 ? 1 : (want[1] ? 0 : 1);   // 왼쪽 판은 왼손, 오른쪽 판은 오른손
-        if (want[k]) k = 1 - k;
-        if (!want[k]) want[k] = P[n.lane];
-      }
-      [0, 1].forEach(k => (want[k] ? p.reach(k, want[k].x, want[k].y, 2.2) : p.rest(k, "guard", 1.2)));
+      // 판마다 지금 밟아야 하는지: 화살표가 곧 닿거나 홀드 중이면
+      const want = [false, false, false, false], now = g.now;
+      for (const n of g.notes) if (n.holding || (!n.done && n.time - now < 0.12 && n.time - now > -0.15)) want[n.lane] = true;
+      p.rest(0, want[1] ? "diag" : "down", 3); p.rest(1, want[2] ? "diag" : "down", 3);
+      p.legs = [want[0] ? "out" : "stand", want[3] ? "out" : "stand"];
     },
   },
   conductor: {

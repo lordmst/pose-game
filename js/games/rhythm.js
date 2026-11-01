@@ -1,37 +1,64 @@
-// 리듬 박자 (펌프 방식): 머리 높이에 판정판 5개(↙ ↖ ● ↗ ↘)가 한 줄로 있고,
-// 화살표가 아래에서 올라와 판에 겹치는 순간 그 판에 손을 넣음. 긴 막대(홀드)는 끝날 때까지 손을 대고 있기
-import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=21";
-import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=21";
+// 리듬 박자 (펌프 방식): 화면 위에 판정판 4개(↙ ↖ ↗ ↘)가 한 줄로 있고 화살표가 아래에서 올라옴.
+// 판을 손으로 누르는 게 아니라 몸으로 '밟음': 왼손 11시(↖) · 오른손 1시(↗) · 왼발 7시(↙) · 오른발 5시(↘)
+// 화살표가 판에 겹치는 순간 그 손을 대각선 위로 뻗거나 그 발을 대각선 아래로 내딛기. 긴 막대(홀드)는 끝날 때까지 그대로
+import { burst, outlinedText, rr, FONT } from "../fx.js?v=22";
+import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=22";
 
 const TRAVEL = 1.6;                                   // 화살표가 화면 아래에서 판까지 올라오는 시간(초, 보통)
 // 판정 시간 폭(초, 보통). 쉬움은 넓고 어려움은 좁음
-const JUDGE = [["PERFECT", 0.07], ["GREAT", 0.12], ["GOOD", 0.17], ["BAD", 0.23]];
+const JUDGE = [["PERFECT", 0.08], ["GREAT", 0.14], ["GOOD", 0.2], ["BAD", 0.27]];
 const J_STYLE = {
   PERFECT: ["#fff6b0", "#ff8a00"], GREAT: ["#c8ffb0", "#1f9e3a"], GOOD: ["#b8e4ff", "#1f6fd1"],
   BAD: ["#e7c8ff", "#7a3fbf"], MISS: ["#dddddd", "#a02020"],
 };
 const LIFE = { PERFECT: 0.02, GREAT: 0.015, GOOD: 0.005, BAD: -0.04, MISS: -0.08 };
-// 판: 펌프와 같은 색 (아래 대각선 파랑, 위 대각선 빨강, 가운데 노랑)
+// 판 (왼쪽부터): 왼발 7시 ↙ · 왼손 11시 ↖ · 오른손 1시 ↗ · 오른발 5시 ↘. 펌프처럼 발은 파랑, 손은 빨강
 export const LANES = [
-  { rot: -135, color: "#2f8bff" }, { rot: -45, color: "#ff3b5c" }, { center: true, color: "#ffc400" },
-  { rot: 45, color: "#ff3b5c" }, { rot: 135, color: "#2f8bff" },
+  { rot: -135, color: "#2f8bff", limb: "왼발", icon: "🦶", clock: "7시" },
+  { rot: -45, color: "#ff3b5c", limb: "왼손", icon: "✋", clock: "11시" },
+  { rot: 45, color: "#ff3b5c", limb: "오른손", icon: "✋", clock: "1시" },
+  { rot: 135, color: "#2f8bff", limb: "오른발", icon: "🦶", clock: "5시" },
 ];
-const MIN_GAP = { easy: 0.7, normal: 0.4, hard: 0.24 };   // 음표 사이 최소 간격(초)
+const MIN_GAP = { easy: 0.75, normal: 0.45, hard: 0.3 };  // 음표 사이 최소 간격(초)
 const DEG = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6];        // 반음 → 음계 자리(도=0 … 시=6)
 const scaleIdx = m => Math.floor(m / 12) * 7 + DEG[m % 12];
 const hash = (a, b) => { let x = (a * 374761393 + b * 668265263) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); x ^= x >>> 16; return (x >>> 0) / 4294967296; };
 
-// 펌프 화살표 모양: 위를 가리키는 화살표를 돌려서 씀. 가운데 판은 둥근 네모
-function arrowPath(ctx, x, y, s, lane) {
-  const L = LANES[lane];
-  ctx.save(); ctx.translate(x, y);
-  ctx.beginPath();
-  if (L.center) { rr(ctx, -s * 0.72, -s * 0.72, s * 1.44, s * 1.44, s * 0.32); }
-  else {
-    ctx.rotate(L.rot * Math.PI / 180);
-    const P = [[0, -1.05], [0.95, -0.08], [0.42, -0.08], [0.42, 0.95], [-0.42, 0.95], [-0.42, -0.08], [-0.95, -0.08]];
-    P.forEach(([px, py], i) => (i ? ctx.lineTo(px * s, py * s) : ctx.moveTo(px * s, py * s))); ctx.closePath();
+// 팔다리 자세 판정 (화면 좌표, 거울 화면이라 선수의 왼쪽이 화면 왼쪽). 들어가는 기준과 풀리는 기준을 달리 해 떨림 방지
+// 손: 손목이 어깨보다 충분히 위 + 몸 바깥쪽(반대편으로 넘어가지 않음)
+// 발: 발목이 몸 가운데에서 옆으로 충분히 벌어짐 (발이 안 보이면 손을 대각선 아래로 뻗는 것으로 대신)
+export function limbStates(p, prev, footByHand) {
+  const out = [false, false, false, false];
+  if (!p || !p[11].v || !p[12].v) return out;
+  const sw = Math.hypot(p[11].x - p[12].x, p[11].y - p[12].y) || 1;
+  const hand = (w, s, side, was) => {
+    if (!p[w].v) return false;
+    const up = (p[s].y - p[w].y) / sw, outward = (p[w].x - p[s].x) * side / sw;
+    return was ? up > 0.35 && outward > -0.4 : up > 0.7 && outward > -0.25;
+  };
+  out[1] = hand(15, 11, -1, prev[1]); out[2] = hand(16, 12, 1, prev[2]);
+  if (!footByHand) {
+    if (p[23].v && p[24].v && p[27].v && p[28].v) {
+      const hx = (p[23].x + p[24].x) / 2;
+      const foot = (a, side, was) => ((p[a].x - hx) * side / sw) > (was ? 0.62 : 0.85);
+      out[0] = foot(27, -1, prev[0]); out[3] = foot(28, 1, prev[3]);
+    }
+  } else {
+    const low = (w, s, side, was) => {
+      if (!p[w].v) return false;
+      const down = (p[w].y - p[s].y) / sw, outward = (p[w].x - p[s].x) * side / sw;
+      return was ? down > 0.6 && outward > 0.35 : down > 0.9 && outward > 0.6;
+    };
+    out[0] = low(15, 11, -1, prev[0]); out[3] = low(16, 12, 1, prev[3]);
   }
+  return out;
+}
+
+// 펌프 화살표 모양: 위를 가리키는 화살표를 돌려서 씀
+function arrowPath(ctx, x, y, s, lane) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(LANES[lane].rot * Math.PI / 180); ctx.beginPath();
+  const P = [[0, -1.05], [0.95, -0.08], [0.42, -0.08], [0.42, 0.95], [-0.42, 0.95], [-0.42, -0.08], [-0.95, -0.08]];
+  P.forEach(([px, py], i) => (i ? ctx.lineTo(px * s, py * s) : ctx.moveTo(px * s, py * s))); ctx.closePath();
   ctx.restore();
 }
 function drawArrow(ctx, x, y, s, lane, kind, glow = 0) {
@@ -49,71 +76,56 @@ function drawArrow(ctx, x, y, s, lane, kind, glow = 0) {
 }
 
 export default {
-  id: "rhythm", title: "리듬 박자", icon: "🥁", sec: 45, cursor: "✋", cat: "move", bg: "#c39bff", desc: "펌프처럼 화살표 맞춰 치기", music: false,
+  id: "rhythm", title: "리듬 박자", icon: "🥁", sec: 45, cursor: "", cat: "move", bg: "#c39bff", desc: "펌프처럼 손발로 박자 밟기", music: false,
   songs: SONGS.map(({ id, title, icon, bpm }) => ({ id, title, icon, bpm })),
-  how: "펌프처럼 화살표가 아래에서 올라와요. 머리 높이의 판에 화살표가 겹치는 순간 그 판에 손을 넣어요. 긴 막대는 끝까지 손을 대고 있기!",
+  how: "화살표가 위 판에 겹치는 순간 몸으로 밟아요. ↖ 왼손 11시, ↗ 오른손 1시로 뻗고, ↙ 왼발 7시, ↘ 오른발 5시로 내딛기! 긴 막대는 끝까지 그대로",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, id = D.id || "normal";
-    const song = songOf(env.song), minGap = MIN_GAP[id] || 0.4, travel = TRAVEL / D.speed, wide = D.reach;
+    const song = songOf(env.song), minGap = MIN_GAP[id] || 0.45, travel = TRAVEL / D.speed, wide = D.reach;
     const badW = JUDGE[3][1] * wide;
     let t0 = null, spb = 0.6, seed = 1, nextJ = 8, notes = [], now = 0, lastT = null;
-    let lastLane = null, lastIdx = null, lastTime = -9, alt = 0, holdUntil = -9;
+    let lastLane = null, lastIdx = null, lastTime = -9, holdUntil = -9;
     const count = { PERFECT: 0, GREAT: 0, GOOD: 0, BAD: 0, MISS: 0 };
-    let life = 0.6, judge = null, judgeT = 0;
-    const flash = [0, 0, 0, 0, 0], inside = [Array(5).fill(false), Array(5).fill(false)];
-    const anchor = { x: z.cx, y: v.H * 0.45, sw: v.U * 0.13, init: false };
+    let life = 0.6, judge = null, judgeT = 0, limbs = [false, false, false, false], feetSeenT = -9, footByHand = false;
+    const flash = [0, 0, 0, 0];
 
-    // 판정판은 몸을 천천히 따라감 (어깨 가운데 기준, 머리 높이)
-    function follow(dt) {
-      const p = env.tracker.pts;
-      if (!p || !p[11].v || !p[12].v) return;
-      const x = (p[11].x + p[12].x) / 2, y = (p[11].y + p[12].y) / 2, sw = Math.max(v.U * 0.07, Math.hypot(p[11].x - p[12].x, p[11].y - p[12].y));
-      if (!anchor.init) { Object.assign(anchor, { x, y, sw, init: true }); return; }
-      const a = Math.min(1, dt * 2.5);
-      anchor.x += (x - anchor.x) * a; anchor.y += (y - anchor.y) * a; anchor.sw += (sw - anchor.sw) * a;
-    }
     function layout() {
-      const L = Math.max(v.U * 0.07, Math.min(anchor.sw * 0.95, z.w / 5.6));
-      const cx = Math.max(z.x0 + L * 2.6, Math.min(z.x1 - L * 2.6, anchor.x));
-      const y = Math.max(v.H * 0.2, Math.min(v.H * 0.5, anchor.y - anchor.sw * 1.0));
-      return { L, y, r: L * 0.42, pads: [0, 1, 2, 3, 4].map(i => ({ x: cx + (i - 2) * L, y, r: L * 0.42 })) };
+      const L = Math.min(z.w / 4.6, v.U * 0.17), cx = z.cx, y = v.H * 0.22;
+      return { L, y, pads: [0, 1, 2, 3].map(i => ({ x: cx + (i - 1.5) * L, y, r: L * 0.42 })) };
     }
     // 가락의 높낮이를 판의 좌우 움직임으로: 올라가면 오른쪽, 내려가면 왼쪽, 같은 음이면 반대편
     function laneFor(midi) {
       const si = scaleIdx(midi);
       let lane;
-      if (lastLane == null) lane = 2;
+      if (lastLane == null) lane = 1;
       else {
         const step = si - lastIdx;
-        if (step === 0) lane = lastLane === 2 ? ((alt ^= 1) ? 1 : 3) : 4 - lastLane;
-        else {
-          lane = lastLane + Math.max(-2, Math.min(2, step));
-          if (lane < 0) lane = Math.min(4, -lane);
-          if (lane > 4) lane = Math.max(0, 8 - lane);
-          if (lane === lastLane) lane = lane === 2 ? ((alt ^= 1) ? 1 : 3) : 4 - lane;
-        }
+        lane = step === 0 ? 3 - lastLane : lastLane + Math.max(-2, Math.min(2, step));
+        if (lane < 0) lane = Math.min(3, -lane);
+        if (lane > 3) lane = Math.max(0, 6 - lane);
+        if (lane === lastLane) lane = 3 - lane;
       }
       lastIdx = si; return lane;
     }
-    // 반 박(j)마다 음표 만들기: 앞 2마디는 준비(둘째 마디에 ↙ ↘ 연습), 그다음은 노래 가락이 시작하는 곳
+    // 반 박(j)마다 음표 만들기: 앞 2마디는 준비(둘째 마디에 ↖ ↗ 연습), 그다음은 노래 가락이 시작하는 곳
     function addStep(j) {
       const time = t0 + j * spb / 2, p = env.progress(), half = spb / 2;
       let lane, hold = 0;
       if (j < rhythm.INTRO) {
-        if (j < 8 || j % (id === "easy" ? 4 : 2)) return;
-        lane = (j / 2) % 2 ? 4 : 0;
+        if (j < 8 || j % 4) return;
+        lane = (j / 4) % 2 ? 2 : 1;
       } else {
         const o = onsetAt(song, j);
         if (!o || time - lastTime < minGap - 0.01 || time < holdUntil + 0.05) return;
         if (j % 2 && (id === "easy" || (id === "normal" && p < 0.4))) return;   // 엇박 음표는 보통은 후반부터, 쉬움은 없음
         lane = laneFor(o[0]);
-        const dur = o[1] * half;
-        if (id !== "easy" && o[1] >= 4) hold = dur * 0.85;                       // 두 박 이상 긴 음은 홀드
+        if (id !== "easy" && o[1] >= 4) hold = o[1] * half * 0.85;               // 두 박 이상 긴 음은 홀드
       }
       lastLane = lane; lastTime = time; if (hold) holdUntil = time + hold;
       const bar = j >= rhythm.INTRO && (j - rhythm.INTRO) % 8 === 0;
-      const pair = !hold && bar && lane !== 2 && id !== "easy" && p > (id === "hard" ? 0.3 : 0.5) && hash(seed, j * 13 + 2) < (id === "hard" ? 0.35 : 0.15);   // 양쪽 대칭 두 판 동시에
-      for (const l of pair ? [lane, 4 - lane] : [lane]) notes.push({ time, lane: l, hold, done: null, holding: false, pair });
+      // 두 손 동시(만세 모양) 또는 두 발 동시(점프해서 벌리기)
+      const pair = !hold && bar && id !== "easy" && p > (id === "hard" ? 0.3 : 0.5) && hash(seed, j * 13 + 2) < (id === "hard" ? 0.35 : 0.15);
+      for (const l of pair ? [lane, 3 - lane] : [lane]) notes.push({ time, lane: l, hold, done: null, holding: false, pair });
     }
     function show(name, x, y) {
       judge = name; judgeT = now; count[name]++; life = Math.max(0, Math.min(1, life + LIFE[name]));
@@ -125,7 +137,6 @@ export default {
       if (!best || bd > badW) return;
       const P = layout().pads[li];
       const name = JUDGE.find(([, w]) => bd <= w * wide)[0];
-      flash[li] = 1;
       if (name === "BAD") { best.done = "BAD"; best.doneAt = now; show("BAD", P.x, P.y); return; }
       env.award(name === "PERFECT" ? 2 : 1, P.x, P.y - P.r * 1.6); show(name, P.x, P.y);
       sfx.catch(env.player.combo);
@@ -138,21 +149,19 @@ export default {
         if (t0 === null) { t0 = rhythm.start(song.id); spb = rhythm.spb; seed = rhythm.seed; }
         now = clock();
         const dt = lastT === null ? 0.016 : Math.min(0.1, now - lastT); lastT = now;
-        follow(dt);
-        for (let i = 0; i < 5; i++) flash[i] = Math.max(0, flash[i] - dt * 4);
         while (t0 + nextJ * spb / 2 - now < travel) { addStep(nextJ); nextJ++; }
-        const Lo = layout(), P = Lo.pads, hands = env.tracker.hands;
-        const isIn = (h, pd, k = 1) => h.vis && Math.hypot(h.x - pd.x, h.y - pd.y) < pd.r * 1.3 * k * wide;
-        hands.forEach((h, k) => P.forEach((pd, li) => {
-          const inn = isIn(h, pd);
-          if (inn && !inside[k][li]) hit(li);              // 판에 '들어오는 순간'만 판정
-          inside[k][li] = inn;
-        }));
+        // 발이 1초 넘게 안 보이면 발 화살표는 손을 대각선 아래로 뻗는 것으로 대신
+        const p = env.tracker.pts;
+        if (p && p[27].v && p[28].v) feetSeenT = now;
+        footByHand = now - feetSeenT > 1;
+        const st = limbStates(p, limbs, footByHand), P = layout().pads;
+        st.forEach((on, li) => { if (on && !limbs[li]) hit(li); if (on) flash[li] = 1; });   // 그 자세로 '들어가는 순간'만 판정
+        limbs = st;
+        for (let i = 0; i < 4; i++) if (!limbs[i]) flash[i] = Math.max(0, flash[i] - dt * 5);
         for (const n of notes) {
-          if (n.holding) {                                  // 홀드: 끝까지 손을 대고 있어야 함 (잠깐 0.15초 떨어지는 건 봐줌)
-            const pd = P[n.lane], on = hands.some(h => isIn(h, pd, 1.25));
-            n.lostT = on ? 0 : n.lostT + dt;
-            if (on) flash[n.lane] = Math.max(flash[n.lane], 0.6);
+          if (n.holding) {                                  // 홀드: 끝까지 그 자세 유지 (잠깐 0.15초 풀리는 건 봐줌)
+            n.lostT = limbs[n.lane] ? 0 : n.lostT + dt;
+            const pd = P[n.lane];
             if (now >= n.end) { n.holding = false; n.done = "PERFECT"; n.doneAt = now; env.award(1, pd.x, pd.y - pd.r * 1.6); show("PERFECT", pd.x, pd.y); }
             else if (n.lostT > 0.15) { n.holding = false; n.done = "MISS"; n.doneAt = now; show("MISS", pd.x, pd.y); }
           } else if (!n.done && now - n.time > badW) { n.done = "MISS"; n.doneAt = now; show("MISS", P[n.lane].x, P[n.lane].y); }
@@ -160,18 +169,23 @@ export default {
         notes = notes.filter(n => !n.done || now - n.doneAt < 0.3);
       },
       draw(ctx) {
-        if (t0 === null) { now = clock(); follow(0.5); }
+        if (t0 === null) now = clock();
         const U = v.U, Lo = layout(), P = Lo.pads, s = Lo.L * 0.42;
         const speed = (v.H * 1.05 - Lo.y) / travel;
         // 생명 게이지 (판 위)
-        const gw = Math.min(z.w * 0.8, Lo.L * 5.4), gx = (P[0].x + P[4].x) / 2 - gw / 2, gy = Math.max(v.H * 0.115, Lo.y - Lo.L * 0.95), gh = Math.max(8, U * 0.016);
+        const gw = Lo.L * 4.2, gx = z.cx - gw / 2, gy = Math.max(v.H * 0.115, Lo.y - Lo.L * 0.75), gh = Math.max(8, U * 0.016);
         ctx.fillStyle = "rgba(0,0,0,.45)"; rr(ctx, gx, gy, gw, gh, gh / 2); ctx.fill();
         const lg = ctx.createLinearGradient(gx, 0, gx + gw, 0); lg.addColorStop(0, "#ff4d4d"); lg.addColorStop(0.5, "#ffd400"); lg.addColorStop(1, "#37d67a");
         ctx.globalAlpha = life < 0.2 ? 0.5 + 0.5 * Math.sin(now * 14) : 1;
         ctx.fillStyle = lg; rr(ctx, gx, gy, Math.max(gh, gw * life), gh, gh / 2); ctx.fill(); ctx.globalAlpha = 1;
-        // 판정판
+        // 판정판 + 어느 손발인지 (밟고 있으면 빛남)
         const beat = t0 !== null && now > t0 ? Math.max(0, 1 - (((now - t0) / spb) % 1) * 3) : 0;
-        P.forEach((pd, li) => drawArrow(ctx, pd.x, pd.y, s * (1 + 0.06 * beat), li, "receptor", flash[li]));
+        P.forEach((pd, li) => {
+          drawArrow(ctx, pd.x, pd.y, s * (1 + 0.06 * beat), li, "receptor", flash[li]);
+          const L = LANES[li], foot = li === 0 || li === 3;
+          const label = foot && footByHand ? `${li ? "오른손" : "왼손"} ${L.clock}` : `${L.limb} ${L.clock}`;
+          outlinedText(ctx, label, pd.x, pd.y + s * 1.45, Math.min(U * 0.026, Lo.L * 0.2), "#fff", L.color, 3);
+        });
         // 올라오는 화살표 (홀드는 긴 막대)
         for (const n of notes) {
           const pd = P[n.lane];
@@ -193,28 +207,28 @@ export default {
           } else drawArrow(ctx, pd.x, y, s, n.lane, "note");
         }
         // 판정 글자와 콤보 (가운데)
-        const jy = Lo.y + (v.H - Lo.y) * 0.42, cx = (P[0].x + P[4].x) / 2;
+        const jy = v.H * 0.52;
         if (judge && now - judgeT < 0.7) {
           const k = Math.min(1, (now - judgeT) / 0.08), sc = 1.25 - 0.25 * k, [fill, stroke] = J_STYLE[judge];
           ctx.globalAlpha = Math.min(1, (0.7 - (now - judgeT)) / 0.2);
-          outlinedText(ctx, judge, cx, jy, Math.min(U * 0.075, z.w / 6) * sc, fill, stroke, Math.max(4, U * 0.012));
+          outlinedText(ctx, judge, z.cx, jy, Math.min(U * 0.075, z.w / 6) * sc, fill, stroke, Math.max(4, U * 0.012));
           const c = env.player.combo || 0;
           if (c >= 4 && judge !== "MISS" && judge !== "BAD") {
-            outlinedText(ctx, String(c), cx, jy + U * 0.085, U * 0.075, "#ffffff", "#222", Math.max(4, U * 0.01));
-            outlinedText(ctx, "COMBO", cx, jy + U * 0.14, U * 0.03, "#ffe14d", "#222", 3);
+            outlinedText(ctx, String(c), z.cx, jy + U * 0.085, U * 0.075, "#ffffff", "#222", Math.max(4, U * 0.01));
+            outlinedText(ctx, "COMBO", z.cx, jy + U * 0.14, U * 0.03, "#ffe14d", "#222", 3);
           }
           ctx.globalAlpha = 1;
         }
-        // 노래 제목
+        if (footByHand && t0 !== null) outlinedText(ctx, "발이 안 보여요: 발 화살표는 손을 아래로 뻗어요", z.cx, v.H * 0.9, Math.min(U * 0.028, z.w / 22), "#fff", "#b04a00", 3);
         ctx.font = `${Math.round(U * 0.028)}px ${FONT}`;
-        outlinedText(ctx, `♪ ${song.title}`, cx, v.H * 0.955, U * 0.03, "#fff", "rgba(0,0,0,.6)", 3);
+        outlinedText(ctx, `♪ ${song.title}`, z.cx, v.H * 0.955, U * 0.03, "#fff", "rgba(0,0,0,.6)", 3);
       },
       stop() { rhythm.stop(); },
       result: () => `${song.title} · PERFECT ${count.PERFECT} · GREAT ${count.GREAT} · GOOD ${count.GOOD} · BAD ${count.BAD} · MISS ${count.MISS}`,
       // 설명 시연용
       get notes() { return notes; },
       get now() { return now; },
-      get pads() { return layout().pads; },
+      get limbs() { return limbs; },
     };
   },
 };

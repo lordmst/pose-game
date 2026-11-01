@@ -2,8 +2,8 @@
 // 1) 박자마다 지휘 모양(아래 → 왼쪽 → 오른쪽 → 위) 자리에 원이 나오고, 원이 작아져 딱 맞을 때 손(지휘봉)으로 지나가기
 // 2) 조명이 비춘 악기 파트는 손으로 가리켜 연주 시키기 (그동안 박자 원은 쉼)
 // 3) 지휘가 잘 맞을수록 오케스트라 소리가 커지고, 놓치면 작아짐
-import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=21";
-import { sfx, rhythm, clock, SONGS, songOf } from "../audio.js?v=21";
+import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=22";
+import { sfx, rhythm, clock, SONGS, songOf } from "../audio.js?v=22";
 
 const PERFECT = 0.09, GOOD = 0.22;    // 판정 시간 폭(초, 보통)
 // 박자 자리 (몸 중심 기준, R 단위). 화면은 거울이라 '왼쪽'이 화면 왼쪽
