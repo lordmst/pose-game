@@ -1,8 +1,8 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=20";
-import { DIFFS } from "./difficulty.js?v=20";
-import { speak } from "./audio.js?v=20";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=21";
+import { DIFFS } from "./difficulty.js?v=21";
+import { speak } from "./audio.js?v=21";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
@@ -301,6 +301,24 @@ const SCRIPTS = {
       [0, 1].forEach(k => (want[k] ? p.reach(k, want[k].x, want[k].y, 2.2) : p.rest(k, "guard", 1.2)));
     },
   },
+  conductor: {
+    dur: 18,
+    run(T, g, p, S, say) {
+      p.hands.forEach(h => { h.shape = "unknown"; }); p.active = -1; p.tcx = p.v.W / 2;
+      if (T < 4) say("지휘자! 오케스트라를 지휘해요");
+      else if (T < 9) say("원이 작아져 딱 맞을 때 손으로 지나가요. 아래, 왼쪽, 오른쪽, 위");
+      else if (T < 15.5) say("조명이 비춘 악기는 손으로 가리켜요. 브라보!");
+      else say("이제 직접 해 봐요!");
+      const cue = g.cue;
+      if (cue) { p.reach(cue.x < p.cx ? 0 : 1, cue.x, cue.y, 1.4); p.rest(cue.x < p.cx ? 1 : 0, "down", 0.8); return; }
+      // 다음 박자 원으로 박자에 맞춰 손 옮기기
+      const b = g.beats.sort((a, c) => a.time - c.time)[0];
+      if (!b) { p.rest(1, "guard", 0.8); p.rest(0, "down", 0.6); return; }
+      const k = b.x < p.cx - p.u * 0.5 ? 0 : 1, left = Math.max(0.05, b.time - g.now), d = Math.hypot(b.x - p.hands[k].x, b.y - p.hands[k].y);
+      p.reach(k, b.x, b.y, Math.min(3, Math.max(0.4, d / p.v.U / left)));   // 왼쪽 원은 왼손, 나머지는 오른손
+      p.rest(1 - k, "guard", 0.8);
+    },
+  },
   goalie: {
     dur: 15,
     run(T, g, p, S, say) {
@@ -364,7 +382,7 @@ export function startDemo(id, game, view) {
   const p = new Puppet(view), zone = { x0: 0, x1: view.W, w: view.W, cx: view.W / 2 };
   const me = { combo: 0 }, stats = { ok: 0, miss: 0, pen: 0 };
   const env = {
-    slot: 0, player: me, tracker: p, zone, view, mode: 1, level: "add10", song: "london", diff: DIFFS.normal, color: "#ff8a3d", name: "도우미",
+    slot: 0, player: me, tracker: p, zone, view, mode: 1, level: "add10", song: game.demoSong || "london", diff: DIFFS.normal, color: "#ff8a3d", name: "도우미",
     progress: () => 0.1, fever: () => false, speak: () => {},
     award: (base, x, y) => { me.combo++; stats.ok++; popup(x, y, `+${base * DIFFS.normal.points}`, { size: view.U * 0.065, color: "#fff", stroke: "#ff8a3d" }); },
     miss: (x, y, label) => { me.combo = 0; stats.miss++; if (label) popup(x, y, label, { size: view.U * 0.04, color: "#eee", stroke: "#555" }); },
@@ -393,7 +411,7 @@ export function startDemo(id, game, view) {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#bfe3ff"); g.addColorStop(0.75, "#fff3d6"); g.addColorStop(1, "#ffe2a8");
       ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
       ctx.fillStyle = "#c9e8a6"; ctx.fillRect(-20, H * 0.965, W + 40, H);
-      if (id === "rhythm") { p.draw(ctx); inst.draw(ctx); } else { inst.draw(ctx); p.draw(ctx); }   // 리듬은 판정 글자가 캐릭터 위에 보이게
+      if (id === "rhythm" || id === "conductor") { p.draw(ctx); inst.draw(ctx); } else { inst.draw(ctx); p.draw(ctx); }   // 리듬은 판정 글자가 캐릭터 위에 보이게
     },
   };
 }

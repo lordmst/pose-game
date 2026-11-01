@@ -1,7 +1,7 @@
 // 리듬 박자 (펌프 방식): 머리 높이에 판정판 5개(↙ ↖ ● ↗ ↘)가 한 줄로 있고,
 // 화살표가 아래에서 올라와 판에 겹치는 순간 그 판에 손을 넣음. 긴 막대(홀드)는 끝날 때까지 손을 대고 있기
-import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=20";
-import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=20";
+import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=21";
+import { sfx, rhythm, clock, SONGS, songOf, onsetAt } from "../audio.js?v=21";
 
 const TRAVEL = 1.6;                                   // 화살표가 화면 아래에서 판까지 올라오는 시간(초, 보통)
 // 판정 시간 폭(초, 보통). 쉬움은 넓고 어려움은 좁음

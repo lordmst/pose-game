@@ -117,6 +117,8 @@ export function stopSpeak() { try { speechSynthesis.cancel(); } catch (e) {} }
    두 선수가 같은 반주·같은 음표 패턴을 쓰도록 시작 시각과 씨앗값을 공유 */
 export const clock = () => (ac ? ac.currentTime : performance.now() / 1000);
 let rTimer = null, rStart = 0, rSpb = 0.6, rStep = 0, rNext = 0, rGain = null, rSeed = 1, rSong = null, pGain = null;
+let rOrch = false, rAccentUntil = -1;          // 지휘자 게임: 관현악 소리, 금관 강조(파트 지시 성공 시)
+const rLevels = {};                            // 선수별 음악 크기(지휘가 맞을수록 큼). 2인은 평균
 
 /* ---------- 리듬 게임 곡 ----------
    멜로디 표기: "음이름옥타브:길이" (길이는 반 박 단위, 2 = 한 박), "-:2"는 쉼표
@@ -189,6 +191,23 @@ function rSchedule() {
   const half = rSpb / 2, S = rSong;
   while (rNext < ac.currentTime + 0.12) {
     const i = rStep, k = i - INTRO;
+    if (rOrch) {     // 관현악: 팀파니(1·3박), 현악 지속음, 멜로디는 부드럽게 두 겹, 강조 구간엔 금관
+      const beat = i % 2 === 0, inBar = (i / 2) % 4;
+      if (beat && (inBar === 0 || inBar === 2)) tone(inBar ? 82 : 65, rNext, 0.45, { type: "triangle", vol: 0.32, slide: 0.85, dest: rGain });
+      if (k >= -8 && i % 8 === 0) {
+        const root = S.roots[Math.floor((((k % S.steps.length) + S.steps.length) % S.steps.length) / 4) % S.roots.length];
+        [0, 7, 16].forEach(iv => tone(midi(root + 12 + iv), rNext, half * 7.6, { type: "sine", vol: 0.05, attack: 0.25, dest: rGain }));
+        tone(midi(root), rNext, half * 7.6, { type: "triangle", vol: 0.15, attack: 0.06, dest: rGain });
+      }
+      const o = onsetAt(S, i);
+      if (o) {
+        const d = half * o[1] * 0.95;
+        tone(midi(o[0]), rNext, d, { type: "triangle", vol: 0.15, attack: 0.03, dest: rGain });
+        tone(midi(o[0] - 12), rNext, d, { type: "sine", vol: 0.07, attack: 0.05, dest: rGain });
+        if (i < rAccentUntil) tone(midi(o[0] - 12), rNext, d, { type: "square", vol: 0.045, attack: 0.02, dest: rGain });
+      }
+      rNext += half; rStep++; continue;
+    }
     drum(S.drums, i, rNext, half, rGain);
     if (k >= -8) {   // 베이스는 멜로디 한 마디 전부터
       const root = S.roots[Math.floor((((k % S.steps.length) + S.steps.length) % S.steps.length) / 4) % S.roots.length];
@@ -203,9 +222,9 @@ function rSchedule() {
 }
 export const rhythm = {
   // 이미 시작했으면 같은 시작 시각을 돌려줌 (2인 공유)
-  start(songId) {
+  start(songId, { orch = false } = {}) {
     if (rTimer || rStart > 0) return rStart;
-    rhythm.stopPreview();
+    rhythm.stopPreview(); rOrch = orch; rAccentUntil = -1; for (const k in rLevels) delete rLevels[k];
     rSong = songOf(songId); rSpb = 60 / rSong.bpm; rSeed = 1 + Math.floor(Math.random() * 1e6);
     rStart = clock() + 0.15;
     if (ac && (settings.bgm || settings.sfx)) {
@@ -214,6 +233,14 @@ export const rhythm = {
     }
     return rStart;
   },
+  // 지휘자 게임: 선수별 음악 크기(0~1). 지휘를 멈추면 오케스트라 소리가 작아짐
+  level(slot, x) {
+    rLevels[slot] = x;
+    if (!rGain || !ac) return;
+    const vals = Object.values(rLevels), avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    rGain.gain.setTargetAtTime(0.6 * (0.3 + 0.7 * avg), ac.currentTime, 0.15);
+  },
+  accent(steps) { rAccentUntil = Math.max(rAccentUntil, rStep + steps); },   // 금관 강조 (반 박 단위)
   stop() {
     clearInterval(rTimer); rTimer = null; rStart = 0;
     if (rGain && ac) { const g = rGain; g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.05); setTimeout(() => { try { g.disconnect(); } catch (e) {} }, 400); }
