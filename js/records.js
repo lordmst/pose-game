@@ -13,11 +13,12 @@ export function addPlayer(name) {
   if (!name) return null;
   let p = db.players.find(x => x.name === name);
   if (p) return p;
-  p = { id: "p" + uid(), name, level: "add10" };
+  p = { id: "p" + uid(), name, level: "add10", diff: "normal" };
   db.players.push(p); persist(); return p;
 }
 export function removePlayer(id) { db.players = db.players.filter(p => p.id !== id); persist(); }
 export function setLevel(id, level) { const p = db.players.find(x => x.id === id); if (p) { p.level = level; persist(); } }
+export function setDiff(id, diff) { const p = db.players.find(x => x.id === id); if (p) { p.diff = diff; persist(); } }
 
 export const getSettings = () => db.settings || {};
 export function setSettings(s) { db.settings = s; persist(); }

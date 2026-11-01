@@ -1,12 +1,13 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=8";
-import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=8";
-import * as R from "./records.js?v=8";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=8";
-import copy from "./games/copy.js?v=8";
-import math, { LEVELS } from "./games/math.js?v=8";
-import ice from "./games/ice.js?v=8";
-import star from "./games/star.js?v=8";
+import { Camera, Tracker, Assigner, createDetector, SIM } from "./pose.js?v=9";
+import { sfx, bgm, speak, stopSpeak, unlock, settings } from "./audio.js?v=9";
+import * as R from "./records.js?v=9";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=9";
+import copy from "./games/copy.js?v=9";
+import math, { LEVELS } from "./games/math.js?v=9";
+import ice from "./games/ice.js?v=9";
+import star from "./games/star.js?v=9";
+import { DIFFS, diffOf } from "./difficulty.js?v=9";
 
 const GAMES = { copy, math, ice, star };
 const GAME_ORDER = ["copy", "math", "ice", "star"];
@@ -35,7 +36,7 @@ let sel = [];
 // 고정 선수(지울 수 없음)와 손님 자리. 손님 이름은 이번 접속 동안만 유지
 const FIXED = ["아빠", "엄마", "우영", "연제"];
 const MAX_GUESTS = 6;
-const guests = [{ id: "guest1", n: 1, name: "", level: "add10" }, { id: "guest2", n: 2, name: "", level: "add10" }];
+const guests = [{ id: "guest1", n: 1, name: "", level: "add10", diff: "normal" }, { id: "guest2", n: 2, name: "", level: "add10", diff: "normal" }];
 const guestOf = id => guests.find(g => g.id === id);
 const guestName = g => g.name.trim() || `손님 ${g.n}`;
 FIXED.forEach(n => R.addPlayer(n));
@@ -94,6 +95,7 @@ function allChoices() {
 }
 function nameOf(id) { const g = guestOf(id); if (g) return guestName(g); return (R.players().find(p => p.id === id) || { name: "?" }).name; }
 function levelOf(id) { const g = guestOf(id); if (g) return g.level; return (R.players().find(p => p.id === id) || {}).level || "add10"; }
+function diffIdOf(id) { const g = guestOf(id); if (g) return g.diff; return (R.players().find(p => p.id === id) || {}).diff || "normal"; }
 // 손님은 이름을 적었을 때만 그 이름으로 기록 저장
 function profileOf(id) { const g = guestOf(id); if (!g) return id; return g.name.trim() ? "guest:" + g.name.trim() : null; }
 
@@ -121,7 +123,7 @@ function renderChips() {
   if (guests.length < MAX_GUESTS) {
     const add = document.createElement("button");
     add.type = "button"; add.className = "chip addguest"; add.textContent = "+ 손님";
-    add.onclick = () => { const n = Math.max(...guests.map(g => g.n)) + 1; guests.push({ id: "guest" + n, n, name: "", level: "add10" }); renderChips(); };
+    add.onclick = () => { const n = Math.max(...guests.map(g => g.n)) + 1; guests.push({ id: "guest" + n, n, name: "", level: "add10", diff: "normal" }); renderChips(); };
     chips.appendChild(add);
   }
 }
@@ -135,7 +137,7 @@ function renderSlots() {
     const nameEl = g
       ? `<input class="gname" data-guest="${id}" maxlength="8" placeholder="손님 ${g.n} 이름 입력" value="${esc(g.name)}">`
       : `<b class="nm">${esc(nameOf(id))}</b>`;
-    row.innerHTML = `<span class="badge">${i + 1}P</span>${nameEl}<span class="pos">${pos}</span><label>수학 풍선 <select></select></label>` +
+    row.innerHTML = `<span class="badge">${i + 1}P</span>${nameEl}<span class="pos">${pos}</span><span class="diffs"></span><label>수학 풍선 <select></select></label>` +
       (g ? `<span class="gnote">이름을 적으면 기록이 저장돼요</span>` : "");
     if (g) {
       const inp = row.querySelector("input");
@@ -146,6 +148,14 @@ function renderSlots() {
     for (const [k, v] of Object.entries(LEVELS)) s.add(new Option(v, k));
     s.value = levelOf(id);
     s.onchange = () => { if (g) g.level = s.value; else R.setLevel(id, s.value); };
+    // 난이도: 쉬움 · 보통 · 어려움
+    const dbox = row.querySelector(".diffs");
+    for (const d of Object.values(DIFFS)) {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = d.label;
+      b.className = "dbtn " + d.id + (diffIdOf(id) === d.id ? " on" : "");
+      b.onclick = () => { if (g) g.diff = d.id; else R.setDiff(id, d.id); renderSlots(); };
+      dbox.appendChild(b);
+    }
     rows.appendChild(row);
   });
   const btn = $("#btnStart");
@@ -162,7 +172,7 @@ $("#btnReset").onclick = () => { if (confirm("모든 순위 기록을 지울까�
 $("#btnStart").onclick = async () => {
   if (!sel.length) return;
   unlock(); goFullscreen();
-  slots = sel.map((id, i) => ({ id, profileId: profileOf(id), name: nameOf(id), level: levelOf(id), color: SLOT_COLORS[i] }));
+  slots = sel.map((id, i) => ({ id, profileId: profileOf(id), name: nameOf(id), level: levelOf(id), diff: diffIdOf(id), color: SLOT_COLORS[i] }));
   setMsg("카메라를 켜는 중...");
   try { await cam.open(); }
   catch (e) { setMsg(cameraErrorText(e), true); return; }
@@ -254,7 +264,7 @@ function makeEnv(i) {
   const p = players[i];
   return {
     slot: i, player: p, tracker: trackers[i], zone: zones[i], view, mode: slots.length,
-    level: p.level, color: p.color, name: p.name,
+    level: p.level, diff: diffOf(p.diff), color: p.color, name: p.name,
     progress: () => 1 - Math.max(0, timeLeft) / GAMES[gameId].sec,
     fever: () => fever,
     award: (base, x, y) => award(i, base, x, y),
@@ -295,7 +305,7 @@ function enterFever() {
 let hudCache = [];
 function setupHud() {
   hudCache = [];
-  players.forEach((p, i) => { const b = $("#pb" + i); b.style.setProperty("--c", p.color); b.querySelector(".pn").textContent = `${i + 1}P ${p.name}`; });
+  players.forEach((p, i) => { const b = $("#pb" + i); b.style.setProperty("--c", p.color); b.querySelector(".pn").textContent = `${i + 1}P ${p.name}` + (p.diff !== "normal" ? ` · ${diffOf(p.diff).label}` : ""); });
   $("#pb1").style.visibility = players.length === 2 ? "visible" : "hidden";
   renderHud();
 }
@@ -323,7 +333,7 @@ function endGame() {
     const meters = Math.round(trackers[i].meters * 10) / 10;
     let rec = null;
     if (p.profileId) {
-      rec = R.addRecord({ key: R.gameKey(gameId, p.level), game: gameId, level: gameId === "math" ? p.level : null, playerId: p.profileId, name: p.name, score: p.score, mode: players.length, meters });
+      rec = R.addRecord({ key: R.gameKey(gameId, p.level), game: gameId, level: gameId === "math" ? p.level : null, playerId: p.profileId, name: p.name, score: p.score, mode: players.length, meters, diff: p.diff });
       justSaved.add(rec.record.id);
     }
     return { p, meters, rec, extra: (insts[i].result && insts[i].result()) || "" };
@@ -353,7 +363,7 @@ function renderResult(results) {
       `<div class="rscore">${p.score}<small>점</small></div>` +
       (badge ? `<div class="rbadge">${badge}</div>` : "") +
       `<div class="rmeta">${rec ? `전체 ${rec.rank}위 (기록 ${rec.total}개 중)` : "손님 이름을 적으면 다음부터 기록이 저장돼요"}</div>` +
-      `<div class="rmeta">${esc(extra)}${extra ? " · " : ""}최대 콤보 ${p.maxCombo}</div>` +
+      `<div class="rmeta">난이도 ${diffOf(p.diff).label} · ${esc(extra)}${extra ? " · " : ""}최대 콤보 ${p.maxCombo}</div>` +
       `<div class="rmeta">손이 움직인 거리 약 ${meters}m</div>`;
     box.appendChild(col);
   });
@@ -380,7 +390,7 @@ function renderRanking() {
   list.forEach((r, i) => {
     const d = new Date(r.at), li = document.createElement("li");
     if (justSaved.has(r.id)) li.className = "new";
-    li.innerHTML = `<b class="rk">${i + 1}</b><span class="nm">${esc(r.name)}</span><span class="sc">${r.score}점</span><span class="dt">${d.getMonth() + 1}/${d.getDate()}${r.mode === 2 ? " · 대결" : ""}</span>`;
+    li.innerHTML = `<b class="rk">${i + 1}</b><span class="nm">${esc(r.name)}</span><span class="sc">${r.score}점</span><span class="df ${r.diff || "normal"}">${diffOf(r.diff).label}</span><span class="dt">${d.getMonth() + 1}/${d.getDate()}${r.mode === 2 ? " · 대결" : ""}</span>`;
     ol.appendChild(li);
   });
   const bx = $("#rankBests"); bx.innerHTML = "<h4>선수별 최고 기록</h4>";

@@ -1,6 +1,6 @@
 // 별 따기: 떨어지는 별을 손으로 잡기. 위쪽 금별은 3점, 폭탄은 피하기(-1점)
-import { burst, shake, outlinedText, starPath } from "../fx.js?v=8";
-import { sfx } from "../audio.js?v=8";
+import { burst, shake, outlinedText, starPath } from "../fx.js?v=9";
+import { sfx } from "../audio.js?v=9";
 
 export default {
   id: "star", title: "별 따기", icon: "⭐", sec: 45, cursor: "✋",
@@ -10,10 +10,10 @@ export default {
     let stars = [], spawnT = 0.4, t = 0, caught = 0, missed = 0, bombs = 0;
     function spawn() {
       const p = env.progress(), r = Math.random();
-      const kind = p > 0.15 && r < 0.14 ? "bomb" : r < 0.32 ? "gold" : "star";
+      const kind = p > 0.15 && r < 0.14 * env.diff.bomb ? "bomb" : r < 0.32 ? "gold" : "star";
       stars.push({
         kind, fx: 0.12 + Math.random() * 0.76, fy: kind === "gold" ? 0.22 : 0.13, hold: kind === "gold" ? 1.4 : 0,
-        ph: Math.random() * 6, vy: (0.1 + 0.08 * p) * (kind === "gold" ? 0.75 : 1) * (env.fever() ? 1.2 : 1),
+        ph: Math.random() * 6, vy: (0.1 + 0.08 * p) * env.diff.speed * (kind === "gold" ? 0.75 : 1) * (env.fever() ? 1.2 : 1),
         trail: [], dead: false, born: 0, x: 0, y: 0,
       });
     }
@@ -21,7 +21,7 @@ export default {
     return {
       update(dt) {
         t += dt; spawnT -= dt;
-        const p = env.progress(), interval = (1.0 - 0.45 * p) / widthK * (env.fever() ? 0.75 : 1);
+        const p = env.progress(), interval = (1.0 - 0.45 * p) / widthK / env.diff.speed * (env.fever() ? 0.75 : 1);
         if (spawnT <= 0 && stars.length < Math.ceil(3.5 * widthK)) { spawn(); spawnT = interval; }
         const hands = env.tracker.hands.filter(h => h.vis), R0 = R();
         for (const s of stars) {
@@ -30,7 +30,7 @@ export default {
           s.x = z.x0 + s.fx * z.w + Math.sin(t * 1.3 + s.ph) * z.w * 0.03; s.y = s.fy * v.H;
           s.trail.push([s.x, s.y]); if (s.trail.length > 10) s.trail.shift();
           const r = s.kind === "gold" ? R0 * 1.35 : R0;
-          if (hands.some(h => Math.hypot(h.x - s.x, h.y - s.y) < r * 1.4)) {
+          if (hands.some(h => Math.hypot(h.x - s.x, h.y - s.y) < r * 1.4 * env.diff.reach)) {
             s.dead = true;
             if (s.kind === "bomb") {
               bombs++; env.penalty(1, s.x, s.y - r, "펑! -1"); sfx.bomb(); shake(v.U * 0.02, 0.35);

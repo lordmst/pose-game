@@ -1,6 +1,6 @@
 // 따라쟁이: 카드 속 자세를 0.6초 유지하면 성공, 2초 안에 해내면 2점
-import { burst, popup, rr, outlinedText } from "../fx.js?v=8";
-import { sfx } from "../audio.js?v=8";
+import { burst, popup, rr, outlinedText } from "../fx.js?v=9";
+import { sfx } from "../audio.js?v=9";
 
 const HOLD = 0.6;
 const ang = (a, b, c) => {
@@ -74,19 +74,19 @@ export default {
         matched = !!(pts && cur.need.every(i => pts[i].v) && cur.ok(measure(pts)));
         hold = matched ? hold + dt : Math.max(0, hold - dt * 1.5);
         const c = card(), cx = c.x + c.w / 2;
-        if (hold >= HOLD) {
-          const fast = shown < 2.0;
+        if (hold >= HOLD * env.diff.hold) {
+          const fast = shown < 2.0 * env.diff.poseTime;
           env.award(fast ? 2 : 1, cx, c.y - v.U * 0.03);
           if (fast) popup(cx, c.y + c.h + v.U * 0.06, "빨라요!", { size: v.U * 0.045, color: "#fff", stroke: "#e0306a" });
           sfx.catch(env.player.combo);
           burst(cx, c.y + c.h / 2, { n: 30, colors: ["#ffd400", "#ff7aa2", "#7ae0ff", "#9dff7a"], shape: "confetti", speed: v.U * 0.9, gravity: v.U * 1.2, size: v.U * 0.016 });
           flashT = 0.3; done++; next();
-        } else if (shown > 7 - 3 * env.progress()) {
+        } else if (shown > (7 - 3 * env.progress()) * env.diff.poseTime) {
           env.miss(cx, c.y - v.U * 0.03, "다음 자세!"); next();
         }
       },
       draw(ctx) {
-        const c = card(), r = v.U * 0.03, limit = 7 - 3 * env.progress();
+        const c = card(), r = v.U * 0.03, limit = (7 - 3 * env.progress()) * env.diff.poseTime;
         ctx.fillStyle = "rgba(0,0,0,.25)"; rr(ctx, c.x + 6, c.y + 8, c.w, c.h, r); ctx.fill();
         ctx.fillStyle = flashT > 0 ? "#fff6c8" : "#fff"; rr(ctx, c.x, c.y, c.w, c.h, r); ctx.fill();
         ctx.lineWidth = v.U * 0.012; ctx.strokeStyle = matched ? "#2fd36b" : env.color; ctx.stroke();
@@ -99,7 +99,7 @@ export default {
         // 자세 유지 게이지(카드 아래)
         const by = c.y + c.h + v.U * 0.015, bh = v.U * 0.028;
         ctx.fillStyle = "rgba(255,255,255,.85)"; rr(ctx, c.x, by, c.w, bh, bh / 2); ctx.fill();
-        if (hold > 0) { ctx.fillStyle = "#2fd36b"; rr(ctx, c.x, by, c.w * Math.min(1, hold / HOLD), bh, bh / 2); ctx.fill(); }
+        if (hold > 0) { ctx.fillStyle = "#2fd36b"; rr(ctx, c.x, by, c.w * Math.min(1, hold / (HOLD * env.diff.hold)), bh, bh / 2); ctx.fill(); }
       },
       result: () => `성공한 자세 ${done}개`,
     };

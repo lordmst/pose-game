@@ -161,3 +161,11 @@ body:not(.live) .overlay { background: var(--y); }
 .pill.go5 { background: var(--b); color: #fff; }
 .readybar .opnote { font-size: clamp(12px, 1.9vmin, 17px); opacity: .7; }
 .badge-lg.off { background: linear-gradient(90deg, var(--c) calc(var(--k, 0) * 100%), rgba(255, 255, 255, .88) 0); color: #222; text-shadow: 0 0 3px #fff, 0 0 3px #fff; border-color: var(--c); border-style: dashed; }
+.diffs { display: inline-flex; border: 2px solid var(--b); border-radius: 12px; overflow: hidden; }
+.dbtn { padding: 6px 12px; font-size: 16px; background: #fff; border-left: 2px solid var(--b); }
+.dbtn:first-child { border-left: none; }
+.dbtn.on.easy { background: #37c26a; color: #fff; }
+.dbtn.on.normal { background: #f0a020; color: #fff; }
+.dbtn.on.hard { background: #e0306a; color: #fff; }
+#rankList .df { font-size: .7em; padding: 1px 8px; border-radius: 10px; color: #fff; background: #f0a020; white-space: nowrap; }
+#rankList .df.easy { background: #37c26a; } #rankList .df.hard { background: #e0306a; }

@@ -1,6 +1,6 @@
 // 얼음 깨기: 손을 빠르게 휘둘러 얼음을 치면 맞은 자리에서 금이 가고, 다 깨면 안에 든 물건이 튀어나옴
-import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=8";
-import { sfx } from "../audio.js?v=8";
+import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=9";
+import { sfx } from "../audio.js?v=9";
 
 const PUNCH = 3.0;      // 타격으로 인정하는 손 속도 (어깨너비/초). 낮출수록 쉬움
 const STRONG = 7.5;     // 이 이상이면 강펀치(2타)
@@ -16,7 +16,7 @@ export default {
     const S = () => Math.min(z.w / cols * 0.62, v.U * 0.25);
     let broken = 0;
     function fresh(slot) {
-      const p = env.progress(), gold = p > 0.1 && Math.random() < 0.15, hp = gold ? 5 : p > 0.5 ? 4 : 3;
+      const p = env.progress(), gold = p > 0.1 && Math.random() < 0.15, hp = Math.max(2, (gold ? 5 : p > 0.5 ? 4 : 3) + env.diff.hp);
       return { fx: slot.fx, fy: slot.fy, hp, max: hp, gold, item: ITEMS[rnd(0, ITEMS.length - 1)], cracks: [], cool: [0, 0], shake: 0, broken: false, respawn: 0, born: 0, hint: 0 };
     }
     const blocks = [];
@@ -51,11 +51,11 @@ export default {
           hands.forEach((h, k) => {
             if (b.broken || !h.vis || b.cool[k] > 0) return;
             if (Math.abs(h.x - cx) > s * 0.6 || Math.abs(h.y - cy) > s * 0.6) return;
-            if (h.bodySpeed < PUNCH) {
+            if (h.bodySpeed < PUNCH * env.diff.punch) {
               if (h.bodySpeed > 1.2 && b.hint === 0) { popup(cx, cy - s * 0.7, "더 빠르게!", { size: v.U * 0.04, color: "#fff", stroke: "#2a7bb5" }); b.hint = 2; }
               return;
             }
-            const strong = h.bodySpeed >= STRONG;
+            const strong = h.bodySpeed >= STRONG * env.diff.punch;
             b.cool[k] = 0.3; b.shake = 0.18;
             const ix = clamp((h.x - cx) / s, -0.42, 0.42), iy = clamp((h.y - cy) / s, -0.42, 0.42);
             for (let n = 0; n < (strong ? 2 : 1) && b.hp > 0; n++) { b.hp--; addCracks(b, ix, iy); }

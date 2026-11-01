@@ -1,6 +1,6 @@
 // 수학 풍선: 정답이 적힌 풍선을 손으로 터뜨리기 (손을 잠깐 대거나 빠르게 치면 터짐)
-import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=8";
-import { sfx } from "../audio.js?v=8";
+import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=9";
+import { sfx } from "../audio.js?v=9";
 
 export const LEVELS = { add10: "덧셈 (10까지)", addsub20: "덧셈·뺄셈 (20까지)", mul: "구구단", mix: "사칙 혼합" };
 const OPS = { add10: ["+"], addsub20: ["+", "-"], mul: ["×"], mix: ["+", "-", "×", "÷"] };
@@ -76,7 +76,7 @@ export default {
         tAll += dt; lock = Math.max(0, lock - dt); boxBad = Math.max(0, boxBad - dt);
         if (needSpeak) { env.speak(prob.speech); needSpeak = false; }
         if (phase === "done") { doneT -= dt; if (doneT <= 0) next(); }
-        const rise = (RISE_START + (RISE_END - RISE_START) * env.progress()) * (env.fever() ? 1.15 : 1), r = R();
+        const rise = (RISE_START + (RISE_END - RISE_START) * env.progress()) * env.diff.speed * (env.fever() ? 1.15 : 1), r = R();
         const hands = env.tracker.hands.filter(h => h.vis);
         for (const b of balloons) {
           if (!b.alive) continue;
