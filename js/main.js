@@ -1,24 +1,24 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=24";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=24";
-import * as R from "./records.js?v=24";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=24";
-import copy from "./games/copy.js?v=24";
-import math from "./games/math.js?v=24";
-import ice from "./games/ice.js?v=24";
-import star from "./games/star.js?v=24";
-import fruit from "./games/fruit.js?v=24";
-import mole from "./games/mole.js?v=24";
-import wall from "./games/wall.js?v=24";
-import rhythm from "./games/rhythm.js?v=24";
-import goalie from "./games/goalie.js?v=24";
-import { hangul, english } from "./games/word.js?v=24";
-import clockGame from "./games/clock.js?v=24";
-import run from "./games/run.js?v=24";
-import simon from "./games/simon.js?v=24";
-import conductor from "./games/conductor.js?v=24";
-import { DIFFS, diffOf } from "./difficulty.js?v=24";
-import { startDemo } from "./demo.js?v=24";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=25";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=25";
+import * as R from "./records.js?v=25";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=25";
+import copy from "./games/copy.js?v=25";
+import math from "./games/math.js?v=25";
+import ice from "./games/ice.js?v=25";
+import star from "./games/star.js?v=25";
+import fruit from "./games/fruit.js?v=25";
+import mole from "./games/mole.js?v=25";
+import wall from "./games/wall.js?v=25";
+import rhythm from "./games/rhythm.js?v=25";
+import goalie from "./games/goalie.js?v=25";
+import { hangul, english } from "./games/word.js?v=25";
+import clockGame from "./games/clock.js?v=25";
+import run from "./games/run.js?v=25";
+import simon from "./games/simon.js?v=25";
+import conductor from "./games/conductor.js?v=25";
+import { DIFFS, diffOf } from "./difficulty.js?v=25";
+import { startDemo } from "./demo.js?v=25";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -332,7 +332,8 @@ function goReady() {
   $("#readyHint").textContent = slots.length === 2
     ? "1P는 화면 왼쪽, 2P는 오른쪽에 서서 두 손을 머리 위로 올려(만세) 주세요"
     : "화면 가운데에 서서 두 손을 머리 위로 올려(만세) 주세요";
-  readyT = 0; readyCache = ""; tutOk = slots.map(() => false); tutT = slots.map(() => 0); readyStartT = lastT;
+  readyT = 0; readyCache = ""; tutOk = slots.map(() => false); tutT = slots.map(() => 0); presentT = slots.map(() => 0); readyStartT = lastT;
+  $(".readybar").classList.remove("compact");
   $("#tutorial").hidden = !g.oneHand;
   renderSubjPick();
   setState("ready");
@@ -376,7 +377,9 @@ function renderSongCards() {
   });
 }
 $("#btnSongBack").onclick = () => { rhythmAudio.stopPreview(); goReady(); };
-let tutOk = [], tutT = [], readyStartT = 0;
+let tutOk = [], tutT = [], readyStartT = 0, presentT = [];
+const TUT_SKIP = 5;        // 한 손 연습을 못 해도 이 시간(초)이 지나면 준비 완료로 침
+const upperOk = tr => !!(tr && tr.present && tr.pts && [0, 11, 12].every(i => tr.pts[i].v));
 const TUT_HOLD = 0.8;      // 연습: 들어 올린 손을 펴서 이만큼 유지하면 통과
 const TUT_MIN_SHOW = 3;    // 한 손 게임은 안내를 읽을 수 있게 자리 잡기 화면을 최소 3초 보여줌(자동 시작 기준)
 // 손 모양을 3초 넘게 한 번도 판정 못 했으면(너무 멀거나 손 인식 모델이 없으면) 튜토리얼 확인을 건너뜀
@@ -384,7 +387,7 @@ const shapeUnavailable = () => !handShape || (lastT - shapeSeenAt > 3 && lastT -
 function renderReadyStat(ok) {
   const html = slots.map((s, i) => {
     const tr = trackers[i];
-    const msg = ok[i] ? (GAMES[gameId].oneHand && tutOk[i] ? "✋ 확인! 준비 완료" : "준비 완료") : !tr.present ? "만세 해 주세요" : !tr.fullBody ? "몸이 다 안 보여요" : "손을 들어 손바닥을 펴 보세요";
+    const msg = ok[i] ? (GAMES[gameId].oneHand && tutOk[i] ? "✋ 확인! 준비 완료" : "준비 완료") : !tr.present ? "만세 해 주세요" : !upperOk(tr) ? "얼굴과 어깨가 보이게" : "손을 들어 손바닥을 펴 보세요";
     return `<span class="rs${ok[i] ? " ok" : ""}" style="--c:${s.color}">${i + 1}P ${esc(s.name)} · ${msg}</span>`;
   }).join("");
   if (html !== readyCache) { $("#readyStat").innerHTML = html; readyCache = html; }
@@ -631,7 +634,11 @@ function tick(dt) {
       tutT[i] = a && a.shape === "open" ? tutT[i] + dt : Math.max(0, tutT[i] - dt);
       if (tutT[i] >= TUT_HOLD && !tutOk[i]) { tutOk[i] = true; sfx.catch(3); }
     });
-    const ok = trackers.map((tr, i) => tr.present && tr.fullBody && (!g.oneHand || tutOk[i] || noShape));
+    trackers.forEach((tr, i) => { presentT[i] = tr.present ? (presentT[i] || 0) + dt : 0; });
+    // 준비 완료: 윗몸(얼굴·두 어깨)만 보이면 됨. 한 손 연습은 5초 넘게 안 되면 건너뜀 (멈춰서 시작이 안 되는 일 방지)
+    const ok = trackers.map((tr, i) => upperOk(tr) && (!g.oneHand || tutOk[i] || noShape || presentT[i] > TUT_SKIP));
+    // 선수가 다 인식되면 안내 창을 작게 접어 화면(내 몸)이 잘 보이게
+    $(".readybar").classList.toggle("compact", trackers.every(tr => tr.present) && (!g.oneHand || ok.every(Boolean)));   // 한 손 연습 안내는 끝날 때까지 보여 줌
     const minShown = !g.oneHand || lastT - readyStartT >= TUT_MIN_SHOW;
     if (g.oneHand) {
       const note = noShape ? "멀어서 손 모양이 잘 안 보여요. 이럴 땐 허리 위로 들어 올린 손으로 골라요" : "";
@@ -719,11 +726,11 @@ function drawSkeletons() {
 function drawReady() {
   const { H, U } = view;
   zones.forEach((z, i) => {
-    const ok = trackers[i] && trackers[i].present && trackers[i].fullBody;
-    const w = Math.min(z.w * 0.6, U * 0.75), x = z.cx - w / 2, y = H * 0.24, h = H * 0.72;
+    const ok = upperOk(trackers[i]);
+    const w = Math.min(z.w * 0.6, U * 0.75), x = z.cx - w / 2, y = H * 0.3, h = H * 0.66;
     ctx.save(); ctx.setLineDash(ok ? [] : [U * 0.025, U * 0.018]); ctx.lineWidth = U * 0.01;
     ctx.strokeStyle = ok ? "#2fd36b" : "rgba(255,255,255,.85)"; rr(ctx, x, y, w, h, U * 0.04); ctx.stroke(); ctx.restore();
-    const label = ok ? "좋아요!" : trackers[i] && trackers[i].present ? "몸이 다 보이게" : `${i + 1}P ${slots[i].name} 여기서 만세!`;
+    const label = ok ? "좋아요!" : trackers[i] && trackers[i].present ? "얼굴과 어깨가 보이게" : `${i + 1}P ${slots[i].name} 여기서 만세!`;
     outlinedText(ctx, label, z.cx, y + h - U * 0.05, U * 0.05, "#fff", ok ? "#1d8f47" : slots[i].color);
   });
 }

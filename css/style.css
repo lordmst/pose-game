@@ -227,3 +227,9 @@ body:not(.live) .overlay { background: var(--y); }
 /* 노래 고르기: 지난번에 고른 노래 표시 */
 .card.song.last { outline: max(4px, .7vmin) solid #ffd400; outline-offset: 3px; }
 #scr-song .card .lbl { font-size: clamp(15px, min(2.2vw, 3.2vh), 26px); }
+/* 자리 잡기: 선수가 다 인식되면 안내 창을 위쪽에 작게 접어 몸이 가려지지 않게 */
+.readybar { transition: opacity .2s; }
+.readybar.compact { padding: .8vmin 2vmin; gap: .6vmin; background: rgba(255, 248, 231, .88); }
+.readybar.compact h2 { font-size: clamp(18px, 3vmin, 30px); }
+.readybar.compact .how, .readybar.compact #readyHint, .readybar.compact .opnote, .readybar.compact .tut-row, .readybar.compact .tut-try { display: none; }
+.readybar.compact .pill { padding-top: .8vmin; padding-bottom: .8vmin; }
