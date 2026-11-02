@@ -3,6 +3,7 @@
 // 화살표가 판에 겹치는 순간 그 동작을 함. 긴 막대(홀드)는 끝날 때까지 그대로. 맞혀도 효과음은 없음(음악만)
 import { burst, outlinedText, rr, FONT } from "../fx.js?v=39";
 import { rhythm, clock, SONGS, songOf, onsetAt, songPlan } from "../audio.js?v=39";
+import * as REAL from "../realmusic.js?v=39";
 
 const TRAVEL = 1.6;                                   // 화살표가 화면 아래에서 판까지 올라오는 시간(초, 보통)
 // 판정 시간 폭(초, 보통). 쉬움은 넓고 어려움은 좁음
@@ -89,13 +90,20 @@ function drawArrow(ctx, x, y, s, lane, kind, glow = 0) {
 
 export default {
   id: "rhythm", title: "리듬 박자", icon: "🥁", sec: 45, cursor: "", cat: "move", bg: "#c39bff", desc: "펌프처럼 손발로 박자 밟기", music: false,
-  songs: SONGS.map(({ id, title, icon, bpm }) => ({ id, title, icon, bpm })),
-  // 게임 시간 = 고른 곡이 끝날 때까지 (곡을 중간에 자르지 않음, 45초에 가장 가깝게 곡 단위로)
-  secFor: songId => songPlan(songId, 45).sec,
+  // 합성음 노래 + 무료 음원(실제 녹음, 위키미디어 공용에서 받아 옴)
+  songs: [...SONGS.map(({ id, title, icon, bpm }) => ({ id, title, icon, bpm, synth: true })), ...REAL.extraSongs(SONGS.map(s => s.id), "rhythm")],
+  // 게임 시간 = 고른 곡이 끝날 때까지 (합성음은 45초에 가장 가깝게 곡 단위로, 녹음은 길이 그대로)
+  secFor: songId => { const r = REAL.ready(songId); return r ? r.duration + 1.0 : songPlan(SONGS.some(s => s.id === songId) ? songId : "basic", 45).sec; },
+  prepare: songId => (SONGS.some(s => s.id === songId) ? Promise.resolve(true) : REAL.load(songId)),
+  preview: songId => { if (SONGS.some(s => s.id === songId)) rhythm.preview(songId); else REAL.preview(songId); },
+  stopPreview: () => { REAL.stopPreview(); rhythm.stopPreview(); },
   how: "화살표가 위 판에 겹치는 순간 몸으로 밟아요. ↖ 왼손 · ↗ 오른손은 옆으로 쭉 뻗고, ↙ 왼발 · ↘ 오른발은 다리를 들어요! 긴 막대는 끝까지 그대로",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, id = D.id || "normal";
-    const song = songOf(env.song), plan = songPlan(song.id, 45), minGap = MIN_GAP[id] || 0.45, travel = TRAVEL / D.speed, wide = D.reach;
+    // 녹음 곡(무료 음원): 받아 둔 게 있어야 함 (없으면 기본 합성음)
+    const isSynth = x => SONGS.some(s => s.id === x), real = !isSynth(env.song) ? REAL.ready(env.song) : null;
+    const song = real ? { id: env.song, title: REAL.RECORDINGS[env.song].title } : songOf(env.song), rec = real ? REAL.RECORDINGS[env.song] : null;
+    const plan = songPlan(real ? "basic" : song.id, 45), minGap = MIN_GAP[id] || 0.45, travel = TRAVEL / D.speed, wide = D.reach;
     const badW = JUDGE[3][1] * wide;
     let t0 = null, spb = 0.6, seed = 1, nextJ = 8, notes = [], now = 0, lastT = null;
     let lastLane = null, lastIdx = null, lastTime = -9, holdUntil = -9;
@@ -123,6 +131,23 @@ export default {
       lastIdx = si; return lane;
     }
     // 반 박(j)마다 음표 만들기: 앞 2마디는 준비(둘째 마디에 ↖ ↗ 연습), 그다음은 노래 가락이 시작하는 곳
+    // 녹음 곡: 녹음에서 찾은 박마다 음표 (최소 간격보다 촘촘하면 건너뜀). 판 고르기는 정해진 순서 없이 섞되 같은 판 연속은 피함
+    let rb = null;
+    if (real) {
+      rb = []; for (const b of real.beats) if (!rb.length || b - rb[rb.length - 1] >= minGap * 0.92) rb.push(b);
+      const gaps = rb.slice(1).map((b, i) => b - rb[i]).sort((p, q) => p - q); spb = gaps.length ? gaps[gaps.length >> 1] : 0.6;
+      nextJ = 0;
+    }
+    function addBeat(b) {
+      const time = t0 + rb[b], p = env.progress();
+      if (b < 2) return;                                                // 처음 두 박은 준비
+      let lane;
+      if (b < 6) lane = b % 2 ? 2 : 1;                                   // 처음엔 두 손 번갈아(연습)
+      else { lane = Math.floor(hash(seed, b * 7 + 1) * 4); if (lane === lastLane) lane = (lane + 1 + Math.floor(hash(seed, b) * 3)) % 4; }
+      lastLane = lane; lastTime = time;
+      const pair = b % 8 === 0 && (lane === 1 || lane === 2) && id !== "easy" && p > (id === "hard" ? 0.3 : 0.5) && hash(seed, b * 13 + 2) < (id === "hard" ? 0.4 : 0.2);
+      for (const l of pair ? [lane, 3 - lane] : [lane]) notes.push({ time, lane: l, hold: 0, done: null, holding: false, pair });
+    }
     function addStep(j) {
       if (j >= plan.endStep) return;                                   // 곡이 끝나면 음표도 끝
       const time = t0 + j * spb / 2, p = env.progress(), half = spb / 2;
@@ -161,10 +186,15 @@ export default {
     }
     return {
       update() {
-        if (t0 === null) { t0 = rhythm.start(song.id, { loops: plan.loops }); spb = rhythm.spb; seed = rhythm.seed; }
-        rhythm.tick(); now = clock();
+        if (t0 === null) {
+          if (real) { t0 = REAL.start(song.id) ?? clock() + 0.15; seed = 7 + song.id.length * 131; }
+          else { t0 = rhythm.start(song.id, { loops: plan.loops }); spb = rhythm.spb; seed = rhythm.seed; }
+        }
+        if (!real) rhythm.tick();
+        now = clock();
         const dt = lastT === null ? 0.016 : Math.min(0.1, now - lastT); lastT = now;
-        while (t0 + nextJ * spb / 2 - now < travel) { addStep(nextJ); nextJ++; }
+        if (real) while (nextJ < rb.length && t0 + rb[nextJ] - now < travel) addBeat(nextJ++);
+        else while (t0 + nextJ * spb / 2 - now < travel) { addStep(nextJ); nextJ++; }
         // 발이 1초 넘게 안 보이면 발 화살표는 손을 대각선 아래로 뻗는 것으로 대신
         const p = env.tracker.pts;
         if (p && ((p[25].v && p[26].v) || (p[27].v && p[28].v))) feetSeenT = now;
@@ -194,7 +224,9 @@ export default {
         ctx.globalAlpha = life < 0.2 ? 0.5 + 0.5 * Math.sin(now * 14) : 1;
         ctx.fillStyle = lg; rr(ctx, gx, gy, Math.max(gh, gw * life), gh, gh / 2); ctx.fill(); ctx.globalAlpha = 1;
         // 판정판 + 어느 손발인지 (밟고 있으면 빛남)
-        const beat = t0 !== null && now > t0 ? Math.max(0, 1 - (((now - t0) / spb) % 1) * 3) : 0;
+        let ph = t0 !== null && now > t0 ? ((now - t0) / spb) % 1 : 1;     // 박 안에서 어디쯤인지 (녹음 곡은 찾은 박 기준)
+        if (rb && t0 !== null) { let i = 0; while (i + 1 < rb.length && t0 + rb[i + 1] <= now) i++; const a = t0 + rb[i], b2 = i + 1 < rb.length ? t0 + rb[i + 1] : a + spb; ph = now < a ? 1 : Math.min(1, (now - a) / (b2 - a)); }
+        const beat = Math.max(0, 1 - ph * 3);
         P.forEach((pd, li) => {
           drawArrow(ctx, pd.x, pd.y, s * (1 + 0.06 * beat), li, "receptor", flash[li]);
           const L = LANES[li], foot = li === 0 || li === 3;
@@ -236,9 +268,9 @@ export default {
         }
         if (footByHand && t0 !== null) outlinedText(ctx, "다리가 안 보여요: 발 화살표는 손을 대각선 아래로 뻗어요", z.cx, v.H * 0.9, Math.min(U * 0.028, z.w / 22), "#fff", "#b04a00", 3);
         ctx.font = `${Math.round(U * 0.028)}px ${FONT}`;
-        outlinedText(ctx, `♪ ${song.title}`, z.cx, v.H * 0.955, U * 0.03, "#fff", "rgba(0,0,0,.6)", 3);
+        outlinedText(ctx, rec ? `♪ ${song.title} · ${rec.performer} (${rec.license})` : `♪ ${song.title}`, z.cx, v.H * 0.955, Math.min(U * 0.03, z.w / 38), "#fff", "rgba(0,0,0,.6)", 3);
       },
-      stop() { rhythm.stop(); },
+      stop() { REAL.stop(); rhythm.stop(); },
       result: () => `${song.title} · PERFECT ${count.PERFECT} · GREAT ${count.GREAT} · GOOD ${count.GOOD} · BAD ${count.BAD} · MISS ${count.MISS}`,
       // 설명 시연용
       get notes() { return notes; },

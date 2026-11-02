@@ -25,7 +25,8 @@ export const RECORDINGS = {
   winter: { title: "사계 중 겨울 3악장", by: "비발디", icon: "❄️", file: "12_-_Vivaldi_Winter_mvt_3_Allegro_-_John_Harrison_violin.ogg", dir: "2/21", performer: "존 해리슨(바이올린) · 위치토 주립대 체임버 플레이어스", license: "CC BY-SA", licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/", meter: 3 },
 };
 // 합성음 대신이 없는 곡(실제 녹음만): 노래 고르기 화면에 쓰는 정보. title·by·icon이 있는 녹음
-export const extraSongs = synthIds => Object.entries(RECORDINGS).filter(([id, R]) => R.title && !synthIds.includes(id))
+// game: 그 녹음을 쓰는 게임 (없으면 지휘자). 리듬 박자용 신나는 곡은 game: "rhythm"
+export const extraSongs = (synthIds, game = "conductor") => Object.entries(RECORDINGS).filter(([id, R]) => R.title && !synthIds.includes(id) && (R.game || "conductor") === game)
   .map(([id, R]) => ({ id, title: R.title, by: R.by, icon: R.icon || "🎼", real: true, synth: false }));
 export const pageUrl = id => `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(RECORDINGS[id].file)}`;
 // 받을 주소: MP3 변환본(아이패드 사파리도 재생) → 원본(ogg). ?realbase=주소 로 시험용 로컬 파일을 쓸 수 있음
