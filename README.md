@@ -5,7 +5,7 @@
 - 실행: https://lordmst.github.io/pose-game/
 - 이전 버전: https://lordmst.github.io/pose-game/v1/
 
-## 게임 (29개)
+## 게임 (36개)
 
 | 분류 | 게임 | 시간 | 방법 |
 |---|---|---|---|
@@ -16,7 +16,7 @@
 | 운동 | 두더지 잡기 | 45초 | 튀어나온 두더지를 주먹으로. 헬멧 두더지는 두 번 쳐야 2배, 토끼 감점 |
 | 운동 | 벽 통과 | 50초 | 구멍 자리로 옆걸음해서 구멍 모양대로 자세 잡기. 절반은 전신 자세(앉기·무릎 들기·옆으로 기울이기) |
 | 운동 | 리듬 박자 | 곡이 끝날 때까지(약 35~55초) | 펌프 방식 화면(판정판 4개 ↙ ↖ ↗ ↘, 아래에서 올라오는 화살표)을 몸으로 밟기: 왼손 ↖ · 오른손 ↗은 옆으로 뻗기(위로 들어도 됨), 왼발 ↙ · 오른발 ↘은 그 다리 들기(무릎이 안 보이면 손을 대각선 아래로). 맞혀도 효과음 없이 음악만. PERFECT·GREAT·GOOD·BAD·MISS, 콤보, 생명 게이지, 홀드(보통·어려움), 두 손 동시. 노래 6곡, 순위는 노래별 |
-| 운동 | 지휘자 | 곡이 끝날 때까지(약 40~60초) | VR 지휘 게임 방식: 화살표 칸 쌍(왼손·오른손)이 내려와 가로 지휘선의 빈 칸에 겹치는 순간 화살표 방향으로 손 휘두르기(4박: 아래 → 안쪽 → 바깥쪽 → 위, 쉬움은 아래·위). 다음 동작을 글자로도 안내. 4마디마다 2마디 동안 왼손 동작(✋ 왼손 머리 위로 올려 게이지 채우기 = 크레셴도, ⊙ 왼쪽 위 동그라미를 왼손으로 터치 = 악기 파트 불러내기), 그동안 화살표는 오른손만. 클래식 6곡(베토벤 환희의 송가, 모차르트 아이네 클라이네 나흐트무지크·터키 행진곡, 그리그 산왕의 궁전에서, 파헬벨 캐논, 오펜바흐 캉캉)을 관현악 소리로 연주, 음악은 맞히든 못 맞히든 끝까지 같은 크기로 나오고 효과음은 없음. 잘 맞을수록 관객 호응 게이지가 차고 연주자들이 신나게 움직임. 순위는 곡별 |
+| 운동 | 지휘자 | 곡이 끝날 때까지(실제 연주 약 2~6분) | 실제 오케스트라 연주 녹음(아래 '지휘자 음악' 참고)에서 박자를 자동으로 찾아 화살표를 맞춤. 노래를 고르면 녹음을 받아 옴(인터넷 필요, 못 받으면 합성 오케스트라 소리). VR 지휘 게임 방식: 화살표 칸 쌍(왼손·오른손)이 내려와 가로 지휘선의 빈 칸에 겹치는 순간 화살표 방향으로 손 휘두르기(4박: 아래 → 안쪽 → 바깥쪽 → 위, 쉬움은 아래·위). 다음 동작을 글자로도 안내. 4마디마다 2마디 동안 왼손 동작(✋ 왼손 머리 위로 올려 게이지 채우기 = 크레셴도, ⊙ 왼쪽 위 동그라미를 왼손으로 터치 = 악기 파트 불러내기), 그동안 화살표는 오른손만. 클래식 6곡(베토벤 환희의 송가, 모차르트 아이네 클라이네 나흐트무지크·터키 행진곡, 그리그 산왕의 궁전에서, 파헬벨 캐논, 오펜바흐 캉캉)을 관현악 소리로 연주, 음악은 맞히든 못 맞히든 끝까지 같은 크기로 나오고 효과음은 없음. 잘 맞을수록 관객 호응 게이지가 차고 연주자들이 신나게 움직임. 순위는 곡별 |
 | 운동 | 골키퍼 | 45초 | 날아오는 공을 손으로 막기. 화살표 공은 옆걸음해서 막기(2배), 금색 공 3배 |
 | 운동 | 달리기 경주 | 45초 | 제자리에서 무릎 번갈아 들기(무릎이 안 보이면 팔 흔들기). 10m마다 점수, 토끼보다 먼저 100m 들어오면 보너스 |
 | 스포츠 | 줄넘기 | 45초 | 해변 광장. 양쪽 친구가 돌리는 3D 줄이 발밑을 지나는 순간 점프(두 발목과 어깨가 함께 뜨면 점프), 내 캐릭터도 같이 뜀. 연속으로 넘을수록 빨라짐, 10번마다 보너스 |
@@ -56,6 +56,21 @@
 공통: 선수별 난이도(쉬움×1·보통×2·어려움×3 배점), 마지막 10초 피버(2배), 5콤보마다 보너스,
 처음 하는 게임은 설명 시연, 기록·순위는 기기 브라우저에 저장.
 
+## 지휘자 음악 (실제 연주 녹음)
+
+녹음 파일은 저장소에 넣지 않고, 게임에서 노래를 고를 때 브라우저가 위키미디어 공용(Wikimedia Commons)에서 직접 받아 옵니다(MP3 변환본 → 원본 순서). 박자는 받아 온 녹음에서 자동으로 찾습니다(js/realmusic.js). 받지 못하면 합성 오케스트라 소리로 진행합니다.
+
+| 곡 | 연주 | 이용 허락 | 원본 |
+|---|---|---|---|
+| 베토벤 환희의 송가 (유럽 연합가 편곡) | 미 해군 군악대 (U.S. Navy Band) | 퍼블릭 도메인 | [Commons](https://commons.wikimedia.org/wiki/File:Anthem_of_Europe_(US_Navy_instrumental_long_version).ogg) |
+| 모차르트 아이네 클라이네 나흐트무지크 1악장 | Advent Chamber Orchestra | CC BY-SA 2.0 (EFF Open Audio License) | [Commons](https://commons.wikimedia.org/wiki/File:Mozart_-_Eine_kleine_Nachtmusik_-_1._Allegro.ogg) |
+| 그리그 산왕의 궁전에서 | 체코 국립 교향악단 (Musopen) | 퍼블릭 도메인 | [Commons](https://commons.wikimedia.org/wiki/File:Musopen_-_In_the_Hall_Of_The_Mountain_King.ogg) |
+| 모차르트 터키 행진곡 (피아노) | Romuald Greiss | 퍼블릭 도메인 | [Commons](https://commons.wikimedia.org/wiki/File:Mozart-Marsz_turecki-(Romuald_Greiss).ogg) |
+| 비발디 사계 중 봄 1악장 | John Harrison(바이올린), Wichita State University Chamber Players | CC BY-SA | [Commons](https://commons.wikimedia.org/wiki/File:Vivaldi_-_Four_Seasons_1_Spring_mvt_1_Allegro_-_John_Harrison_violin.oga) |
+| 오펜바흐 캉캉 (천국과 지옥 서곡 중) | Musopen | 퍼블릭 도메인 (CC0) | [Commons](https://commons.wikimedia.org/wiki/File:Offenbach_-_Orpheus_in_the_Underworld_-_Overture,_Can_Can_section.ogg) |
+
+점검: 주소 끝에 `&realbase=/.testaudio` 를 붙이면 위키미디어 대신 로컬 시험 파일(곡 id.wav)을 씁니다.
+
 ## 파일 구조
 
 ```
@@ -69,6 +84,7 @@ js/records.js       선수 목록, 기록, 순위
 js/demo.js          게임 설명 시연 (만화 캐릭터가 실제 게임을 해 보임)
 js/difficulty.js    난이도별 배수
 js/games/sport/*.js 스포츠 탭 14종목 (닌텐도 스위치 스포츠 리조트 종목을 몸동작으로, three.js 3D)
+js/realmusic.js 지휘자 실제 연주 녹음 받기·재생·박자 찾기
 js/games/learn/*.js 학습 탭에 더한 7종 (js/games/learn.js에서 묶음)
 js/games/sport/kit3d.js 3D 공통 도구: 장면·빛·그림자, 미이 같은 캐릭터(선수 팔 자세 따라 하기), 바다·야자수·구름, 카메라 작은 화면
 js/vendor/three.module.min.js three.js 0.160.0 (MIT, 라이선스 three.LICENSE)

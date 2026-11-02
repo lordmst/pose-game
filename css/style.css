@@ -251,3 +251,5 @@ body:not(.live) .overlay { background: var(--y); }
 .cards.tons .card .lbl { font-size: clamp(14px, min(1.9vw, 2.8vh), 24px); }
 .cards.tons .card .desc { font-size: clamp(11px, min(1.2vw, 1.8vh), 14px); }
 @media (max-width: 760px) { .cards.tons { grid-template-columns: repeat(4, auto); } }
+/* 실제 연주 녹음을 받는 동안 노래 카드를 흐리게 */
+#songCards.loading { opacity: .45; pointer-events: none; }

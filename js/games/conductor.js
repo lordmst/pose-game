@@ -1,11 +1,13 @@
 // 지휘자: 오케스트라 지휘하기 (VR 지휘 게임 방식)
 // 화면 가운데로 금색 삼각형(왼손·오른손 한 쌍)이 위에서 내려옴. 가로 지휘선에 닿는 순간
 // 삼각형이 가리키는 방향으로 그 손을 휘두르기 (4박: 아래 ▼▼ → 안쪽 → 바깥쪽 → 위 ▲▲)
-// 음악은 맞히든 못 맞히든 처음부터 끝까지 똑같이 나옴. 잘 맞을수록 관객 호응 게이지가 차고 연주자들이 신나게 움직임
+// 음악은 실제 오케스트라 연주 녹음(위키미디어 공용, 퍼블릭 도메인·CC)을 처음부터 끝까지 틀고, 녹음에서 찾은 박자에 화살표를 맞춤
+// (녹음을 못 받으면 합성 오케스트라 소리). 맞히든 못 맞히든 음악은 똑같이 나옴. 잘 맞을수록 관객 호응 게이지가 차고 연주자들이 신나게 움직임
 // 중간중간 왼손 동작: ✋ '왼손 올리기'(크레셴도: 왼손을 머리 위로 쭉 올려 게이지 채우기),
 //                     ⊙ '왼손 터치'(왼쪽 위에 나온 동그라미를 왼손으로 짚어 악기 파트 불러내기). 그동안 화살표는 오른손만
-import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=36";
-import { rhythm, clock, CLASSICS, songOf, songPlan } from "../audio.js?v=36";
+import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=37";
+import { rhythm, clock, CLASSICS, songOf, songPlan } from "../audio.js?v=37";
+import * as REAL from "../realmusic.js?v=37";
 
 const PERFECT = 0.1, GOOD = 0.22;   // 판정 시간 폭(초, 보통)
 const SWING = 1.8;                  // 휘두르기로 인정하는 손 속도(어깨너비/초)
@@ -26,14 +28,27 @@ const RAISE_HOLD = 0.6, TOUCH_HOLD = 0.25;   // 성공으로 치는 유지 시�
 
 export default {
   id: "conductor", title: "지휘자", icon: "🎼", sec: 50, cursor: "🪄", cat: "move", bg: "#e8a87c", desc: "오케스트라 지휘하기", music: false,
-  songs: CLASSICS.map(({ id, title, by, icon, bpm }) => ({ id, title, by, icon, bpm })), demoSong: "ode",
-  // 게임 시간 = 고른 곡이 끝날 때까지 (곡을 중간에 자르지 않음, 50초에 가장 가깝게 곡 단위로)
-  secFor: songId => songPlan(songId || "ode", 50).sec,
+  songs: CLASSICS.map(({ id, title, by, icon, bpm }) => ({ id, title, by, icon, bpm, real: REAL.has(id) })), demoSong: "ode",
+  // 게임 시간 = 곡이 끝날 때까지 (실제 연주는 녹음 길이 그대로, 합성음은 50초에 가장 가깝게 곡 단위로)
+  secFor: songId => { const r = REAL.ready(songId); return r ? r.duration + 1.0 : songPlan(songId || "ode", 50).sec; },
+  prepare: songId => REAL.load(songId),                          // 노래를 고르면 녹음을 받아 박자를 찾음
+  preview: songId => { if (!REAL.preview(songId)) rhythm.preview(songId); },
+  stopPreview: () => { REAL.stopPreview(); rhythm.stopPreview(); },
   how: "화살표가 가로선 칸에 겹치는 순간 그 방향으로 손을 휘둘러요(왼쪽 화살표는 왼손). ✋가 나오면 왼손을 머리 위로 쭉, ⊙가 나오면 왼손으로 터치! 클래식 명곡 6곡",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, id = D.id || "normal", wide = D.reach;
     const song = songOf(env.song || "ode"), plan = songPlan(song.id, 50), pat = PATTERN[id === "easy" ? 2 : 4], travel = TRAVEL / D.speed;
     let t0 = null, spb = 0.6, nextJ = 8, notes = [], now = 0, lastT = null, energy = 0.7, flare = 0, events = [], raiseLv = 0;
+    // 실제 연주: 녹음에서 찾은 박 중 너무 촘촘한 것은 건너뛰어 지휘할 박(cb)을 고름 (빠른 곡은 두 박에 한 번)
+    const real = REAL.ready(song.id), rec = REAL.RECORDINGS[song.id];
+    let cb = null, rpat = pat;
+    if (real) {
+      const minGap = { easy: 0.7, normal: 0.45, hard: 0.36 }[id] || 0.45; cb = [];
+      for (const b of real.beats) if (!cb.length || b - cb[cb.length - 1] >= minGap * 0.92) cb.push(b);
+      const gaps = cb.slice(1).map((b, i) => b - cb[i]).sort((p, q) => p - q); spb = gaps.length ? gaps[gaps.length >> 1] : 0.6;
+      if (rec.meter === 2) rpat = id === "easy" ? ["down", null, "up", null] : ["down", "up"];
+      nextJ = 0;
+    }
     const cnt = { PERFECT: 0, GOOD: 0, MISS: 0 }, ev = { ok: 0, all: 0 }, trail = [[], []];
     // 화살표 칸 크기: 한 박 간격보다 크면 겹치므로 빠른 곡은 조금 작게
     const lay = () => {
@@ -42,6 +57,25 @@ export default {
     };
 
     // 반 박(j)마다: 박마다 지휘 모양대로 (어려움은 더 빨리 내려오고 판정이 좁음)
+    // 실제 연주: 지휘할 박 하나씩 (b = 박 번호)
+    function addBeat(b) {
+      const time = t0 + cb[b];
+      if (b >= 8 && (b - 8) % EVENT_EVERY === 0 && b + EVENT_LEN < cb.length) {
+        const type = ((b - 8) / EVENT_EVERY) % 2 ? "touch" : "raise";
+        events.push({ type, start: time - 0.3, end: t0 + cb[b + EVENT_LEN], hold: 0, done: null, sec: events.length % 6, pos: null }); ev.all++;
+      }
+      const key = rpat[b % rpat.length];
+      if (!key || b < 4) return;                        // 첫 네 박은 준비
+      const left = events.some(e => time >= e.start + 0.3 && time < e.end);
+      notes.push({ time, key, hands: left ? [1] : [0, 1], parts: [null, null], done: false });
+    }
+    // 지금 박 안에서 어디쯤인지(0~1)와 몇 번째 박인지
+    function beatAt(t) {
+      if (!cb) { const x = (t - t0) / spb; return { i: Math.floor(x), ph: x % 1 }; }
+      let i = 0; while (i + 1 < cb.length && t0 + cb[i + 1] <= t) i++;
+      const a = t0 + cb[i], b = i + 1 < cb.length ? t0 + cb[i + 1] : a + spb;
+      return { i: t < a ? -1 : i, ph: Math.max(0, Math.min(1, (t - a) / (b - a))) };
+    }
     function addStep(j) {
       if (j >= plan.endStep) return;                                   // 곡이 끝나면 지휘도 끝
       const time = t0 + j * spb / 2;
@@ -90,11 +124,16 @@ export default {
     }
     return {
       update() {
-        if (t0 === null) { t0 = rhythm.start(song.id, { orch: true, loops: plan.loops }); spb = rhythm.spb; }
-        rhythm.tick(); now = clock();
+        if (t0 === null) {
+          if (real) t0 = REAL.start(song.id) ?? clock() + 0.15;
+          else { t0 = rhythm.start(song.id, { orch: true, loops: plan.loops }); spb = rhythm.spb; }
+        }
+        if (!real) rhythm.tick();
+        now = clock();
         const dt = lastT === null ? 0.016 : Math.min(0.1, now - lastT); lastT = now;
         flare = Math.max(0, flare - dt * 3);
-        while (t0 + nextJ * spb / 2 - now < travel) { addStep(nextJ); nextJ++; }
+        if (real) while (nextJ < cb.length && t0 + cb[nextJ] - now < travel) addBeat(nextJ++);
+        else while (t0 + nextJ * spb / 2 - now < travel) { addStep(nextJ); nextJ++; }
         const hands = env.tracker.hands;
         hands.forEach((h, k) => { const tr = trail[k]; if (h.vis) tr.push({ x: h.x, y: h.y, t: now }); else tr.length = 0; while (tr.length && now - tr[0].t > 0.3) tr.shift(); });
         const W = GOOD * wide;
@@ -125,7 +164,7 @@ export default {
           e.hold = on ? e.hold + dt : Math.max(0, e.hold - dt * 0.5);
           if (e.hold >= (e.type === "raise" ? RAISE_HOLD : TOUCH_HOLD)) {
             e.done = "ok"; e.doneAt = now; ev.ok++; energy = Math.min(1, energy + 0.2); flare = 1;
-            rhythm.accent(16);   // 효과음 대신 금관 소리가 더해짐
+            if (real) REAL.swell(4); else rhythm.accent(16);   // 효과음 대신 소리가 커짐(실제 연주) / 금관이 더해짐(합성음)
             const at = e.type === "raise" ? gaugePos() : e.pos;
             env.award(3, at.x, at.y - v.U * 0.08);
             popup(at.x + (e.type === "raise" ? v.U * 0.12 : 0), at.y + v.U * 0.06, e.type === "raise" ? "크레셴도!" : "브라보!", { size: v.U * 0.045, color: "#fff", stroke: "#e08a00", life: 1.0 });
@@ -136,7 +175,7 @@ export default {
       },
       draw(ctx) {
         if (t0 === null) now = clock();
-        const U = v.U, Lo = lay(), beatPh = t0 !== null && now > t0 ? ((now - t0) / spb) % 1 : 0, pulse = Math.max(0, 1 - beatPh * 3);
+        const U = v.U, Lo = lay(), BA = t0 !== null && now > t0 ? beatAt(now) : { i: -1, ph: 0 }, beatPh = BA.ph, pulse = Math.max(0, 1 - beatPh * 3);
         // 무대와 연주자 (잘할수록 크게 들썩임)
         const stY = v.H * 0.88;
         ctx.fillStyle = "rgba(90,40,20,.55)"; ctx.beginPath(); ctx.ellipse(z.cx, v.H * 1.04, z.w * 0.56, v.H * 0.2, 0, Math.PI, 0); ctx.fill();
@@ -226,10 +265,10 @@ export default {
           ctx.restore();
         }
         // 첫 마디: 준비 숫자
-        if (t0 !== null && now >= t0 && now < t0 + 4 * spb) outlinedText(ctx, String(Math.floor((now - t0) / spb) + 1), z.cx, v.H * 0.3, U * 0.1 * (1 + pulse * 0.2), "#fff", "#8a5a00");
-        outlinedText(ctx, `♪ ${song.title}`, z.cx, v.H * 0.965, U * 0.028, "#fff", "rgba(0,0,0,.6)", 3);
+        if (t0 !== null && BA.i >= 0 && BA.i < 4) outlinedText(ctx, String(BA.i + 1), z.cx, v.H * 0.3, U * 0.1 * (1 + pulse * 0.2), "#fff", "#8a5a00");
+        outlinedText(ctx, real ? `♪ ${song.title} · 연주 ${rec.performer} (${rec.license})` : `♪ ${song.title}`, z.cx, v.H * 0.965, Math.min(U * 0.028, z.w / 40), "#fff", "rgba(0,0,0,.6)", 3);
       },
-      stop() { rhythm.stop(); },
+      stop() { REAL.stop(); rhythm.stop(); },
       result: () => `${song.title} · 완벽 ${cnt.PERFECT} · 좋아요 ${cnt.GOOD} · 놓침 ${cnt.MISS} · 왼손 동작 ${ev.ok}/${ev.all}`,
       // 설명 시연용
       get notes() { return notes.filter(n => !n.done).map(n => ({ time: n.time, key: n.key, hands: n.hands, parts: n.parts })); },

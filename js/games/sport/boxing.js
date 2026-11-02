@@ -1,9 +1,9 @@
 // 복싱 (스포츠 리조트처럼 3D 링): 내 눈높이에서 상대 선수를 봄. 화면 아래 빨간 내 글러브가 내 손을 그대로 따라감
 // 상대가 막고 있는 곳(얼굴/몸)이 아닌 빈 곳을 주먹으로 침. 상대가 주먹을 뒤로 빼면(빨간 경고) → 두 손으로 얼굴 막기, 또는 머리를 옆으로 피하기
 // 상대 체력을 다 깎으면 KO 보너스, 다음 상대 등장. 내가 맞으면 감점, 체력이 다 떨어지면 다운
-import { burst, popup, shake, rr, outlinedText } from "../../fx.js?v=36";
-import { sfx } from "../../audio.js?v=36";
-import { stage, THREE, box, ball as sphere, cyl, mesh, avatar } from "./kit3d.js?v=36";
+import { burst, popup, shake, rr, outlinedText } from "../../fx.js?v=37";
+import { sfx } from "../../audio.js?v=37";
+import { stage, THREE, box, ball as sphere, cyl, mesh, avatar } from "./kit3d.js?v=37";
 
 const PUNCH = 3.0;       // 펀치로 인정하는 손 속도 (어깨너비/초)
 const STRONG = 7.0;      // 이 이상이면 강펀치(체력 2칸)

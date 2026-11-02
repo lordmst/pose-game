@@ -118,6 +118,8 @@ export function stopSpeak() { try { speechSynthesis.cancel(); } catch (e) {} }
    리듬 게임은 소리와 음표가 정확히 맞아야 하므로 오디오 시계를 기준으로 함.
    두 선수가 같은 반주·같은 음표 패턴을 쓰도록 시작 시각과 씨앗값을 공유 */
 export const clock = () => (ac ? ac.currentTime : performance.now() / 1000);
+// 실제 녹음(realmusic.js)이 쓰는 소리 장치와 출력(배경음악을 꺼도 들리게 효과음 쪽으로)
+export const audioOut = () => (ac ? { ac, dest: settings.bgm ? musicBus : sfxBus } : null);
 let rTimer = null, rStart = 0, rSpb = 0.6, rStep = 0, rNext = 0, rGain = null, rSeed = 1, rSong = null, pGain = null;
 let rOrch = false, rAccentUntil = -1, rEnd = Infinity;   // rEnd: 곡이 끝나는 반 박 번호 (그 뒤로는 소리 없음)          // 지휘자 게임: 관현악 소리, 금관 강조(파트 지시 성공 시)
 const rLevels = {};                            // 선수별 음악 크기(지휘가 맞을수록 큼). 2인은 평균
@@ -160,7 +162,7 @@ export const SONGS = [
     melody: mel(`A4:1 C5:1 E5:2 D5:1 C5:1 D5:2 E5:2 G5:1 E5:1 D5:2 C5:2 A4:1 C5:1 E5:2 D5:1 C5:1 A4:2 G4:2 A4:2 C5:2 -:2
                  A5:2 G5:1 E5:1 G5:2 A5:2 G5:1 E5:1 D5:2 E5:2 -:2 C5:1 D5:1 E5:2 G5:1 E5:1 D5:2 C5:2 B4:2 A4:4`) },
 ];
-// 지휘자 게임용 클래식 (모두 저작권이 끝난 작품). 오케스트라 소리로 연주
+// 지휘자 게임용 클래식 (모두 저작권이 끝난 작품). 실제 연주 녹음(realmusic.js)을 못 받을 때 쓰는 합성 오케스트라 소리
 export const CLASSICS = [
   { id: "ode", title: "환희의 송가", by: "베토벤", icon: "🎻", bpm: 112, drums: "pop", bassStyle: "beat", lead: ["triangle", 0.12],
     bass: SONGS.find(x => x.id === "ode").bass, melody: SONGS.find(x => x.id === "ode").melody },
@@ -176,9 +178,10 @@ export const CLASSICS = [
     bass: "A A A A E E A A A A A A E E E A",
     melody: mel(`B4:1 A4:1 G#4:1 A4:1 C5:4 D5:1 C5:1 B4:1 C5:1 E5:4 F5:1 E5:1 D#5:1 E5:1 B5:1 A5:1 G#5:1 A5:1 B5:1 A5:1 G#5:1 A5:1 C6:4
                  B4:1 A4:1 G#4:1 A4:1 C5:4 D5:1 C5:1 B4:1 C5:1 E5:4 F5:1 E5:1 D#5:1 E5:1 B5:1 A5:1 G#5:1 A5:1 B4:1 A4:1 G#4:1 B4:1 A4:4`) },
-  { id: "canon", title: "캐논", by: "파헬벨", icon: "🎻", bpm: 80, drums: "soft", bassStyle: "half", lead: ["triangle", 0.12],
-    bass: "D A B F# G D G A D A B F# G D G A",
-    melody: mel(`F#5:4 E5:4 D5:4 C#5:4 B4:4 A4:4 B4:4 C#5:4 D5:4 C#5:4 B4:4 A4:4 G4:4 F#4:4 G4:4 E4:4`) },
+  { id: "spring", title: "사계 중 봄", by: "비발디", icon: "🌸", bpm: 100, drums: "pop", bassStyle: "beat", lead: ["triangle", 0.12],
+    bass: "E E E E E E B B E E E E A B E E",
+    melody: mel(`E5:2 G#5:2 G#5:2 G#5:2 F#5:2 E5:2 B5:6 B5:2 A5:2 G#5:2 G#5:2 G#5:2 F#5:2 E5:2 B5:6
+                 B5:2 A5:2 G#5:2 A5:2 B5:4 A5:2 G#5:2 F#5:8 E5:2 G#5:2 G#5:2 G#5:2 F#5:2 E5:2 E5:8`) },
   { id: "cancan", title: "캉캉 (천국과 지옥)", by: "오펜바흐", icon: "💃", bpm: 132, drums: "pop", bassStyle: "beat", lead: ["triangle", 0.12],
     bass: "C C C C G G C G C C C C G G G C",
     melody: mel(`C5:2 -:2 D5:1 F5:1 E5:1 D5:1 G5:2 G5:2 G5:1 A5:1 E5:1 F5:1 D5:2 D5:2 D5:1 F5:1 E5:1 D5:1 C5:1 C6:1 B5:1 A5:1 G5:1 F5:1 E5:1 D5:1
