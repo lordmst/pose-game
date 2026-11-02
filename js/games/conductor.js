@@ -28,16 +28,20 @@ const RAISE_HOLD = 0.6, TOUCH_HOLD = 0.25;   // 성공으로 치는 유지 시�
 
 export default {
   id: "conductor", title: "지휘자", icon: "🎼", sec: 50, cursor: "🪄", cat: "move", bg: "#e8a87c", desc: "오케스트라 지휘하기", music: false,
-  songs: CLASSICS.map(({ id, title, by, icon, bpm }) => ({ id, title, by, icon, bpm, real: REAL.has(id) })), demoSong: "ode",
+  songs: [...CLASSICS.map(({ id, title, by, icon, bpm }) => ({ id, title, by, icon, bpm, real: REAL.has(id), synth: true })), ...REAL.extraSongs(CLASSICS.map(c => c.id))], demoSong: "ode",
   // 게임 시간 = 곡이 끝날 때까지 (실제 연주는 녹음 길이 그대로, 합성음은 50초에 가장 가깝게 곡 단위로)
-  secFor: songId => { const r = REAL.ready(songId); return r ? r.duration + 1.0 : songPlan(songId || "ode", 50).sec; },
+  secFor: songId => { const r = REAL.ready(songId); return r ? r.duration + 1.0 : songPlan(CLASSICS.some(c => c.id === songId) ? songId : "ode", 50).sec; },
   prepare: songId => REAL.load(songId),                          // 노래를 고르면 녹음을 받아 박자를 찾음
   preview: songId => { if (!REAL.preview(songId)) rhythm.preview(songId); },
   stopPreview: () => { REAL.stopPreview(); rhythm.stopPreview(); },
   how: "화살표가 가로선 칸에 겹치는 순간 그 방향으로 손을 휘둘러요(왼쪽 화살표는 왼손). ✋가 나오면 왼손을 머리 위로 쭉, ⊙가 나오면 왼손으로 터치! 클래식 명곡 6곡",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, id = D.id || "normal", wide = D.reach;
-    const song = songOf(env.song || "ode"), plan = songPlan(song.id, 50), pat = PATTERN[id === "easy" ? 2 : 4], travel = TRAVEL / D.speed;
+    // 고른 곡: 실제 녹음만 있는 곡은 받아 둔 게 있어야 함 (없으면 환희의 송가 합성음으로)
+    let sid = env.song || "ode"; const hasSynth = x => CLASSICS.some(c => c.id === x);
+    if (!hasSynth(sid) && !REAL.ready(sid)) sid = "ode";
+    const song = hasSynth(sid) ? songOf(sid) : { id: sid, title: REAL.RECORDINGS[sid].title, by: REAL.RECORDINGS[sid].by };
+    const plan = songPlan(hasSynth(sid) ? sid : "ode", 50), pat = PATTERN[id === "easy" ? 2 : 4], travel = TRAVEL / D.speed;
     let t0 = null, spb = 0.6, nextJ = 8, notes = [], now = 0, lastT = null, energy = 0.7, flare = 0, events = [], raiseLv = 0;
     // 실제 연주: 녹음에서 찾은 박 중 너무 촘촘한 것은 건너뛰어 지휘할 박(cb)을 고름 (빠른 곡은 두 박에 한 번)
     const real = REAL.ready(song.id), rec = REAL.RECORDINGS[song.id];

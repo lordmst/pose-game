@@ -11,6 +11,9 @@ export const RECORDINGS = {
   spring: { file: "Vivaldi_-_Four_Seasons_1_Spring_mvt_1_Allegro_-_John_Harrison_violin.oga", dir: "f/ff", performer: "존 해리슨(바이올린) · 위치토 주립대 체임버 플레이어스", license: "CC BY-SA", licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/", meter: 4 },
   cancan: { file: "Offenbach_-_Orpheus_in_the_Underworld_-_Overture,_Can_Can_section.ogg", dir: "6/63", performer: "Musopen", license: "퍼블릭 도메인 (CC0)", licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/", meter: 2 },
 };
+// 합성음 대신이 없는 곡(실제 녹음만): 노래 고르기 화면에 쓰는 정보. title·by·icon이 있는 녹음
+export const extraSongs = synthIds => Object.entries(RECORDINGS).filter(([id, R]) => R.title && !synthIds.includes(id))
+  .map(([id, R]) => ({ id, title: R.title, by: R.by, icon: R.icon || "🎼", real: true, synth: false }));
 export const pageUrl = id => `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(RECORDINGS[id].file)}`;
 // 받을 주소: MP3 변환본(아이패드 사파리도 재생) → 원본(ogg). ?realbase=주소 로 시험용 로컬 파일을 쓸 수 있음
 function urls(id) {

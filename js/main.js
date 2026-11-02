@@ -371,7 +371,7 @@ function renderSongCards() {
   $("#songHead").textContent = `${g.icon} ${g.title} · 노래를 골라요`;
   const list = [...g.songs, { id: "random", icon: "🎲", title: "아무거나" }];
   const last = R.getSettings()["lastSong_" + gameId];
-  box.innerHTML = ""; box.classList.toggle("many", list.length > 4); box.classList.toggle("lots", list.length > 6);
+  box.innerHTML = ""; box.classList.toggle("many", list.length > 4); box.classList.toggle("lots", list.length > 6); box.classList.toggle("tons", list.length > 10);
   list.forEach((S, i) => {
     const b = document.createElement("button"); b.type = "button"; b.className = "card song" + (S.id === last ? " last" : ""); b.setAttribute("data-hand", ""); b.dataset.song = S.id;
     b.style.setProperty("--bg", S.id === "random" ? "#dfe6e9" : ["#ffeaa7", "#fab1a0", "#81ecec", "#a29bfe", "#ffb8d1", "#b8e994"][i % 6]);
@@ -390,7 +390,11 @@ function renderSongCards() {
         const r = await Promise.race([g.prepare(id), new Promise(ok => setTimeout(() => ok(null), 25000))]);
         songLoading = false; box.classList.remove("loading");
         if (state !== "song") return;
-        if (!r) { $("#songHead").textContent = "연주를 불러오지 못해 기본 소리로 해요"; await new Promise(ok => setTimeout(ok, 1200)); }
+        if (!r) {
+          const S = g.songs.find(x => x.id === id);
+          if (S && S.synth === false) { $("#songHead").textContent = "연주를 불러오지 못했어요. 인터넷을 확인하거나 다른 곡을 골라요"; return; }   // 합성음 대신이 없는 곡
+          $("#songHead").textContent = "연주를 불러오지 못해 기본 소리로 해요"; await new Promise(ok => setTimeout(ok, 1200));
+        }
       }
       beginCountdown(songStartSec, id);
     };
