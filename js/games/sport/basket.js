@@ -1,9 +1,9 @@
 // 농구 (스포츠 리조트 3점 슛 대회처럼 3D): 바닷가 야외 코트, 3점 라인을 따라 놓인 공 랙 5곳에서 차례로 슛
 // 두 손을 머리 위로 올리면 슛 준비 → 힘 막대가 오르내림 → 초록 칸일 때 손을 위로 '휙' 튕기면 슛
 // 랙 5개 × 공 5개, 랙의 마지막 공(무지개 머니볼)은 2배. 깨끗하게 들어가면(스위시) 보너스
-import { burst, popup, outlinedText, rr } from "../../fx.js?v=40";
-import { sfx } from "../../audio.js?v=40";
-import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, playerAvatar } from "./kit3d.js?v=40";
+import { burst, popup, outlinedText, rr } from "../../fx.js?v=41";
+import { sfx } from "../../audio.js?v=41";
+import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, playerAvatar } from "./kit3d.js?v=41";
 
 const FLICK = 1.6;                  // 튕기기로 인정하는 손 속도(어깨너비/초)
 const SWEET = 0.8;                  // 힘 막대의 가장 좋은 자리 (0~1)

@@ -1,36 +1,37 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=40";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=40";
-import * as R from "./records.js?v=40";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=40";
-import copy from "./games/copy.js?v=40";
-import math from "./games/math.js?v=40";
-import ice from "./games/ice.js?v=40";
-import star from "./games/star.js?v=40";
-import fruit from "./games/fruit.js?v=40";
-import mole from "./games/mole.js?v=40";
-import wall from "./games/wall.js?v=40";
-import rhythm from "./games/rhythm.js?v=40";
-import goalie from "./games/goalie.js?v=40";
-import { hangul, english } from "./games/word.js?v=40";
-import clockGame from "./games/clock.js?v=40";
-import run from "./games/run.js?v=40";
-import simon from "./games/simon.js?v=40";
-import conductor from "./games/conductor.js?v=40";
-import SPORTS from "./games/sports.js?v=40";
-import LEARN from "./games/learn.js?v=40";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=40";
-import { DIFFS, diffOf } from "./difficulty.js?v=40";
-import { startDemo } from "./demo.js?v=40";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=41";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=41";
+import * as R from "./records.js?v=41";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=41";
+import copy from "./games/copy.js?v=41";
+import math from "./games/math.js?v=41";
+import ice from "./games/ice.js?v=41";
+import star from "./games/star.js?v=41";
+import fruit from "./games/fruit.js?v=41";
+import mole from "./games/mole.js?v=41";
+import wall from "./games/wall.js?v=41";
+import rhythm from "./games/rhythm.js?v=41";
+import goalie from "./games/goalie.js?v=41";
+import { hangul, english } from "./games/word.js?v=41";
+import clockGame from "./games/clock.js?v=41";
+import run from "./games/run.js?v=41";
+import simon from "./games/simon.js?v=41";
+import conductor from "./games/conductor.js?v=41";
+import SPORTS from "./games/sports.js?v=41";
+import LEARN from "./games/learn.js?v=41";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=41";
+import { DIFFS, diffOf } from "./difficulty.js?v=41";
+import { startDemo } from "./demo.js?v=41";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
 for (const g of SPORTS) { GAMES[g.id] = g; GAME_ORDER.push(g.id); }   // 스포츠 탭 (스포츠 리조트 종목들)
-for (const g of LEARN) { GAMES[g.id] = g; GAME_ORDER.push(g.id); }   // 학습 탭에 더한 게임들
+for (const g of LEARN) { GAMES[g.id] = g; GAME_ORDER.push(g.id); }   // 생각놀이 탭에 더한 게임들
 // 카드 하나로 묶는 게임: 카드를 고른 뒤 자리 잡기 화면에서 과목을 고름 (기록·순위는 게임별 그대로)
 const GROUPS = [];   // 예: { id, members: [게임 id...], icon, title, desc, bg, cat }
 const groupOf = id => GROUPS.find(g => g.members.includes(id));
-const CATS = [{ id: "move", label: "🏃 운동" }, { id: "sport", label: "🏅 스포츠" }, { id: "learn", label: "📚 학습" }];
+// 게임 탭: 놀이(몸놀이·음악놀이) · 스포츠 · 생각놀이(배우는 게임). id는 기록·설정과 이어지므로 그대로 둠
+const CATS = [{ id: "move", label: "🎈 놀이" }, { id: "sport", label: "🏅 스포츠" }, { id: "learn", label: "💡 생각놀이" }];
 const LEVEL_GAMES = GAME_ORDER.filter(id => GAMES[id].levels);   // 선수별로 단계를 고르는 게임 (수학 풍선, 글자 풍선)
 const firstLevel = g => Object.keys(subOf(g))[0];
 // 순위 세부 탭: 선수별 단계(수학·글자) 또는 노래(리듬)
@@ -289,7 +290,7 @@ function updateSelBadges() {
     b.textContent = `${i + 1}P ${slots[i].name} · ${on ? "인식됨" : "만세 해 주세요"}`;
   });
 }
-// 게임 카드: 운동 / 학습 탭. 묶인 게임은 첫 게임 자리에 카드 하나로
+// 게임 카드: 놀이 / 스포츠 / 생각놀이 탭. 묶인 게임은 첫 게임 자리에 카드 하나로
 function cardIds(cat) {
   const out = [];
   for (const id of GAME_ORDER) {
@@ -334,7 +335,7 @@ function chooseGame(id) {
 function goReady() {
   const g = GAMES[gameId];
   $("#readyTitle").textContent = `${g.icon} ${g.title}`;
-  $("#readyHow").textContent = g.how;
+  $("#readyHow").textContent = "";   // 자리 잡기 화면의 분홍 설명 글은 뺌 (설명은 게임 설명 시연에서)
   $("#readyHint").textContent = slots.length === 2
     ? "1P는 화면 왼쪽, 2P는 오른쪽에 서서 두 손을 머리 위로 올려(만세) 주세요"
     : "화면 가운데에 서서 두 손을 머리 위로 올려(만세) 주세요";
