@@ -1,9 +1,9 @@
 // 줄넘기 (스포츠 리조트의 몸풀기, 3D): 바닷가 광장에서 양쪽 친구가 줄을 돌려 주고, 줄이 발밑을 지나는 순간 점프!
 // 내 캐릭터는 정면에서 보이고, 내가 뛰면 같이 뜀
 // 점프 판정: 두 발목이 서 있을 때보다 함께 올라가면 (발목이 안 보이면 어깨가 확 올라가면) 공중에 있는 것으로 봄
-import { burst, popup, outlinedText, rr, FONT } from "../../fx.js?v=42";
-import { sfx } from "../../audio.js?v=42";
-import { stage, THREE, ground, sea, box, cyl, ball as sphere, mesh, palm, cloud, playerAvatar, randomAvatar } from "./kit3d.js?v=42";
+import { burst, popup, outlinedText, rr, FONT } from "../../fx.js?v=43";
+import { sfx } from "../../audio.js?v=43";
+import { stage, THREE, ground, sea, box, cyl, ball as sphere, mesh, palm, cloud, playerAvatar, randomAvatar } from "./kit3d.js?v=43";
 
 const PERIOD0 = 1.5, PERIOD_MIN = 0.85;   // 줄 한 바퀴 시간(초): 처음 → 가장 빠를 때
 const WIN = 0.16;                          // 줄이 발밑을 지날 때 앞뒤로 이만큼(초) 안에 공중이면 성공
