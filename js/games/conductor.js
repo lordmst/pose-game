@@ -5,9 +5,9 @@
 // (녹음을 못 받으면 합성 오케스트라 소리). 맞히든 못 맞히든 음악은 똑같이 나옴. 잘 맞을수록 관객 호응 게이지가 차고 연주자들이 신나게 움직임
 // 중간중간 왼손 동작: ✋ '왼손 올리기'(크레셴도: 왼손을 머리 위로 쭉 올려 게이지 채우기),
 //                     ⊙ '왼손 터치'(왼쪽 위에 나온 동그라미를 왼손으로 짚어 악기 파트 불러내기). 그동안 화살표는 오른손만
-import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=37";
-import { rhythm, clock, CLASSICS, songOf, songPlan } from "../audio.js?v=37";
-import * as REAL from "../realmusic.js?v=37";
+import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=39";
+import { rhythm, clock, CLASSICS, songOf, songPlan } from "../audio.js?v=39";
+import * as REAL from "../realmusic.js?v=39";
 
 const PERFECT = 0.1, GOOD = 0.22;   // 판정 시간 폭(초, 보통)
 const SWING = 1.8;                  // 휘두르기로 인정하는 손 속도(어깨너비/초)
@@ -51,6 +51,7 @@ export default {
       for (const b of real.beats) if (!cb.length || b - cb[cb.length - 1] >= minGap * 0.92) cb.push(b);
       const gaps = cb.slice(1).map((b, i) => b - cb[i]).sort((p, q) => p - q); spb = gaps.length ? gaps[gaps.length >> 1] : 0.6;
       if (rec.meter === 2) rpat = id === "easy" ? ["down", null, "up", null] : ["down", "up"];
+      if (rec.meter === 3) rpat = id === "easy" ? ["down", null, "up"] : ["down", "out", "up"];   // 3박(왈츠): 세모 지휘
       nextJ = 0;
     }
     const cnt = { PERFECT: 0, GOOD: 0, MISS: 0 }, ev = { ok: 0, all: 0 }, trail = [[], []];

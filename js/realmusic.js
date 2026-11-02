@@ -1,8 +1,8 @@
 // 지휘자 게임용 실제 연주 녹음: 위키미디어 공용(Wikimedia Commons)의 퍼블릭 도메인·CC 녹음을 브라우저가 직접 받아 옴
 // 받아 온 녹음에서 박자(비트) 시각을 찾아(박자 추적) 지휘 화살표를 맞춤. 못 받으면 합성음으로 대신함
-import { audioOut, clock, settings } from "./audio.js?v=37";
+import { audioOut, clock, settings } from "./audio.js?v=39";
 
-// 녹음 목록: 파일 이름, 저장 위치(md5 앞 두 자리), 연주자, 이용 허락, 박자표(한 마디 박 수)
+// 녹음 목록: 파일 이름, 저장 위치(md5 앞 두 자리), 연주자, 이용 허락, 박자표(한 마디 박 수: 2·3·4)
 export const RECORDINGS = {
   ode: { file: "Anthem_of_Europe_(US_Navy_instrumental_long_version).ogg", dir: "9/9d", performer: "미 해군 군악대 (U.S. Navy Band)", license: "퍼블릭 도메인", licenseUrl: "https://creativecommons.org/publicdomain/mark/1.0/", meter: 4 },
   nacht: { file: "Mozart_-_Eine_kleine_Nachtmusik_-_1._Allegro.ogg", dir: "2/24", performer: "Advent Chamber Orchestra", license: "CC BY-SA 2.0 (EFF Open Audio License)", licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/", meter: 4 },
@@ -10,6 +10,19 @@ export const RECORDINGS = {
   turkish: { file: "Mozart-Marsz_turecki-(Romuald_Greiss).ogg", dir: "4/4e", performer: "로무알드 그라이스 (피아노)", license: "퍼블릭 도메인", licenseUrl: "https://creativecommons.org/publicdomain/mark/1.0/", meter: 2 },
   spring: { file: "Vivaldi_-_Four_Seasons_1_Spring_mvt_1_Allegro_-_John_Harrison_violin.oga", dir: "f/ff", performer: "존 해리슨(바이올린) · 위치토 주립대 체임버 플레이어스", license: "CC BY-SA", licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/", meter: 4 },
   cancan: { file: "Offenbach_-_Orpheus_in_the_Underworld_-_Overture,_Can_Can_section.ogg", dir: "6/63", performer: "Musopen", license: "퍼블릭 도메인 (CC0)", licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/", meter: 2 },
+  // ↓ 실제 녹음만 있는 곡 (합성음 대신 없음): title·by·icon으로 노래 고르기 화면에 나옴. from: 이 초부터 틂
+  williamtell: { title: "윌리엄 텔 서곡 (피날레)", by: "로시니", icon: "🏇", file: "Gioachino_Rossini,_William_Tell_Overture_(military_band_version,_2000).ogg", dir: "4/43", from: 450, performer: "미 해병대 군악대 (U.S. Marine Corps Band)", license: "퍼블릭 도메인", licenseUrl: "https://commons.wikimedia.org/wiki/Template:PD-USGov-Military-Marines", meter: 2 },
+  radetzky: { title: "라데츠키 행진곡", by: "요한 슈트라우스 1세", icon: "👏", file: "Radetzky_March.ogg", dir: "b/b4", performer: "미 해병대 군악대 (U.S. Marine Band)", license: "퍼블릭 도메인", licenseUrl: "https://commons.wikimedia.org/wiki/Template:PD-USGov-Military-Marines", meter: 2 },
+  beethoven5: { title: "운명 교향곡 1악장", by: "베토벤", icon: "✊", file: "Ludwig_van_Beethoven_-_Symphonie_5_c-moll_-_1._Allegro_con_brio.ogg", dir: "5/5b", performer: "풀다 교향악단 (Fulda Symphonic Orchestra)", license: "EFF Open Audio License (CC BY-SA 호환)", licenseUrl: "https://www.eff.org/IP/Open_licenses/eff_oal.php", meter: 2 },
+  stars: { title: "성조기여 영원하라 (끝부분)", by: "수자", icon: "🎺", file: "Grandioso_of_Stars_and_Stripes_Forever_-_U.S._Army_Band.ogg", dir: "f/f0", performer: "미 육군 군악대 (U.S. Army Band)", license: "퍼블릭 도메인", licenseUrl: "https://commons.wikimedia.org/wiki/Template:PD-USGov-Military-Army", meter: 2 },
+  washpost: { title: "워싱턴 포스트 행진곡", by: "수자", icon: "🥁", file: "Washington_Post_March_-_U.S._Army_Band.ogg", dir: "f/fb", performer: "미 육군 군악대 (U.S. Army Band)", license: "퍼블릭 도메인", licenseUrl: "https://commons.wikimedia.org/wiki/Template:PD-USGov-Military-Army", meter: 2 },
+  tortoise: { title: "동물의 사육제 중 거북이", by: "생상스", icon: "🐢", file: "Saint-Saens_-_The_Carnival_of_the_Animals_-_04_Tortues.ogg", dir: "2/21", performer: "시애틀 청소년 교향악단 (Seattle Youth Symphony)", license: "CC BY-SA 2.0", licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/", meter: 4 },
+  mozart40: { title: "교향곡 40번 1악장", by: "모차르트", icon: "🎼", file: "Wolfgang_Amadeus_Mozart_-_Symphony_40_g-moll_-_1._Molto_allegro.ogg", dir: "9/99", performer: "풀다 교향악단 (Fulda Symphonic Orchestra)", license: "EFF Open Audio License (CC BY-SA 호환)", licenseUrl: "https://www.eff.org/IP/Open_licenses/eff_oal.php", meter: 2 },
+  hungarian6: { title: "헝가리 무곡 6번", by: "브람스", icon: "💃", file: "Johannes_Brahms_-_Ungarischer_Tanz_6_D-Dur.ogg", dir: "d/df", performer: "풀다 교향악단 (Fulda Symphonic Orchestra)", license: "EFF Open Audio License (CC BY-SA 호환)", licenseUrl: "https://www.eff.org/IP/Open_licenses/eff_oal.php", meter: 2 },
+  waltz: { title: "슈트라우스 왈츠 메들리", by: "요한 슈트라우스 2세", icon: "🩰", file: "USAF_Band_Strauss_Waltz_Medley.ogg", dir: "4/48", performer: "미 공군 현악단 (U.S. Air Force Strings)", license: "퍼블릭 도메인", licenseUrl: "https://commons.wikimedia.org/wiki/Template:PD-USGov-Military-Air_Force", meter: 3 },
+  airg: { title: "G선상의 아리아", by: "바흐", icon: "🎻", file: "Air_-_Air_Force_Strings_-_United_States_Air_Force_Band.mp3", dir: "e/ec", performer: "미 공군 현악단 (U.S. Air Force Strings)", license: "퍼블릭 도메인", licenseUrl: "https://commons.wikimedia.org/wiki/Template:PD-USGov-Military-Air_Force", meter: 4 },
+  summer: { title: "사계 중 여름 1악장", by: "비발디", icon: "☀️", file: "Vivaldi_-_Four_Seasons_2_Summer_mvt_1_Allegro_non_molto_-_John_Harrison_violin.oga", dir: "a/a5", performer: "존 해리슨(바이올린) · 위치토 주립대 체임버 플레이어스", license: "CC BY-SA", licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/", meter: 3 },
+  winter: { title: "사계 중 겨울 3악장", by: "비발디", icon: "❄️", file: "12_-_Vivaldi_Winter_mvt_3_Allegro_-_John_Harrison_violin.ogg", dir: "2/21", performer: "존 해리슨(바이올린) · 위치토 주립대 체임버 플레이어스", license: "CC BY-SA", licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/", meter: 3 },
 };
 // 합성음 대신이 없는 곡(실제 녹음만): 노래 고르기 화면에 쓰는 정보. title·by·icon이 있는 녹음
 export const extraSongs = synthIds => Object.entries(RECORDINGS).filter(([id, R]) => R.title && !synthIds.includes(id))
@@ -19,6 +32,7 @@ export const pageUrl = id => `https://commons.wikimedia.org/wiki/File:${encodeUR
 function urls(id) {
   const R = RECORDINGS[id], f = encodeURIComponent(R.file), base = new URLSearchParams(location.search).get("realbase");
   if (base) return [`${base}/${id}.wav`];
+  if (/\.mp3$/i.test(R.file)) return [`https://upload.wikimedia.org/wikipedia/commons/${R.dir}/${f}`];   // 원본이 MP3
   return [
     `https://upload.wikimedia.org/wikipedia/commons/transcoded/${R.dir}/${f}/${f}.mp3`,
     `https://upload.wikimedia.org/wikipedia/commons/${R.dir}/${f}`,
@@ -40,7 +54,13 @@ export function load(id) {
         const res = await fetch(u, { mode: "cors" });
         if (!res.ok) continue;
         const buf = await res.arrayBuffer();
-        const buffer = await new Promise((ok, no) => out.ac.decodeAudioData(buf, ok, no));
+        let buffer = await new Promise((ok, no) => out.ac.decodeAudioData(buf, ok, no));
+        const from = RECORDINGS[id].from || 0;
+        if (from > 0 && from < buffer.duration - 5) {   // 유명한 부분부터 (예: 윌리엄 텔 피날레)
+          const s0 = Math.floor(from * buffer.sampleRate), cut = out.ac.createBuffer(buffer.numberOfChannels, buffer.length - s0, buffer.sampleRate);
+          for (let c = 0; c < buffer.numberOfChannels; c++) cut.copyToChannel(buffer.getChannelData(c).subarray(s0), c);
+          buffer = cut;
+        }
         const { beats, spb } = trackBeats(buffer);
         const r = { buffer, beats, spb, duration: buffer.duration };
         done.set(id, r); return r;

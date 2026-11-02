@@ -58,7 +58,7 @@
 
 ## 지휘자 음악 (실제 연주 녹음)
 
-녹음 파일은 저장소에 넣지 않고, 게임에서 노래를 고를 때 브라우저가 위키미디어 공용(Wikimedia Commons)에서 직접 받아 옵니다(MP3 변환본 → 원본 순서). 박자는 받아 온 녹음에서 자동으로 찾습니다(js/realmusic.js). 받지 못하면 합성 오케스트라 소리로 진행합니다.
+18곡. 녹음 파일은 저장소에 넣지 않고, 게임에서 노래를 고를 때 브라우저가 위키미디어 공용(Wikimedia Commons)에서 직접 받아 옵니다(MP3 변환본 → 원본 순서). 박자는 받아 온 녹음에서 자동으로 찾습니다(js/realmusic.js). 받지 못하면 처음 6곡은 합성 오케스트라 소리로 진행하고, 나머지 12곡은 다른 곡을 고르라고 안내합니다. 3박자 곡(왈츠 등)은 세모 지휘(아래 → 바깥 → 위)입니다.
 
 | 곡 | 연주 | 이용 허락 | 원본 |
 |---|---|---|---|
@@ -68,6 +68,18 @@
 | 모차르트 터키 행진곡 (피아노) | Romuald Greiss | 퍼블릭 도메인 | [Commons](https://commons.wikimedia.org/wiki/File:Mozart-Marsz_turecki-(Romuald_Greiss).ogg) |
 | 비발디 사계 중 봄 1악장 | John Harrison(바이올린), Wichita State University Chamber Players | CC BY-SA | [Commons](https://commons.wikimedia.org/wiki/File:Vivaldi_-_Four_Seasons_1_Spring_mvt_1_Allegro_-_John_Harrison_violin.oga) |
 | 오펜바흐 캉캉 (천국과 지옥 서곡 중) | Musopen | 퍼블릭 도메인 (CC0) | [Commons](https://commons.wikimedia.org/wiki/File:Offenbach_-_Orpheus_in_the_Underworld_-_Overture,_Can_Can_section.ogg) |
+| 로시니 윌리엄 텔 서곡 (7분 30초 피날레부터) | 미 해병대 군악대 (U.S. Marine Corps Band) | 퍼블릭 도메인 (미국 정부 저작물) | [Commons](https://commons.wikimedia.org/wiki/File:Gioachino_Rossini,_William_Tell_Overture_(military_band_version,_2000).ogg) |
+| 요한 슈트라우스 1세 라데츠키 행진곡 | 미 해병대 군악대 (U.S. Marine Band) | 퍼블릭 도메인 (미국 정부 저작물) | [Commons](https://commons.wikimedia.org/wiki/File:Radetzky_March.ogg) |
+| 베토벤 운명 교향곡 1악장 | 풀다 교향악단 (Fulda Symphonic Orchestra) | EFF Open Audio License (CC BY-SA 호환) | [Commons](https://commons.wikimedia.org/wiki/File:Ludwig_van_Beethoven_-_Symphonie_5_c-moll_-_1._Allegro_con_brio.ogg) |
+| 수자 성조기여 영원하라 (끝부분) | 미 육군 군악대 (U.S. Army Band) | 퍼블릭 도메인 (미국 정부 저작물) | [Commons](https://commons.wikimedia.org/wiki/File:Grandioso_of_Stars_and_Stripes_Forever_-_U.S._Army_Band.ogg) |
+| 수자 워싱턴 포스트 행진곡 | 미 육군 군악대 (U.S. Army Band) | 퍼블릭 도메인 (미국 정부 저작물) | [Commons](https://commons.wikimedia.org/wiki/File:Washington_Post_March_-_U.S._Army_Band.ogg) |
+| 생상스 동물의 사육제 중 거북이 | 시애틀 청소년 교향악단 (Seattle Youth Symphony) | CC BY-SA 2.0 | [Commons](https://commons.wikimedia.org/wiki/File:Saint-Saens_-_The_Carnival_of_the_Animals_-_04_Tortues.ogg) |
+| 모차르트 교향곡 40번 1악장 | 풀다 교향악단 | EFF Open Audio License (CC BY-SA 호환) | [Commons](https://commons.wikimedia.org/wiki/File:Wolfgang_Amadeus_Mozart_-_Symphony_40_g-moll_-_1._Molto_allegro.ogg) |
+| 브람스 헝가리 무곡 6번 | 풀다 교향악단 | EFF Open Audio License (CC BY-SA 호환) | [Commons](https://commons.wikimedia.org/wiki/File:Johannes_Brahms_-_Ungarischer_Tanz_6_D-Dur.ogg) |
+| 요한 슈트라우스 2세 왈츠 메들리 | 미 공군 현악단 (U.S. Air Force Strings) | 퍼블릭 도메인 (미국 정부 저작물) | [Commons](https://commons.wikimedia.org/wiki/File:USAF_Band_Strauss_Waltz_Medley.ogg) |
+| 바흐 G선상의 아리아 | 미 공군 현악단 | 퍼블릭 도메인 (미국 정부 저작물) | [Commons](https://commons.wikimedia.org/wiki/File:Air_-_Air_Force_Strings_-_United_States_Air_Force_Band.mp3) |
+| 비발디 사계 중 여름 1악장 | John Harrison(바이올린), Wichita State University Chamber Players | CC BY-SA | [Commons](https://commons.wikimedia.org/wiki/File:Vivaldi_-_Four_Seasons_2_Summer_mvt_1_Allegro_non_molto_-_John_Harrison_violin.oga) |
+| 비발디 사계 중 겨울 3악장 | John Harrison(바이올린), Wichita State University Chamber Players | CC BY-SA | [Commons](https://commons.wikimedia.org/wiki/File:12_-_Vivaldi_Winter_mvt_3_Allegro_-_John_Harrison_violin.ogg) |
 
 점검: 주소 끝에 `&realbase=/.testaudio` 를 붙이면 위키미디어 대신 로컬 시험 파일(곡 id.wav)을 씁니다.
 
