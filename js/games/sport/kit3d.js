@@ -17,18 +17,20 @@ try { quality = Math.max(0, Math.min(QUALITY.length - 1, (+localStorage.getItem(
 const saveQuality = () => { try { localStorage.setItem("posegame.q3d2", String(quality)); } catch (e) {} };
 
 /* ---------- 장면 ---------- */
-// opts: { fov, sky: [위색, 아래색], fog: [색, 가까이, 멀리], shadows, pip: "br"|"bl"|false }
+// opts: { fov, sky: [위색, 아래색], fog: [색, 가까이, 멀리], shadows, pip: "br"|"bl"|false,
+//         band: [위 비율, 아래 비율] → 화면의 그 띠에만 투명 배경으로 그림 (예: 지휘자 게임 아래쪽 오케스트라) }
 export function stage(env, opts = {}) {
   const z = env.zone, v = env.view;
   const canvas = document.createElement("canvas");
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });   // 테두리 계단 없애기(MSAA)
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: !!opts.band, powerPreference: "high-performance" });   // 테두리 계단 없애기(MSAA)
+  if (opts.band) renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setPixelRatio(1);
   if (opts.shadows !== false) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(opts.fov || 50, z.w / v.H, 0.1, 2000);
   const [top, bottom] = opts.sky || ["#6ec6ff", "#e6f6ff"];
-  scene.background = gradientTexture(top, bottom);
+  if (!opts.band) scene.background = gradientTexture(top, bottom);   // 띠로 그릴 땐 배경 없이(뒤의 카메라 화면이 보이게)
   if (opts.fog) scene.fog = new THREE.Fog(opts.fog[0], opts.fog[1], opts.fog[2]);
   // 빛: 하늘빛 + 해 (그림자)
   const hemi = new THREE.HemisphereLight(0xffffff, 0x8db36b, 1.15); scene.add(hemi);
@@ -39,7 +41,7 @@ export function stage(env, opts = {}) {
     sun.shadow.bias = -0.0005;
   }
   scene.add(sun, sun.target);
-  let w = 0, h = 0, prev = 0, ema = 0, frames = 0, applied = -1;
+  let w = 0, h = 0, prev = 0, ema = 0, frames = 0, applied = -1, skipN = 0;
   // 화질 단계 적용 (그림자 켜고 끄기)
   function applyQuality() {
     if (applied === quality) return;
@@ -99,16 +101,19 @@ export function stage(env, opts = {}) {
     THREE, scene, camera, renderer, sun, hemi, pipMark: null,
     // 자기 구역에 장면을 그림 (+ 카메라 작은 화면)
     draw(ctx) {
-      measure(); applyQuality(); smoothScene(performance.now());
+      measure(); applyQuality(); if (opts.smooth !== false) smoothScene(performance.now());   // smooth: false = 작게 보이는 장면은 면 수를 늘리지 않음
+      // every: N장면에 한 번만 3D를 새로 그리고, 그 사이에는 지난 그림을 그대로 씀 (무거운 장면을 가볍게)
+      if (opts.every > 1 && w && (++skipN % opts.every)) { const [b0, b1] = opts.band || [0, 1]; ctx.drawImage(canvas, z.x0, v.H * b0, z.w, v.H * (b1 - b0)); return; }
       // 기기 화소 배율(태블릿은 2)까지 반영해 화면 실제 화소에 맞춰 그림 → 흐릿하거나 계단지지 않게
       const dpr = v.dpr || Math.min(window.devicePixelRatio || 1, 2);
       let k = dpr * QUALITY[quality].res;
-      k = Math.min(k, Math.sqrt(MAX_PIXELS / Math.max(1, z.w * v.H)));
-      const W = Math.max(2, Math.round(z.w * k)), H = Math.max(2, Math.round(v.H * k));
+      const [b0, b1] = opts.band || [0, 1], bh = v.H * (b1 - b0);
+      k = Math.min(k, Math.sqrt(MAX_PIXELS / Math.max(1, z.w * bh)));
+      const W = Math.max(2, Math.round(z.w * k)), H = Math.max(2, Math.round(bh * k));
       if (W !== w || H !== h) { w = W; h = H; renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); }
       renderer.render(scene, camera);
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(canvas, z.x0, 0, z.w, v.H);
+      ctx.drawImage(canvas, z.x0, v.H * b0, z.w, bh);
       if (opts.pip !== false) api.pip(ctx, opts.pip || "br");
     },
     // 선수 카메라 작은 화면: 내 몸이 어떻게 움직이는지 보이게 (구석에)
@@ -121,7 +126,7 @@ export function stage(env, opts = {}) {
     },
     // 3D 위치 → 화면 좌표 (글자·효과를 2D로 얹을 때)
     get quality() { return quality; },
-    toScreen(p) { const q = p.clone().project(camera); return { x: z.x0 + (q.x + 1) / 2 * z.w, y: (1 - q.y) / 2 * v.H, behind: q.z > 1 }; },
+    toScreen(p) { const q = p.clone().project(camera), [b0, b1] = opts.band || [0, 1]; return { x: z.x0 + (q.x + 1) / 2 * z.w, y: v.H * (b0 + (1 - q.y) / 2 * (b1 - b0)), behind: q.z > 1 }; },
     dispose() { scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); renderer.dispose(); renderer.forceContextLoss(); },
   };
   return api;
@@ -146,7 +151,13 @@ export function mesh(geo, color, o = {}) {
   m.castShadow = o.cast !== false; m.receiveShadow = !!o.receive; return m;
 }
 export const box = (w, h, d, color, o) => mesh(new THREE.BoxGeometry(w, h, d), color, o);
-export const ball = (r, color, o) => mesh(new THREE.SphereGeometry(r, 32, 22), color, o);
+// 같은 모양은 한 번만 만들어 함께 씀 (메모리·불러오기 절약)
+const geoCache = new Map();
+const geo = (key, make) => { if (!geoCache.has(key)) { const g = make(); g.userData.shared = true; geoCache.set(key, g); } return geoCache.get(key); };
+// 공: 작을수록 면 수를 적게 (눈·볼처럼 작은 것은 12×8이면 충분)
+const segOf = r => (r < 0.05 ? [12, 8] : r < 0.12 ? [20, 14] : [32, 22]);
+export const ball = (r, color, o) => { const [a, b] = segOf(r); return mesh(geo(`s${r}`, () => Object.assign(new THREE.SphereGeometry(r, a, b), { userData: { smooth: true } })), color, o); };
+const capsule = (r, len, cap, rad) => geo(`c${r},${len},${cap},${rad}`, () => Object.assign(new THREE.CapsuleGeometry(r, len, cap, rad), { userData: { smooth: true } }));
 export const cyl = (r1, r2, h, color, o) => mesh(new THREE.CylinderGeometry(r1, r2, h, 32), color, o);
 // 바닥(그림자 받음)
 export function ground(scene, color = "#7cc35a", size = 200, y = 0) {
@@ -200,19 +211,19 @@ export function textBoard(w, h, opts = {}) {
 const SKINS = ["#ffd7b5", "#f1c27d", "#e0ac69", "#c68642"], HAIRS = ["#3b2414", "#1f1f1f", "#7a4a1f", "#d9a441", "#a33b1f"];
 export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], hair = HAIRS[0], girl = false, scale = 1 } = {}) {
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-  const legs = [-1, 1].map(s => { const p = new THREE.Group(); p.position.set(0.1 * s, 0.78, 0); const l = mesh(new THREE.CapsuleGeometry(0.08, 0.58, 8, 24), pants); l.position.y = -0.37; const shoe = mesh(new THREE.CapsuleGeometry(0.065, 0.12, 6, 16), "#ffffff"); shoe.rotation.x = Math.PI / 2; shoe.scale.set(1.1, 1, 0.65); /* 둥근 다리·신발 */ shoe.position.set(0, -0.76, 0.04); p.add(l, shoe); body.add(p); return p; });
-  const torso = mesh(new THREE.CapsuleGeometry(0.2, 0.32, 10, 28), shirt); torso.position.y = 1.08; torso.scale.set(1, 1, 0.75); body.add(torso);
+  const legs = [-1, 1].map(s => { const p = new THREE.Group(); p.position.set(0.1 * s, 0.78, 0); const l = mesh(capsule(0.08, 0.58, 4, 14), pants); l.position.y = -0.37; const shoe = mesh(capsule(0.065, 0.12, 3, 10), "#ffffff"); shoe.rotation.x = Math.PI / 2; shoe.scale.set(1.1, 1, 0.65); /* 둥근 다리·신발 */ shoe.position.set(0, -0.76, 0.04); p.add(l, shoe); body.add(p); return p; });
+  const torso = mesh(capsule(0.2, 0.32, 6, 20), shirt); torso.position.y = 1.08; torso.scale.set(1, 1, 0.75); body.add(torso);
   const headG = new THREE.Group(); headG.position.y = 1.56; body.add(headG);
   const head = ball(0.21, skin); head.scale.set(1, 1.08, 1); headG.add(head);
-  const hairM = mesh(new THREE.SphereGeometry(0.225, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.52), hair); hairM.position.y = 0.03; hairM.rotation.x = -0.25; headG.add(hairM);
+  const hairM = mesh(geo("hair", () => Object.assign(new THREE.SphereGeometry(0.225, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.52), { userData: { smooth: true } })), hair); hairM.position.y = 0.03; hairM.rotation.x = -0.25; headG.add(hairM);
   if (girl) { const tail = ball(0.09, hair); tail.position.set(0, 0.02, -0.22); headG.add(tail); }
   [-1, 1].forEach(s => { const e = ball(0.03, "#1d1d1d", { cast: false }); e.scale.set(1, 1.5, 0.6); e.position.set(0.075 * s, 0.03, 0.19); headG.add(e); const ch = ball(0.035, "#ff9fae", { cast: false, opacity: 0.7 }); ch.scale.set(1, 0.6, 0.3); ch.position.set(0.12 * s, -0.05, 0.17); headG.add(ch); });
   const mouth = mesh(new THREE.TorusGeometry(0.045, 0.012, 6, 12, Math.PI), "#7a3b1a", { cast: false }); mouth.position.set(0, -0.08, 0.195); mouth.rotation.z = Math.PI; headG.add(mouth);
   const arms = [1, -1].map(s => {        // 캐릭터 자신의 왼팔(+x쪽, 정면 기준)·오른팔
     const sh = new THREE.Group(); sh.position.set(0.27 * s, 1.34, 0); body.add(sh);
-    const up = mesh(new THREE.CapsuleGeometry(0.06, 0.2, 8, 24), shirt); up.position.y = -0.15; sh.add(up);   // 어깨·팔꿈치가 둥글게
+    const up = mesh(capsule(0.06, 0.2, 4, 12), shirt); up.position.y = -0.15; sh.add(up);   // 어깨·팔꿈치가 둥글게
     const el = new THREE.Group(); el.position.y = -0.3; sh.add(el);
-    const fo = mesh(new THREE.CapsuleGeometry(0.05, 0.19, 8, 24), skin); fo.position.y = -0.135; el.add(fo);
+    const fo = mesh(capsule(0.05, 0.19, 4, 12), skin); fo.position.y = -0.135; el.add(fo);
     const hand = new THREE.Group(); hand.position.y = -0.29; el.add(hand);
     hand.add(ball(0.065, skin));
     return { sh, el, hand, s };

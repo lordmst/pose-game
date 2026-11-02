@@ -5,9 +5,10 @@
 // (녹음을 못 받으면 합성 오케스트라 소리). 맞히든 못 맞히든 음악은 똑같이 나옴. 잘 맞을수록 관객 호응 게이지가 차고 연주자들이 신나게 움직임
 // 중간중간 왼손 동작: ✋ '왼손 올리기'(크레셴도: 왼손을 머리 위로 쭉 올려 게이지 채우기),
 //                     ⊙ '왼손 터치'(왼쪽 위에 나온 동그라미를 왼손으로 짚어 악기 파트 불러내기). 그동안 화살표는 오른손만
-import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=43";
-import { rhythm, clock, CLASSICS, songOf, songPlan } from "../audio.js?v=43";
-import * as REAL from "../realmusic.js?v=43";
+import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=45";
+import { rhythm, clock, CLASSICS, songOf, songPlan } from "../audio.js?v=45";
+import * as REAL from "../realmusic.js?v=45";
+import { orchestra } from "./orchestra3d.js?v=45";
 
 const PERFECT = 0.1, GOOD = 0.22;   // 판정 시간 폭(초, 보통)
 const SWING = 1.8;                  // 휘두르기로 인정하는 손 속도(어깨너비/초)
@@ -55,6 +56,7 @@ export default {
       nextJ = 0;
     }
     const cnt = { PERFECT: 0, GOOD: 0, MISS: 0 }, ev = { ok: 0, all: 0 }, trail = [[], []];
+    const orch = orchestra(env);   // 화면 아래 무대의 3D 오케스트라 (위쪽은 카메라에 비친 내 모습)
     // 화살표 칸 크기: 한 박 간격보다 크면 겹치므로 빠른 곡은 조금 작게
     const lay = () => {
       const L = Math.min(z.w * 0.4, v.U * 0.32), lineY = v.H * 0.52, topY = v.H * 0.1, gap = (lineY - topY) / travel * spb;
@@ -137,6 +139,7 @@ export default {
         now = clock();
         const dt = lastT === null ? 0.016 : Math.min(0.1, now - lastT); lastT = now;
         flare = Math.max(0, flare - dt * 3);
+        orch.update(now, t0 !== null && now > t0 ? beatAt(now).ph : 0.5, energy, dt);
         if (real) while (nextJ < cb.length && t0 + cb[nextJ] - now < travel) addBeat(nextJ++);
         else while (t0 + nextJ * spb / 2 - now < travel) { addStep(nextJ); nextJ++; }
         const hands = env.tracker.hands;
@@ -169,6 +172,7 @@ export default {
           e.hold = on ? e.hold + dt : Math.max(0, e.hold - dt * 0.5);
           if (e.hold >= (e.type === "raise" ? RAISE_HOLD : TOUCH_HOLD)) {
             e.done = "ok"; e.doneAt = now; ev.ok++; energy = Math.min(1, energy + 0.2); flare = 1;
+            if (e.type === "touch") orch.call(e.sec, 4);                  // 부른 파트에 조명, 신나게 연주
             if (real) REAL.swell(4); else rhythm.accent(16);   // 효과음 대신 소리가 커짐(실제 연주) / 금관이 더해짐(합성음)
             const at = e.type === "raise" ? gaugePos() : e.pos;
             env.award(3, at.x, at.y - v.U * 0.08);
@@ -181,16 +185,8 @@ export default {
       draw(ctx) {
         if (t0 === null) now = clock();
         const U = v.U, Lo = lay(), BA = t0 !== null && now > t0 ? beatAt(now) : { i: -1, ph: 0 }, beatPh = BA.ph, pulse = Math.max(0, 1 - beatPh * 3);
-        // 무대와 연주자 (잘할수록 크게 들썩임)
-        const stY = v.H * 0.88;
-        ctx.fillStyle = "rgba(90,40,20,.55)"; ctx.beginPath(); ctx.ellipse(z.cx, v.H * 1.04, z.w * 0.56, v.H * 0.2, 0, Math.PI, 0); ctx.fill();
-        ctx.font = `${Math.round(U * 0.05)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        const n = Math.max(4, Math.min(8, Math.round(z.w / (U * 0.11))));
-        for (let i = 0; i < n; i++) {
-          const x = z.x0 + z.w * (i + 0.5) / n, amp = (0.15 + 0.85 * energy) * (0.3 + 0.7 * pulse);
-          ctx.globalAlpha = 0.45 + 0.55 * energy; ctx.fillText(SECTIONS[i % SECTIONS.length], x, stY - (i % 2) * U * 0.035 - amp * U * 0.014);
-        }
-        ctx.globalAlpha = 1;
+        // 무대와 오케스트라 (3D, 화면 아래 띠). 잘할수록 크게 연주
+        orch.draw(ctx);
         // 관객 호응 (음악 크기와는 상관없음)
         const gw = Math.min(z.w * 0.6, U * 0.5), gx = z.cx - gw / 2, gy = v.H * 0.125, gh = Math.max(8, U * 0.016);
         ctx.fillStyle = "rgba(0,0,0,.45)"; rr(ctx, gx, gy, gw, gh, gh / 2); ctx.fill();
@@ -253,7 +249,7 @@ export default {
             }
           } else if (e.pos || !e.done) {
             // ⊙ 터치 동그라미 + 그 악기에 조명
-            const Pp = e.pos || touchPos(env.tracker.pts, v.U * 0.13), sec = e.sec % n, sx = z.x0 + z.w * (sec + 0.5) / n;
+            const Pp = e.pos || touchPos(env.tracker.pts, v.U * 0.13), SA = orch.sectionAt(e.sec), sx = SA.x, stY = SA.y;   // 부를 파트 위치
             if (!e.done || e.done === "ok") {
               const cg = ctx.createLinearGradient(0, v.H * 0.12, 0, stY);
               cg.addColorStop(0, "rgba(255,240,170,0)"); cg.addColorStop(1, `rgba(255,240,170,${e.done ? 0.45 : 0.28})`);
@@ -273,7 +269,7 @@ export default {
         if (t0 !== null && BA.i >= 0 && BA.i < 4) outlinedText(ctx, String(BA.i + 1), z.cx, v.H * 0.3, U * 0.1 * (1 + pulse * 0.2), "#fff", "#8a5a00");
         outlinedText(ctx, real ? `♪ ${song.title} · 연주 ${rec.performer} (${rec.license})` : `♪ ${song.title}`, z.cx, v.H * 0.965, Math.min(U * 0.028, z.w / 40), "#fff", "rgba(0,0,0,.6)", 3);
       },
-      stop() { REAL.stop(); rhythm.stop(); },
+      stop() { REAL.stop(); rhythm.stop(); orch.dispose(); },
       result: () => `${song.title} · 완벽 ${cnt.PERFECT} · 좋아요 ${cnt.GOOD} · 놓침 ${cnt.MISS} · 왼손 동작 ${ev.ok}/${ev.all}`,
       // 설명 시연용
       get notes() { return notes.filter(n => !n.done).map(n => ({ time: n.time, key: n.key, hands: n.hands, parts: n.parts })); },
