@@ -1,9 +1,9 @@
 // 골프 (스포츠 리조트처럼 3D 섬 코스): 내 캐릭터 뒤에서 깃발 쪽을 봄. 두 손을 모아 머리 위로 들어 올렸다가(백스윙) 빠르게 아래로 휘두르면 샷
 // 손을 높이 들수록 멀리 날아감 → 깃발까지 거리에 맞게 높이를 조절. 휘두를 때 손이 옆으로 쏠리면 공이 휨, 바람도 있음
 // 카메라가 날아가는 공을 따라감. 그린 위에 올라가면 퍼팅(작게 들었다가 툭)으로 컵에 넣기. 오른쪽 위에 작은 지도
-import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=48";
-import { sfx } from "../../audio.js?v=48";
-import { stage, THREE, box, ball as sphere, mesh, cyl, tree, palm, cloud, sea, playerAvatar } from "./kit3d.js?v=48";
+import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=50";
+import { sfx } from "../../audio.js?v=50";
+import { stage, THREE, box, ball as sphere, mesh, cyl, tree, palm, cloud, sea, playerAvatar } from "./kit3d.js?v=50";
 
 const SWING = 2.2;                         // 다운스윙으로 인정하는 손 속도(어깨너비/초)
 const MAX_DIST = 170;                      // 끝까지 들었을 때 날아가는 거리(m)
@@ -27,13 +27,24 @@ function club() {
   const head = box(0.11, 0.05, 0.05, "#9aa0a6", { metal: 0.7, rough: 0.3 }); head.position.set(0.04, -0.96, 0); g.add(head);
   return g;
 }
+const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 침
+const hash = (a, b) => { let x = (a * 374761393 + b * 668265263) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); x ^= x >>> 16; return (x >>> 0) / 4294967296; };
+// 2인 대결: 두 화면이 같은 홀(거리·위치·바람)을 치고, 두 사람이 홀을 마치면 깃발에 더 가까이 붙인 사람이 그 홀 승리
+let shared = null;
 const flat = (geo, color, y = 0.02) => { const m = mesh(geo, color, { cast: false, receive: true }); m.rotation.x = -Math.PI / 2; m.position.y = y; return m; };
 
 export default {
-  id: "golf", title: "골프", icon: "⛳", sec: 60, cursor: "", cat: "sport", bg: "#96e6a1", desc: "깃발 가까이 샷, 그린에선 퍼팅", scene3d: true,
-  how: "두 손을 모아 머리 위로 들었다가 빠르게 아래로 휘둘러요. 높이 들수록 멀리! 그린에 올라가면 조금만 들었다가 툭 쳐서 컵에 넣어요",
+  id: "golf", title: "골프", icon: "⛳", sec: 60, cursor: "", cat: "sport", bg: "#96e6a1", desc: "깃발 가까이 샷, 그린에선 퍼팅 · 2인 대결", scene3d: true,
+  how: "두 손을 모아 머리 위로 들었다가 빠르게 아래로 휘둘러요. 높이 들수록 멀리! 그린에 올라가면 조금만 들었다가 툭 쳐서 컵에 넣어요. 둘이 하면 같은 홀에서 깃발에 더 가까이 붙인 사람이 이겨요",
   create(env) {
     const z = env.zone, v = env.view;
+    const versus = env.mode === 2, slot = versus ? env.slot : 0, other = 1 - slot, owner = !versus || slot === 0;
+    if (versus && !shared) shared = { seed: 1 + Math.floor(Math.random() * 1e6), hole: 1, players: [null, null], wins: [0, 0], last: null, waitT: 0, ended: false };
+    const G = versus ? shared : { seed: 1 + Math.floor(Math.random() * 1e6), hole: 1, players: [null, null], wins: [0, 0] };
+    const P = G.players[slot] = { name: env.name || `${slot + 1}P`, color: env.color || "#ff6b6b", tracker: env.tracker, hole: 0, done: false, best: Infinity, ball: new THREE.Vector3(), stance: new THREE.Vector3(), yaw: 0, anim: null };
+    const O = () => (versus ? G.players[other] : null);
+    // n번 홀: 두 사람이 같은 거리·위치·바람 (씨앗 값으로 정함)
+    const holeDef = i => ({ dist: 60 + Math.round(hash(G.seed, i * 5) * 80), px: (hash(G.seed, i * 5 + 1) - 0.5) * 16, wind: Math.round((hash(G.seed, i * 5 + 2) - 0.5) * 8 * env.diff.speed), pondSide: hash(G.seed, i * 5 + 3) < 0.5 ? -1 : 1 });
     const st = stage(env, { fov: 50, sky: ["#3fa9f5", "#dff3ff"], shadowSize: 10 });
     const { scene, camera, sun } = st;
     // 섬: 바다 + 모래 해변 + 잔디
@@ -66,7 +77,7 @@ export default {
       const fringe = flat(new THREE.RingGeometry(GREEN_R, GREEN_R + 1.5, 40), "#8bdc6a", 0.025); fringe.position.set(hx, 0.025, hz); course.add(fringe);
       hole.bunkers = [[hx - 13, hz + 6, 4.5], [hx + 12, hz - 4, 3.8], [hx + 8, hz + 30, 5]];
       hole.bunkers.forEach(([x, zz, r]) => { const b = flat(new THREE.CircleGeometry(r, 24), "#f3e2a9", 0.035); b.scale.y = 0.65; b.position.set(x, 0.035, zz); course.add(b); });
-      const side = Math.random() < 0.5 ? -1 : 1; hole.pond = [hx * 0.5 + side * 24, hz * 0.55, 9];
+      const side = hole.pondSide; hole.pond = [hx * 0.5 + side * 24, hz * 0.55, 9];
       const pond = flat(new THREE.CircleGeometry(hole.pond[2], 30), "#3aa0e0", 0.04); pond.position.set(hole.pond[0], 0.04, hole.pond[1]); course.add(pond);
       for (let i = 0; i < 12; i++) { const k = i / 11, s = i % 2 ? 1 : -1; const tr = (i % 3 ? tree : palm)(hx * k + s * (22 + (i % 3) * 5), hz * k - 5, 1.6 + (i % 3) * 0.4); course.add(tr); }
       flag.position.set(hx, 0, hz);
@@ -74,11 +85,27 @@ export default {
     }
     function newHole() {
       holes++;
-      const dist = 60 + Math.round(Math.random() * 80);
-      hole = { dist, px: (Math.random() - 0.5) * 16, wind: Math.round((Math.random() - 0.5) * 8 * env.diff.speed) };
+      if (!versus) G.hole = holes;
+      hole = holeDef(G.hole); P.hole = G.hole; P.done = false; P.best = Infinity;
       phase = "address"; maxLv = 0; shot = null; putting = false; pos.set(0, 0, 0);
       buildCourse();
     }
+    // 2인: 내 홀이 끝나면 상대를 기다림 → 둘 다 끝나면(또는 오래 기다리면) 더 가까이 붙인 사람이 홀 승리, 다음 홀로
+    function finishHole() {
+      if (!versus) { newHole(); return; }
+      P.done = true; phase = "wait";
+    }
+    function judgeHoles(dt) {   // 0번 화면이 판정
+      const A = G.players[0], B = G.players[1];
+      if (!A || !B || A.hole !== G.hole) return;
+      if (A.done || B.done) G.waitT += dt;
+      if ((A.done && B.done) || G.waitT > 15) {
+        const da = A.best, db = B.best, w = da === db ? -1 : da < db ? 0 : 1;
+        if (w >= 0) G.wins[w]++;
+        G.last = { hole: G.hole, w, da, db }; G.hole++; G.waitT = 0;
+      }
+    }
+    let shownLast = 0;
     newHole();
     const flagPos = () => new THREE.Vector3(hole.px, 0, -hole.dist);
     const distLeft = () => Math.hypot(pos.x - hole.px, -pos.z - hole.dist);
@@ -114,7 +141,7 @@ export default {
     function land() {
       const P0 = ballAt(shot, 99); pos.copy(P0).setY(0);
       const dm = distLeft(), P = st.toScreen(P0);
-      best = Math.min(best, dm); phase = "result"; shot.res = 0;
+      best = Math.min(best, dm); P.best = Math.min(P.best, dm < 0.6 && shot.putt ? 0 : dm); phase = "result"; shot.res = 0;
       let pts = 0, label = "";
       const inPond = Math.hypot(pos.x - hole.pond[0], pos.z - hole.pond[1]) < hole.pond[2];
       if (shot.putt) {
@@ -146,24 +173,33 @@ export default {
       me.position.copy(stance).add(left);
       return { dir, yaw };
     }
-    function animGolfer() {
-      const lv = phase === "back" ? Math.max(level, maxLv * 0.9) : phase === "address" ? level : 0;
-      if (swingT < 0.6) {   // 휘두르고 난 뒤 팔로스루
-        const u = Math.min(1, swingT / 0.25);
-        me.body.rotation.y = -0.2 + 1.3 * u;
-        me.arm(0, 0, 0.5 + 2.2 * u, 0.2); me.arm(1, 0, 0.5 + 2.2 * u, 0.2);
-      } else if (phase === "fly" || phase === "result") { me.body.rotation.y = 1.1; me.arm(0, 0, 2.6, 0.3); me.arm(1, 0, 2.6, 0.3); }
+    // 골퍼 자세 (내 캐릭터·상대 캐릭터 같이 씀). A = { phase, level, maxLv, swingT, putting }
+    function animAv(a, A) {
+      const lv = A.phase === "back" ? Math.max(A.level, A.maxLv * 0.9) : A.phase === "address" ? A.level : 0;
+      if (A.swingT < 0.6) {   // 휘두르고 난 뒤 팔로스루
+        const u = Math.min(1, A.swingT / 0.25);
+        a.body.rotation.y = -0.2 + 1.3 * u;
+        a.arm(0, 0, 0.5 + 2.2 * u, 0.2); a.arm(1, 0, 0.5 + 2.2 * u, 0.2);
+      } else if (A.phase === "fly" || A.phase === "result" || A.phase === "wait") { a.body.rotation.y = 1.1; a.arm(0, 0, 2.6, 0.3); a.arm(1, 0, 2.6, 0.3); }
       else {
-        const k = putting ? Math.min(lv, 0.5) : lv;
-        me.body.rotation.y = -k * 1.1;
-        me.arm(0, 0.05, 0.5 + k * 2.3, 0.1 + k * 0.6); me.arm(1, -0.05, 0.5 + k * 2.3, 0.1 + k * 0.4);
+        const k = A.putting ? Math.min(lv, 0.5) : lv;
+        a.body.rotation.y = -k * 1.1;
+        a.arm(0, 0.05, 0.5 + k * 2.3, 0.1 + k * 0.6); a.arm(1, -0.05, 0.5 + k * 2.3, 0.1 + k * 0.4);
       }
-      myClub.rotation.set(0.25, 0, 0);
     }
+    function animGolfer() { P.anim = { phase, level, maxLv, swingT, putting }; animAv(me, P.anim); myClub.rotation.set(0.25, 0, 0); }
+    // 2인: 상대 골퍼와 상대 공 (같은 홀일 때만 보임)
+    let rival = null, rivalBall = null, autoT = 0, autoLv = 0;
     return {
       update(dt) {
         t += dt; swingT += dt; water.update(t);
-        const b = body(), hs = env.tracker.hands.filter(h => h.vis);
+        const b = AUTO ? null : body(), hs = env.tracker.hands.filter(h => h.vis);
+        if (AUTO && (phase === "address" || phase === "back")) {   // 점검용: 필요한 높이(80%는 거의 맞게)까지 들었다가 1.4초 뒤 휘두름
+          if (autoT === 0) autoLv = clamp(this_need() * (Math.random() < 0.8 ? 0.94 + Math.random() * 0.12 : 0.6 + Math.random() * 0.8), 0.05, 1);
+          autoT += dt; level = Math.min(autoLv, autoT / 1.0 * autoLv);
+          if (autoT > 0.3) { phase = "back"; maxLv = Math.max(maxLv, level); }
+          if (autoT > 1.4) { autoT = 0; hit((Math.random() - 0.5) * 2); }
+        }
         if (b && hs.length) {
           const midY = hs.reduce((s, h) => s + h.y, 0) / hs.length;
           level = clamp((b.sy - midY) / (1.7 * b.sw), 0, 1);
@@ -180,14 +216,53 @@ export default {
           shot.res += dt;
           if (shot.res > 2.2) {
             if (shot.toPutt) { putting = true; phase = "address"; maxLv = 0; shot = null; }
-            else newHole();
+            else finishHole();
           }
+        }
+        // 2인: 판정·다음 홀
+        if (versus) {
+          if (owner) judgeHoles(dt);
+          if (P.hole !== G.hole) {          // 홀이 넘어감(둘 다 끝났거나 오래 기다림) → 결과 알리고 다음 홀
+            const L = G.last;
+            if (L && L.hole !== shownLast) {
+              shownLast = L.hole;
+              const Wn = L.w >= 0 ? G.players[L.w] : null;
+              popup(z.cx, v.H * 0.34, Wn ? `${L.hole}번 홀 ${Wn.name} 승리!` : `${L.hole}번 홀 무승부`, { size: Math.min(v.U * 0.06, z.w / 12), color: "#fff", stroke: Wn ? Wn.color : "#555", life: 2.2 });
+              if (L.w === slot) { env.award(3, z.cx, v.H * 0.28); sfx.fanfare(); }
+            }
+            newHole();
+          }
+          const Op = O();
+          if (Op && !rival) {
+            rival = playerAvatar({ color: Op.color, name: Op.name }); rival.scale.setScalar(1.15); rival.hold(1, club()); scene.add(rival);
+            rivalBall = sphere(0.1, Op.color, { rough: 0.3 }); scene.add(rivalBall);
+          }
+          if (Op && rival) {
+            const same = Op.hole === P.hole;
+            rival.visible = rivalBall.visible = same;
+            if (same) {
+              rivalBall.position.copy(Op.ball);
+              // 같은 자리(티)에 서면 겹치지 않게 옆으로 비켜 섬
+              // 공 왼쪽에 서는 건 나와 같고, 같은 자리(티)면 공 건너편(오른쪽)으로 비켜 서서 겹치지 않게
+              const side = Op.stance.distanceTo(P.stance) < 1.6 ? -2.4 : 1;
+              rival.position.copy(Op.stance).add(new THREE.Vector3(Math.cos(Op.yaw) * 0.75 * side, 0, -Math.sin(Op.yaw) * 0.75 * side));
+              rival.rotation.y = Op.yaw - Math.PI / 2;
+              if (Op.anim) animAv(rival, Op.anim); rival.idle(t + 1);
+            }
+          }
+          if (!G.ended && env.progress() > 0.985 && Op) {
+            G.ended = true;
+            const w = G.wins[0] === G.wins[1] ? null : G.players[G.wins[0] > G.wins[1] ? 0 : 1];
+            popup(z.cx, v.H * 0.42, w ? `${w.name} 최종 승리!` : "무승부!", { size: v.U * 0.07, color: "#fff", stroke: w ? w.color : "#555", life: 2 });
+          }
+          if (G.ended && !P.bonus && G.wins[slot] > G.wins[other]) { P.bonus = true; env.award(5, z.cx, v.H * 0.3); }
         }
         placeGolfer(); animGolfer(); me.idle(t);
         flag.cloth.rotation.y = -hole.wind * 0.12 + Math.sin(t * 5) * 0.12;
         // 공·그림자·자국
         const bp = shot && phase !== "address" ? ballAt(shot, shot.t) : pos.clone().setY(0.09);
         gball.position.copy(bp); shadow.position.set(bp.x, 0.045, bp.z);
+        P.ball.copy(bp); P.stance.copy(stance); P.yaw = Math.atan2(aimDir.x, aimDir.z) ;
         trail.visible = !!shot && !shot.putt;
         if (trail.visible) { const a = trail.geometry.attributes.position; for (let i = 0; i < 40; i++) { const p = ballAt(shot, shot.t * i / 39); a.setXYZ(i, p.x, p.y, p.z); } a.needsUpdate = true; }
         aimLine.visible = phase === "address" || phase === "back";
@@ -228,6 +303,8 @@ export default {
         ctx.fillStyle = "#3aa0e0"; const Pm = M(hole.pond[0], hole.pond[1]); ctx.beginPath(); ctx.arc(Pm.x, Pm.y, hole.pond[2] * sc, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = "#b5f59a"; ctx.beginPath(); ctx.arc(Fm.x, Fm.y, GREEN_R * sc, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = "#ff3b3b"; ctx.fillRect(Fm.x - 1, Fm.y - U * 0.025, 2, U * 0.025); ctx.beginPath(); ctx.moveTo(Fm.x, Fm.y - U * 0.025); ctx.lineTo(Fm.x + U * 0.014, Fm.y - U * 0.019); ctx.lineTo(Fm.x, Fm.y - U * 0.013); ctx.fill();
+        const Op2 = O();
+        if (Op2 && Op2.hole === P.hole) { const Rm = M(Op2.ball.x, Op2.ball.z); ctx.fillStyle = Op2.color; ctx.beginPath(); ctx.arc(Rm.x, Rm.y, U * 0.007, 0, Math.PI * 2); ctx.fill(); }   // 상대 공
         const Bm = M(gball.position.x, gball.position.z); ctx.fillStyle = "#fff"; ctx.strokeStyle = "#333"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(Bm.x, Bm.y, U * 0.007, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         // 힘 막대 (왼쪽): 지금 손 높이, 깃발까지 필요한 높이 표시
         const gx = z.x0 + Math.max(U * 0.05, z.w * 0.06), gh = v.H * 0.4, gy = v.H * 0.22, gw = Math.max(14, U * 0.028);
@@ -239,11 +316,27 @@ export default {
         ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(gx + gw / 2 + 2, ny); ctx.lineTo(gx + gw / 2 + U * 0.028, ny - U * 0.015); ctx.lineTo(gx + gw / 2 + U * 0.028, ny + U * 0.015); ctx.closePath(); ctx.fill();
         outlinedText(ctx, "힘", gx, gy - U * 0.028, U * 0.032, "#fff", "#333", 3);
         const pw = Math.min(z.w * 0.24, U * 0.3), hx = z.x0 + (z.w - pw) / 2;
-        const hint = phase === "address" ? (putting ? "조금만 들었다가 툭! 컵에 넣어요" : "두 손 모아 위로 들었다가 휙!") : phase === "back" ? "이제 아래로 빠르게 휘둘러요!" : "";
+        const hint = phase === "address" ? (putting ? "조금만 들었다가 툭! 컵에 넣어요" : "두 손 모아 위로 들었다가 휙!") : phase === "back" ? "이제 아래로 빠르게 휘둘러요!" : phase === "wait" ? "상대가 칠 때까지 기다려요" : "";
+        // 2인: 두 화면 같은 점수판 "1P 이름 이긴 홀 : 이긴 홀 이름 2P" + 이번 홀 깃발까지 거리 + 앞선 사람 👑
+        const Op = O();
+        if (Op) {
+          const A = G.players[0], B = G.players[1], bx0 = z.x0 + U * 0.02, bw = Math.max(U * 0.3, ix - U * 0.02 - bx0), by0 = v.H * 0.105, bh0 = U * 0.12;
+          ctx.fillStyle = "rgba(10,50,30,.82)"; rr(ctx, bx0, by0, bw, bh0, U * 0.02); ctx.fill();
+          const lead = G.wins[0] === G.wins[1] ? -1 : G.wins[0] > G.wins[1] ? 0 : 1, fs = Math.min(U * 0.048, bw / 9), mid = bx0 + bw / 2;
+          outlinedText(ctx, `${lead === 0 ? "👑" : ""}${G.wins[0]}`, bx0 + bw * 0.25, by0 + bh0 * 0.36, fs, "#fff", A.color, 4);
+          outlinedText(ctx, ":", mid, by0 + bh0 * 0.36, fs * 0.8, "#fff", "#333", 3);
+          outlinedText(ctx, `${G.wins[1]}${lead === 1 ? "👑" : ""}`, bx0 + bw * 0.75, by0 + bh0 * 0.36, fs, "#fff", B.color, 4);
+          const dd = Q => (Q.hole === G.hole && Q.best < Infinity ? `${Q.best.toFixed(1)}m` : "-"), ns = Math.min(U * 0.024, bw / 18);
+          outlinedText(ctx, `1P ${A.name} ${dd(A)}`, bx0 + bw * 0.25, by0 + bh0 * 0.78, ns, "#fff", A.color, 3);
+          outlinedText(ctx, `${dd(B)} ${B.name} 2P`, bx0 + bw * 0.75, by0 + bh0 * 0.78, ns, "#fff", B.color, 3);
+        }
         if (hint) outlinedText(ctx, hint, hx, v.H * 0.88, Math.min(U * 0.042, (z.w - pw) / (hint.length * 0.95)), "#fff", phase === "back" ? "#c05000" : "#2d6a1e", 4);
       },
-      stop() { st.dispose(); },
-      result: () => `${holes - (phase === "result" ? 0 : 1)}번 홀 · 가장 가까이 ${best === Infinity ? "-" : best.toFixed(1) + "m"} · 홀인원·컵인 ${cups}`,
+      stop() { st.dispose(); shared = null; },
+      result: () => {
+        const Op = O(), vs = Op ? ` · 이긴 홀 ${G.wins[slot]}:${G.wins[other]} ${G.wins[slot] > G.wins[other] ? "(승)" : G.wins[slot] < G.wins[other] ? "(패)" : "(무)"}` : "";
+        return `${holes - (phase === "result" ? 0 : 1)}번 홀 · 가장 가까이 ${best === Infinity ? "-" : best.toFixed(1) + "m"} · 홀인원·컵인 ${cups}${vs}`;
+      },
       // 설명 시연용
       get phase() { return phase; },
       get need() { return this_need(); },

@@ -73,27 +73,55 @@ export const sfx = {
   }),
 };
 
-/* ---------- 배경음악: 32스텝 반복 ----------
+/* ---------- 배경음악 (합성 댄스곡 3곡) ----------
+   실제 음원(realmusic.js 신나는 무료 음원)을 못 받았을 때 쓰는 대신 음악. 드럼(킥·클랩·하이햇)·베이스·화음 스탭·멜로디
    음악이 끊기지 않게: 0.4초 앞까지 미리 예약해 둠. 화면 처리(자세 인식)로 타이머가 늦게 와도 소리는 이미 예약돼 있음 */
 const LOOKAHEAD = 0.4;
-const BASS = [48, 0, 48, 0, 55, 0, 55, 0, 53, 0, 53, 0, 55, 0, 52, 0];
-const LEAD = [72, 0, 74, 76, 0, 79, 76, 0, 74, 0, 72, 74, 0, 76, 0, 0, 79, 0, 81, 79, 0, 76, 74, 0, 72, 0, 74, 0, 72, 0, 0, 0];
-let timer = null, step = 0, nextT = 0, tempo = 1;
+// 마디(16칸=16분음표)별: 화음(3음), 베이스 근음, 멜로디 16칸(0 = 쉼)
+const BGM_SONGS = [
+  { bpm: 126, chords: [[60, 64, 67], [59, 62, 67], [57, 60, 64], [57, 60, 65]], roots: [36, 43, 45, 41],
+    lead: [[72, 0, 0, 74, 76, 0, 79, 0, 76, 0, 74, 0, 72, 0, 0, 0], [74, 0, 0, 76, 79, 0, 81, 0, 79, 0, 76, 0, 74, 0, 0, 0],
+           [76, 0, 0, 79, 81, 0, 84, 0, 81, 0, 79, 0, 76, 0, 74, 0], [77, 0, 76, 0, 74, 0, 72, 0, 74, 0, 0, 0, 0, 0, 0, 0]] },
+  { bpm: 124, chords: [[57, 60, 64], [57, 60, 65], [55, 60, 64], [55, 59, 62]], roots: [45, 41, 48, 43],
+    lead: [[76, 0, 76, 0, 79, 0, 76, 0, 74, 0, 72, 0, 74, 0, 0, 0], [72, 0, 72, 0, 76, 0, 72, 0, 71, 0, 69, 0, 71, 0, 0, 0],
+           [72, 0, 72, 0, 76, 0, 79, 0, 76, 0, 74, 0, 72, 0, 0, 0], [74, 0, 74, 0, 71, 0, 74, 0, 79, 0, 0, 0, 0, 0, 0, 0]] },
+  { bpm: 132, chords: [[57, 60, 65], [59, 62, 67], [59, 64, 67], [57, 60, 64]], roots: [41, 43, 40, 45], arp: true },
+];
+// 필터 거친 신스 소리 (베이스·화음·멜로디용): 톱니파 두 개를 살짝 어긋나게 → 두툼한 소리
+function synth(freq, t, dur, { type = "sawtooth", vol = 0.08, cutoff = 1800, detune = 8, dest } = {}) {
+  const f = ac.createBiquadFilter(), g = ac.createGain();
+  f.type = "lowpass"; f.Q.value = 2; f.frequency.setValueAtTime(cutoff * 2.2, t); f.frequency.exponentialRampToValueAtTime(Math.max(200, cutoff * 0.6), t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  f.connect(g); g.connect(dest);
+  for (const d of detune ? [-detune, detune] : [0]) { const o = ac.createOscillator(); o.type = type; o.frequency.value = freq; o.detune.value = d; o.connect(f); o.start(t); o.stop(t + dur + 0.05); }
+}
+let timer = null, step = 0, nextT = 0, tempo = 1, song = 0;
 function schedule() {
   if (!ac || !bgmGain) return;
-  const spb = 60 / (132 * tempo) / 2;
+  const S = BGM_SONGS[song], sx = 60 / (S.bpm * tempo) / 4;     // 16분음표 길이
   while (nextT < ac.currentTime + LOOKAHEAD) {
-    const i = step % 32, b = BASS[i % 16], l = LEAD[i];
-    if (b) tone(midi(b), nextT, spb * 1.6, { type: "triangle", vol: 0.16, dest: bgmGain });
-    if (l) tone(midi(l), nextT, spb * 0.9, { type: "square", vol: 0.04, dest: bgmGain });
-    if (i % 2 === 0) noise(nextT, 0.03, { vol: 0.05, type: "highpass", freq: 7000, dest: bgmGain });
-    nextT += spb; step++;
+    const i = step % 16, bar = Math.floor(step / 16), ci = bar % 4, ch = S.chords[ci], root = S.roots[ci], sec = Math.floor(bar / 4) % 4, t = nextT, d = bgmGain;
+    // 드럼: 처음 2마디는 하이햇·킥만 → 점점 신나게
+    if (i % 4 === 0) tone(150, t, 0.16, { vol: 0.55, slide: 0.28, dest: d });                                   // 킥
+    if (bar >= 1 && (i === 4 || i === 12)) { noise(t, 0.16, { vol: 0.3, freq: 1700, q: 0.8, dest: d }); noise(t + 0.012, 0.1, { vol: 0.2, freq: 1300, q: 0.9, dest: d }); }   // 클랩
+    if (i % 2 === 0) noise(t, i % 4 === 2 ? 0.09 : 0.03, { vol: i % 4 === 2 ? 0.12 : 0.05, type: "highpass", freq: 7500, dest: d });   // 하이햇
+    // 베이스: 엇박 8분음표 + 옥타브
+    if (i % 4 === 2) synth(midi(root + (i === 10 ? 12 : 0)), t, sx * 1.8, { type: "sawtooth", vol: 0.12, cutoff: 700, detune: 4, dest: d });
+    // 화음 스탭: 엇박 (킥과 겹치지 않게 → 펌핑 느낌)
+    if (bar >= 2 && (i === 2 || i === 6 || i === 10 || i === 14)) ch.forEach(n => synth(midi(n), t, sx * 1.4, { vol: 0.035, cutoff: 2600, dest: d }));
+    // 멜로디: 4마디마다 바뀜 (쉬는 구간 → 멜로디 → 아르페지오 → 멜로디)
+    if (bar >= 4) {
+      if (S.arp || sec === 2) { const a = ch[[0, 1, 2, 1][i % 4]] + 12 + (i >= 8 ? 12 : 0); if (i % 2 === 0 || S.arp) synth(midi(a), t, sx * 0.9, { type: "square", vol: 0.04, cutoff: 3200, detune: 0, dest: d }); }
+      else if (sec !== 0) { const n = S.lead[ci][i]; if (n) synth(midi(n), t, sx * 1.9, { type: "square", vol: 0.05, cutoff: 3600, detune: 6, dest: d }); }
+    }
+    nextT += sx; step++;
   }
 }
 export const bgm = {
   start() {
     if (!settings.bgm || !ac || timer) return;
-    bgmGain = ac.createGain(); bgmGain.gain.value = 0.55; bgmGain.connect(musicBus);
+    bgmGain = ac.createGain(); bgmGain.gain.value = 0.5; bgmGain.connect(musicBus);
+    song = (song + 1 + Math.floor(Math.random() * (BGM_SONGS.length - 1))) % BGM_SONGS.length;   // 지난번과 다른 곡
     step = 0; nextT = ac.currentTime + 0.05; timer = setInterval(schedule, 25);
   },
   stop() {

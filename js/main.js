@@ -1,27 +1,28 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=48";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=48";
-import * as R from "./records.js?v=48";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=48";
-import copy from "./games/copy.js?v=48";
-import math from "./games/math.js?v=48";
-import ice from "./games/ice.js?v=48";
-import star from "./games/star.js?v=48";
-import fruit from "./games/fruit.js?v=48";
-import mole from "./games/mole.js?v=48";
-import wall from "./games/wall.js?v=48";
-import rhythm from "./games/rhythm.js?v=48";
-import goalie from "./games/goalie.js?v=48";
-import { hangul, english } from "./games/word.js?v=48";
-import clockGame from "./games/clock.js?v=48";
-import run from "./games/run.js?v=48";
-import simon from "./games/simon.js?v=48";
-import conductor from "./games/conductor.js?v=48";
-import SPORTS from "./games/sports.js?v=48";
-import LEARN from "./games/learn.js?v=48";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=48";
-import { DIFFS, diffOf } from "./difficulty.js?v=48";
-import { startDemo } from "./demo.js?v=48";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=50";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=50";
+import * as R from "./records.js?v=50";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=50";
+import copy from "./games/copy.js?v=50";
+import math from "./games/math.js?v=50";
+import ice from "./games/ice.js?v=50";
+import star from "./games/star.js?v=50";
+import fruit from "./games/fruit.js?v=50";
+import mole from "./games/mole.js?v=50";
+import wall from "./games/wall.js?v=50";
+import rhythm from "./games/rhythm.js?v=50";
+import goalie from "./games/goalie.js?v=50";
+import { hangul, english } from "./games/word.js?v=50";
+import clockGame from "./games/clock.js?v=50";
+import run from "./games/run.js?v=50";
+import simon from "./games/simon.js?v=50";
+import conductor from "./games/conductor.js?v=50";
+import SPORTS from "./games/sports.js?v=50";
+import LEARN from "./games/learn.js?v=50";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=50";
+import { DIFFS, diffOf } from "./difficulty.js?v=50";
+import { startDemo } from "./demo.js?v=50";
+import * as REAL from "./realmusic.js?v=50";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -267,7 +268,7 @@ function cameraErrorText(e) {
 }
 function stopInsts() { insts.forEach(g => { try { if (g.stop) g.stop(); } catch (e) {} }); }   // 리듬 반주 등 게임이 켠 소리 끄기
 function backToSetup() {
-  stopInsts(); stopLoop(); bgm.stop(); stopSpeak(); cam.close(); trackers = [];
+  stopInsts(); stopLoop(); stopBgm(); stopSpeak(); cam.close(); trackers = [];
   document.body.classList.remove("live"); hideCursors();
   setState("setup"); renderSetup();
 }
@@ -332,8 +333,12 @@ function chooseGame(id) {
   const grp = groupOf(id); if (grp) R.setSettings({ ...R.getSettings(), ["last_" + grp.id]: id });
   if (needDemo(id)) openDemo(); else goReady();
 }
+// 배경음악: 신나는 무료 음원(realmusic)을 게임마다 골라 자리 잡는 동안 미리 받음. 못 받았으면 합성 댄스곡
+let nextBgm = null;
+function stopBgm() { bgm.stop(); REAL.bgmStop(); }
 function goReady() {
   const g = GAMES[gameId];
+  if (g.music !== false) nextBgm = REAL.pickBgm();
   $("#readyTitle").textContent = `${g.icon} ${g.title}`;
   $("#readyHow").textContent = "";   // 자리 잡기 화면의 분홍 설명 글은 뺌 (설명은 게임 설명 시연에서)
   $("#readyHint").textContent = slots.length === 2
@@ -470,7 +475,7 @@ function beginCountdown(sec = 3, song = null) {
   setupHud();
   cdT = sec; setState("countdown"); showCd(String(sec)); sfx.tick();
 }
-function beginPlay() { setState("play"); showCd("시작!"); goT = 0.7; sfx.go(); if (GAMES[gameId].music !== false) bgm.start(); }
+function beginPlay() { setState("play"); showCd("시작!"); goT = 0.7; sfx.go(); if (GAMES[gameId].music !== false && !(nextBgm && REAL.bgmPlay(nextBgm))) bgm.start(); }
 function showCd(txt) { const el = $("#cd"); el.hidden = false; el.textContent = txt; el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop"); }
 
 function makeEnv(i) {
@@ -487,7 +492,7 @@ function makeEnv(i) {
     pip: (c, x, y, w, h, mark) => drawPip(c, i, x, y, w, h, mark),
   };
 }
-// 3D 스포츠용 카메라 작은 화면: 그 선수 몸 주변만 잘라 구석에 보여 줌 (뼈대 선 포함)
+// 3D 스포츠용 카메라 작은 화면: 그 선수 몸 주변만 잘라 구석에 보여 줌 (카메라 모습만)
 function drawPip(c, i, x, y, w, h, mark) {
   const z = zones[i], tr = trackers[i], P = tr && tr.pts, U = view.U, s = h / view.H;
   let cx = P && P[11].v && P[12].v ? (P[11].x + P[12].x) / 2 : z.cx;
@@ -497,7 +502,8 @@ function drawPip(c, i, x, y, w, h, mark) {
   c.beginPath(); c.roundRect(x, y, w, h, U * 0.02); c.clip();
   c.translate(x + w / 2, y); c.scale(s, s); c.translate(-cx, 0);
   cam.draw(c, view.W, view.H);
-  if (P) {
+  // 뼈대 선(다각형 모양)은 그리지 않음: 작은 창에는 카메라에 비친 모습만 (점검용 ?bones=1 일 때만 표시)
+  if (P && SHOW_BONES) {
     c.strokeStyle = slots[i].color; c.lineWidth = U * 0.02; c.lineCap = "round"; c.beginPath();
     for (const [a, b] of BONES) if (P[a].v && P[b].v) { c.moveTo(P[a].x, P[a].y); c.lineTo(P[b].x, P[b].y); }
     c.stroke();
@@ -532,7 +538,7 @@ function penalty(i, n, x, y, label) {
   bump(i);
 }
 function enterFever() {
-  fever = true; sfx.fever(); bgm.setTempo(1.35);
+  fever = true; sfx.fever(); bgm.setTempo(1.35); REAL.bgmRate(1.08);
   $("#hud").classList.add("fever");
   popup(view.W / 2, view.H * 0.45, "피버 타임! 점수 2배", { size: view.U * 0.09, color: "#fff", stroke: "#e0306a", life: 1.6, vy: -20 });
 }
@@ -558,11 +564,11 @@ function renderHud() {
   $("#ttxt").textContent = Math.max(0, Math.ceil(timeLeft));
 }
 function bump(i) { const el = $(`#pb${i} .ps`); el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
-$("#btnQuit").onclick = () => { stopInsts(); bgm.stop(); stopSpeak(); setState("select"); };
+$("#btnQuit").onclick = () => { stopInsts(); stopBgm(); stopSpeak(); setState("select"); };
 
 /* ---------- 5. 결과 ---------- */
 function endGame() {
-  stopInsts(); bgm.stop(); stopSpeak(); sfx.fanfare();
+  stopInsts(); stopBgm(); stopSpeak(); sfx.fanfare();
   $("#hud").classList.remove("fever");
   justSaved = new Set();
   const results = players.map((p, i) => {
@@ -590,7 +596,7 @@ function renderResult(results) {
     title = a.p.score === b.p.score ? "무승부!" : `${(a.p.score > b.p.score ? a : b).p.name} 승리!`;
   }
   $("#resTitle").textContent = `${g.icon} ${g.title} · ${title}`;
-  const box = $("#resCols"); box.innerHTML = "";
+  const box = $("#resCols"); box.innerHTML = ""; box.classList.toggle("two", results.length === 2);   // 2인은 두 칸 나란히 (한 화면에 다 보이게)
   const decided = results.length === 2 && results[0].p.score !== results[1].p.score;
   const top = Math.max(...results.map(r => r.p.score));
   results.forEach(({ p, meters, rec, extra, item }, i) => {
@@ -882,6 +888,7 @@ function goFullscreen() {
 }
 
 if (SIM) window.__dbg = { get demo() { return demo; }, get state() { return state; }, setTime: s => { timeLeft = s; }, players: () => players, scales: () => trackers.map(t => Math.round(t.scale)),
+  bgmReal: () => REAL.bgmPlaying(),   // 점검: 실제 음원 배경음악이 나오는지
   bodyX: () => trackers.map(t => (t.pts && t.pts[11].v && t.pts[12].v ? Math.round((t.pts[11].x + t.pts[12].x) / 2) : null)) };   // 점검: 선수 몸 위치(화면 x)
 
 renderSetup();
