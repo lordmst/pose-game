@@ -9,6 +9,23 @@ const ZRATE = 0.33;          // 물체가 멀리서 다가오는 속도(1/초, �
 const FLAP = 2.0;            // 날갯짓으로 인정하는 손 아래 방향 속도(어깨너비/초)
 const XS = 7, AS = 16, Y0 = 1.2, ZD = 90;   // 게임 좌표 → 3D(m): 옆 1 = 7m, 높이 1 = 16m, 앞 1 = 90m
 
+const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 목표 쪽으로 기울이고 날갯짓
+// 코스: 풍선·링·섬을 '출발점에서의 거리(cz)'에 놓음. 2인은 같은 코스를 함께 씀. 링을 통과하면 잠깐 빨라짐(경주)
+const rng = seed => () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+// 비행기 빨간 몸통을 선수 색으로 (2인에서 누구 비행기인지 알아보게)
+function tint(g, color) { g.traverse(c => { if (c.isMesh && c.material && c.material.color && c.material.color.getHexString() === "e8332f") { c.material = c.material.clone(); c.material.color.set(color); } }); }
+function makeCourse() { return { items: [], nextCz: 0.55, ox: 0, id: 1, rnd: rng(1 + Math.floor(Math.random() * 1e9)), racers: [null, null] }; }
+let shared = null;   // 2인 경주: 같은 하늘길·서로의 위치
+function extend(C, upTo, p) {
+  while (C.nextCz < upTo) {
+    const r = C.rnd(), cz = C.nextCz, alt = 0.25 + C.rnd() * 0.6, push = (kind, ox, a, z) => C.items.push({ id: C.id++, kind, ox, a, cz: z, col: Math.floor(C.rnd() * 5) });
+    C.ox = clamp(C.ox + (C.rnd() - 0.5) * 1.4, -1.4, 1.4);
+    if (r < 0.55) push("balloon", C.ox, alt, cz);
+    else if (r < 0.8) { const sgn = C.rnd() < 0.5 ? -1 : 1; for (let i = 0; i < 3; i++) push("ring", C.ox + i * 0.08 * sgn, alt, cz + i * 0.13); }
+    else { push("island", C.ox, 0, cz); push("balloon", C.ox, 0.75, cz + 0.02); }
+    C.nextCz += 0.41 - 0.115 * p;
+  }
+}
 // 작은 섬: 모래 + 초록 산 + 야자수
 function island(r = 4, h = 9) {
   const g = new THREE.Group();
@@ -59,21 +76,29 @@ export default {
     const balloonMats = ["#ff5a7a", "#ffd43b", "#4dabf7", "#69db7c", "#cc5de8"].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35 }));
     const ringMat = new THREE.MeshStandardMaterial({ color: "#ffd400", emissive: "#7a5a00", roughness: 0.3 });
 
-    let X = 0, A = 0.55, vA = 0, steer = 0, objs = [], spawnT = 0.6, t = 0, dist = 0, flapCool = 0, wet = 0, flapN = 0;
-    let got = 0, rings = 0, streak = 0, lastRing = -9, wide = false, flapFx = 0, roll = 0;
+    let X = 0, A = 0.55, vA = 0, steer = 0, objs = [], t = 0, dist = 0, flapCool = 0, wet = 0, flapN = 0;
+    let got = 0, rings = 0, streak = 0, lastRing = -9, wide = false, flapFx = 0, roll = 0, boost = 0, slow = 0, finalDone = false, autoFlapT = 0;
     const wpos = (ox, a, oz) => new THREE.Vector3(ox * XS, Y0 + a * AS, -oz * ZD);
-    function spawn(kind, ox, alt, z0 = 1) {
-      const o = { kind, ox, a: alt, z: z0, done: false };
-      if (kind === "balloon") { o.mesh = new THREE.Group(); const b = new THREE.Mesh(geo.balloon, balloonMats[Math.floor(Math.random() * 5)]); b.scale.set(1, 1.2, 1); b.castShadow = true; o.mesh.add(b); const str = cyl(0.02, 0.02, 1.6, "#666"); str.position.y = -2; o.mesh.add(str); }
-      else if (kind === "ring") { o.mesh = new THREE.Mesh(geo.ring, ringMat); o.mesh.castShadow = true; }
+    // 코스: 1인은 혼자, 2인은 함께 (같은 풍선·링·섬, 풍선은 먼저 터뜨린 사람 것)
+    const two = env.mode === 2;
+    const C = two ? (shared = shared || makeCourse()) : makeCourse();
+    const done = new Set(), live = new Map();
+    let rival = null;                              // 2인: 상대 비행기 (상대 정보가 처음 들어오면 만듦)
+    if (two && env.color) tint(plane, env.color);
+    function show(it) {
+      const o = { ...it, src: it, z: it.cz - dist, done: false };
+      if (o.kind === "balloon") { o.mesh = new THREE.Group(); const b = new THREE.Mesh(geo.balloon, balloonMats[it.col]); b.scale.set(1, 1.2, 1); b.castShadow = true; o.mesh.add(b); const str = cyl(0.02, 0.02, 1.6, "#666"); str.position.y = -2; o.mesh.add(str); }
+      else if (o.kind === "ring") { o.mesh = new THREE.Mesh(geo.ring, ringMat); o.mesh.castShadow = true; }
       else { o.mesh = island(3.2, 10); o.a = 0; }
-      scene.add(o.mesh); objs.push(o);
+      scene.add(o.mesh); live.set(it.id, o);
     }
-    function spawnSet() {
-      const r = Math.random(), ox = clamp(X + (Math.random() - 0.5) * 1.4, -1.4, 1.4), alt = 0.25 + Math.random() * 0.6;
-      if (r < 0.55) spawn("balloon", ox, alt);
-      else if (r < 0.8) for (let i = 0; i < 3; i++) spawn("ring", ox + i * 0.08 * (Math.random() < 0.5 ? -1 : 1), alt, 1 + i * 0.13);
-      else { spawn("island", ox, 0); spawn("balloon", ox, 0.75, 1.02); }
+    // 2인 경주 안내: 순위·거리 차이·두 사람 점수
+    function raceHud(ctx, y0) {
+      const U = v.U, Rv = C.racers[1 - env.slot], Aa = C.racers[0], B = C.racers[1]; if (!Rv || !Aa || !B) return;
+      const first = dist >= Rv.dist, gap = Math.round(Math.abs(dist - Rv.dist) * ZD);
+      const fs = Math.min(U * 0.032, z.w / 20), y = y0 + U * 0.045;
+      outlinedText(ctx, gap < 4 ? "🤝 나란히!" : `${first ? "🥇 1등" : "🥈 2등"} · ${first ? `${gap}m 앞서요` : `${gap}m 뒤져요`}`, z.cx, y, fs * 1.15, "#fff", first ? "#d08a00" : "#5a6b7d", 3);
+      outlinedText(ctx, `1P ${Aa.name} ${Aa.score} : ${B.score} ${B.name} 2P`, z.cx, y + fs * 1.35, fs, "#fff", "#0a3c6e", 3);
     }
     // 지나간 물체 치우기 (함께 쓰는 모양은 남김)
     const drop = m => { scene.remove(m); m.traverse(c => { if (c.geometry && c.geometry !== geo.balloon && c.geometry !== geo.ring) c.geometry.dispose(); }); };
@@ -83,7 +108,12 @@ export default {
         t += dt; flapCool -= dt; flapFx = Math.max(0, flapFx - dt * 3); wet -= dt;
         const p = env.tracker.pts, hs = env.tracker.hands, sc = env.tracker.scale || v.U * 0.13;
         // 기울이기: 오른손(화면 오른쪽)이 낮으면 오른쪽으로
-        if (hs[0].vis && hs[1].vis) {
+        if (AUTO) {   // 가상 선수: 가장 가까운 풍선·링 쪽으로 기울이고, 낮으면 날갯짓
+          const tg = objs.filter(o => !o.done && o.kind !== "island" && o.z > 0.03).sort((a, b) => a.z - b.z)[0];
+          steer += (clamp(tg ? (tg.ox - X) * 3 : 0, -1, 1) - steer) * Math.min(1, dt * 6);
+          autoFlapT -= dt; if (autoFlapT <= 0 && A < (tg ? tg.a : 0.5) + 0.02) { vA = Math.min(0.4, vA + 0.2); autoFlapT = env.slot ? 0.4 : 0.3; flapN++; flapFx = 1; }
+          wide = true;
+        } else if (hs[0].vis && hs[1].vis) {
           const tilt = (hs[1].y - hs[0].y) / sc;
           steer += (clamp(tilt / 0.9, -1, 1) - steer) * Math.min(1, dt * 6);
           // 날갯짓: 두 손이 함께 빠르게 아래로
@@ -96,26 +126,35 @@ export default {
         A = clamp(A + vA * dt, 0.03, 1);
         const pp = wpos(X, A, 0), ps = st.toScreen(pp);
         if (A <= 0.03) { vA = Math.max(vA, 0.05); if (wet <= 0) { wet = 2; env.miss(ps.x, ps.y, "물에 닿았어요! 날갯짓!"); burst(ps.x, ps.y + v.U * 0.05, { n: 16, colors: ["#bfefff", "#ffffff"], speed: v.U * 0.5, gravity: v.U, size: v.U * 0.012 }); } }
-        const zr = ZRATE * D.speed;
+        boost = Math.max(0, boost - dt); slow = Math.max(0, slow - dt);
+        const zr = ZRATE * D.speed * (boost > 0 ? 1.35 : 1) * (slow > 0 ? 0.6 : 1);   // 링 통과 = 잠깐 빨라짐, 섬 부딪힘 = 느려짐
         dist += zr * dt;
-        spawnT -= dt; if (spawnT <= 0) { spawnSet(); spawnT = (1.25 - 0.35 * env.progress()) / D.speed; }
+        extend(C, dist + 1.1, env.progress());
+        for (const it of C.items) { const rz = it.cz - dist; if (rz < 1.1 && rz > -0.1 && !live.has(it.id) && !done.has(it.id)) show(it); }
+        objs = [...live.values()];
+        for (const o of objs) o.z = o.src.cz - dist;
+        if (two) C.racers[env.slot] = { X, A, dist, steer, roll, vA, color: env.color, name: env.name, score: env.player.score || 0 };   // 내 위치·점수
         for (const o of objs) {
-          o.z -= zr * dt;
           if (o.done || o.z > 0.04) continue;
-          o.done = true;
+          o.done = true; done.add(o.id);
+          if (o.kind === "balloon" && o.src.takenBy != null) continue;          // 상대가 먼저 터뜨린 풍선
           const dx = Math.abs(o.ox - X), dh = Math.abs(o.a - A), q = scr(o.ox, o.a, 0);
           if (o.kind === "island") {
-            if (dx < 0.3 && A < 0.5) { vA = 0.45; shake(v.U * 0.02, 0.3); sfx.thud(); env.miss(ps.x, ps.y, "산에 쿵!"); streak = 0; }
+            if (dx < 0.3 && A < 0.5) { vA = 0.45; slow = 1; shake(v.U * 0.02, 0.3); sfx.thud(); env.miss(ps.x, ps.y, "산에 쿵!"); streak = 0; }
           } else if (dx < 0.2 * D.reach && dh < 0.17 * D.reach) {
-            if (o.kind === "balloon") { got++; o.mesh.visible = false; sfx.pop(); env.award(1, q.x, q.y - v.U * 0.05); burst(q.x, q.y, { n: 18, colors: ["#ff5a7a", "#ffd400", "#ffffff"], speed: v.U * 0.6, gravity: v.U * 0.5, size: v.U * 0.015 }); }
+            if (o.kind === "balloon") { got++; o.src.takenBy = env.slot; o.mesh.visible = false; sfx.pop(); env.award(1, q.x, q.y - v.U * 0.05); burst(q.x, q.y, { n: 18, colors: ["#ff5a7a", "#ffd400", "#ffffff"], speed: v.U * 0.6, gravity: v.U * 0.5, size: v.U * 0.015 }); }
             else {
-              rings++; o.hit = 1; streak = t - lastRing < 1.2 ? streak + 1 : 1; lastRing = t; sfx.catch(env.player.combo);
+              rings++; o.hit = 1; boost = 1.5; streak = t - lastRing < 1.2 ? streak + 1 : 1; lastRing = t; sfx.catch(env.player.combo);
               env.award(streak >= 3 ? 2 : 1, q.x, q.y - v.U * 0.05);
               if (streak >= 3) popup(q.x, q.y + v.U * 0.05, `링 ${streak}개 연속!`, { size: v.U * 0.04, color: "#fff", stroke: "#1d8f47" });
             }
           } else if (o.kind === "ring") streak = 0;
         }
-        objs = objs.filter(o => { if (o.z > (o.kind === "island" ? -0.03 : -0.08)) return true; drop(o.mesh); return false; });
+        for (const o of objs) if (o.z <= (o.kind === "island" ? -0.03 : -0.08)) { drop(o.mesh); live.delete(o.id); }
+        objs = objs.filter(o => o.z > (o.kind === "island" ? -0.03 : -0.08));
+        if (C.items.length > 300) { const lo = Math.min(dist, ...C.racers.filter(Boolean).map(r => r.dist)) - 0.3; C.items = C.items.filter(it => it.cz > lo); }
+        const Rv0 = two ? C.racers[1 - env.slot] : null;   // 경주가 끝날 무렵 앞선 사람에게 1등 보너스
+        if (Rv0 && !finalDone && env.progress() > 0.97) { finalDone = true; if (dist >= Rv0.dist) { env.award(5, z.cx, v.H * 0.4); popup(z.cx, v.H * 0.47, "1등!", { size: v.U * 0.09, color: "#fff", stroke: "#e0306a", life: 1.6 }); sfx.fanfare(); } }
         // 3D 반영
         roll += (-steer * 0.75 - roll) * Math.min(1, dt * 5);
         plane.position.copy(pp); plane.rotation.set(clamp(vA * 1.4, -0.35, 0.45), -steer * 0.15, roll);
@@ -123,8 +162,18 @@ export default {
         plane.pilot.arm(0, 1.3 + Math.sin(t * 9) * flapFx * 0.6, 0, 0.1); plane.pilot.arm(1, 1.3 + Math.sin(t * 9) * flapFx * 0.6, 0, 0.1);
         for (const o of objs) {
           o.mesh.position.copy(wpos(o.ox, o.a, o.z));
-          if (o.kind === "balloon") o.mesh.position.y += Math.sin(t * 2 + o.ox * 5) * 0.3;
+          if (o.kind === "balloon") { o.mesh.position.y += Math.sin(t * 2 + o.ox * 5) * 0.3; if (o.src.takenBy != null && o.src.takenBy !== env.slot) o.mesh.visible = false; }   // 상대가 터뜨린 풍선은 사라짐
           if (o.kind === "ring") { o.mesh.rotation.z = t * 0.6; if (o.hit) { o.hit = Math.max(0, o.hit - dt * 2); o.mesh.scale.setScalar(1 + (1 - o.hit) * 0.6); } }
+        }
+        // 상대 비행기: 같은 하늘에서 앞뒤·옆·높이 그대로
+        if (two) {
+          const Rv = C.racers[1 - env.slot];
+          if (Rv && !rival) { rival = airplane(Rv.color); if (Rv.color) tint(rival, Rv.color); scene.add(rival); }
+          if (rival) {
+            rival.visible = Rv.dist - dist < 1.3 && (Rv.dist - dist) * ZD > -2;   // 뒤처진 상대는 카메라 앞을 가리지 않게 숨김
+            rival.position.copy(wpos(Rv.X, Rv.A, Rv.dist - dist)); rival.rotation.set(clamp((Rv.vA || 0) * 1.4, -0.35, 0.45), -(Rv.steer || 0) * 0.15, Rv.roll || 0);
+            rival.prop.rotation.z += dt * 40;
+          }
         }
         const worldSpeed = zr * ZD;
         deco.forEach(s => { s.position.z += worldSpeed * dt; if (s.position.z > 30) { s.position.z -= 270; s.position.x = (Math.random() < 0.5 ? -1 : 1) * (25 + Math.random() * 40); } });
@@ -148,14 +197,20 @@ export default {
         // 점수판 (위쪽 가운데)
         const bw = Math.min(z.w * 0.8, U * 0.55), bh = U * 0.07, top = v.H * 0.11;
         ctx.fillStyle = "rgba(10,60,110,.8)"; rr(ctx, z.cx - bw / 2, top, bw, bh, U * 0.02); ctx.fill();
-        outlinedText(ctx, `🎈 ${got}  ·  ⭕ ${rings}`, z.cx, top + bh / 2, Math.min(U * 0.04, z.w / 12), "#fff", "#0a3c6e", 3);
+        outlinedText(ctx, `🎈 ${got}  ·  ⭕ ${rings}${boost > 0 ? "  · 🚀" : ""}`, z.cx, top + bh / 2, Math.min(U * 0.04, z.w / 12), "#fff", "#0a3c6e", 3);
+        if (two) raceHud(ctx, top + bh);
+        if (rival && rival.visible) {   // 상대 이름표
+          const Rv = C.racers[1 - env.slot], q = st.toScreen(rival.position.clone().add(new THREE.Vector3(0, 2.2, 0)));
+          if (!q.behind && q.x > z.x0 && q.x < z.x1) outlinedText(ctx, Rv.name || "상대", q.x, q.y, Math.min(U * 0.03, z.w / 22), "#fff", Rv.color || "#555", 3);
+        }
         if (A < 0.15) outlinedText(ctx, "너무 낮아요! 두 팔로 날갯짓!", z.cx, v.H * 0.8, Math.min(U * 0.045, z.w / 14), "#fff", "#c0392b", 4);
       },
-      stop() { st.dispose(); },
+      stop() { st.dispose(); shared = null; },
       result: () => `풍선 ${got} · 링 ${rings} · 날갯짓 ${flapN}번`,
       // 설명 시연용
       get X() { return X; }, get A() { return A; },
       get objs() { return objs.filter(o => !o.done && o.kind !== "island"); },
+      get dist() { return dist; },
     };
   },
   demo: {

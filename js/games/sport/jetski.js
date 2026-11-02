@@ -9,6 +9,22 @@ const TOP = 60;                         // 최고 속도(km/h, 보통)
 const JS = 6, ZD = 80;                  // 게임 좌표 → 3D(m): 옆 1 = 6m, 앞 1 = 80m
 const XMAX = 1.4;                       // 좌우 끝(게임 좌표)
 const GUIDE_Z = -7;                     // 안내 점선을 그릴 곳(앞쪽, m)
+const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 핸들 잡고 점선 자리로 감
+// 코스: 부표 문·별·바위를 '출발점에서의 거리(cz)'에 놓음. 2인은 같은 코스를 함께 씀(먼저 간 쪽이 앞을 만들어 둠)
+const rng = seed => () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+function makeCourse() { return { items: [], nextCz: 0.6, gateX: 0, id: 1, rnd: rng(1 + Math.floor(Math.random() * 1e9)), racers: [null, null] }; }
+let shared = null;   // 2인 경주: 같은 코스·서로의 위치
+function extend(C, upTo, p, D) {
+  while (C.nextCz < upTo) {
+    const r = C.rnd(), cz = C.nextCz;
+    C.gateX = clamp(C.gateX + (C.rnd() - 0.5) * 1.1, -1, 1);
+    const w = (0.34 - 0.08 * p) * D.reach;
+    C.items.push({ id: C.id++, kind: "gate", x: C.gateX, w, cz });
+    if (r < 0.45) C.items.push({ id: C.id++, kind: "star", x: clamp(C.gateX + (C.rnd() - 0.5) * 0.4, -1.1, 1.1), cz: cz + 0.18 });
+    else if (r < 0.75) C.items.push({ id: C.id++, kind: "rock", x: clamp(C.gateX + (C.rnd() < 0.5 ? -1 : 1) * (0.45 + C.rnd() * 0.3), -1.3, 1.3), cz: cz + 0.12 });
+    C.nextCz += 0.67 - 0.17 * p;
+  }
+}
 const waveY = (x, zz, t) => Math.sin(x * 0.15 + t * 1.6) * 0.18 + Math.cos(-zz * 0.12 + t * 1.2) * 0.15;   // kit3d sea()와 같은 물결
 
 function jetski(color) {
@@ -83,23 +99,29 @@ export default {
     const mover = bodyMover(env, XMAX), guideM = moveGuide(guideHold);
     let goalG = null, prevX = 0, gxNow = null;
 
-    let X = 0, speed = 0, steer = 0, t = 0, dist = 0, objs = [], spawnT = 0.5, gateX = 0, safe = 0, holding = false, sprayT = 0;
-    let gates = 0, missedG = 0, stars = 0, bumps = 0;
+    let X = 0, speed = 0, steer = 0, t = 0, dist = 0, objs = [], safe = 0, holding = false, sprayT = 0;
+    let gates = 0, missedG = 0, stars = 0, bumps = 0, finalDone = false;
+    // 코스: 1인은 혼자, 2인은 함께 (같은 부표·별·바위, 별은 먼저 잡은 사람 것)
+    const two = env.mode === 2;
+    const C = two ? (shared = shared || makeCourse()) : makeCourse();
+    const done = new Set(), live = new Map();   // 내가 이미 지나간 물체, 지금 화면에 있는 물체(id → o)
+    let rival = null;                            // 2인: 상대 수상오토바이 (상대 정보가 처음 들어오면 만듦)
     const wpos = (x, zz) => new THREE.Vector3(x * JS, 0, -zz * ZD);
-    const drop = o => { (o.meshes || [o.mesh]).forEach(m => { scene.remove(m); m.traverse(c => { if (c.geometry && c.geometry !== starGeo) c.geometry.dispose(); }); }); };
-    function add(o) {
+    const drop = o => { (o.meshes || [o.mesh]).forEach(m => { scene.remove(m); m.traverse(c => { if (c.geometry && c.geometry !== starGeo && !c.geometry.userData.shared) c.geometry.dispose(); }); }); };
+    // 코스의 물체를 내 화면에 만들기 (가까워지면 만들고 지나가면 치움)
+    function show(it) {
+      const o = { ...it, src: it, z: it.cz - dist };
       if (o.kind === "gate") { o.meshes = [buoy("#e23b3b"), buoy("#ffd400")]; const line = new THREE.Group(); for (let i = 0; i < 9; i++) { const f = sphere(0.09, i % 2 ? "#ffffff" : "#ff922b", { cast: false }); line.add(f); } o.meshes.push(line); o.line = line; }
       else o.meshes = [o.kind === "star" ? star() : rock()];
-      o.meshes.forEach(m => scene.add(m)); objs.push(o);
+      o.meshes.forEach(m => scene.add(m)); live.set(it.id, o);
     }
-    function spawn() {
-      const p = env.progress(), r = Math.random();
-      gateX = clamp(gateX + (Math.random() - 0.5) * 1.1, -1, 1);
-      const w = (0.34 - 0.08 * p) * D.reach;
-      add({ kind: "gate", x: gateX, w, z: 1 });
-      if (r < 0.45) add({ kind: "star", x: clamp(gateX + (Math.random() - 0.5) * 0.4, -1.1, 1.1), z: 1.18 });
-      else if (r < 0.75) add({ kind: "rock", x: clamp(gateX + (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.3), -1.3, 1.3), z: 1.12 });
-      spawnT = (1.6 - 0.4 * p) / D.speed;
+    // 2인 경주 안내: 순위·거리 차이·두 사람 점수 (두 화면 모두)
+    function raceHud(ctx, y0) {
+      const U = v.U, Rv = C.racers[1 - env.slot], A = C.racers[0], B = C.racers[1]; if (!Rv || !A || !B) return;
+      const first = dist >= Rv.dist, gap = Math.round(Math.abs(dist - Rv.dist) * ZD);
+      const fs = Math.min(U * 0.032, z.w / 20), y = y0 + U * 0.045;
+      outlinedText(ctx, gap < 3 ? "🤝 나란히!" : `${first ? "🥇 1등" : "🥈 2등"} · ${first ? `${gap}m 앞서요` : `${gap}m 뒤져요`}`, z.cx, y, fs * 1.15, "#fff", first ? "#d08a00" : "#5a6b7d", 3);
+      outlinedText(ctx, `1P ${A.name} ${A.score} : ${B.score} ${B.name} 2P`, z.cx, y + fs * 1.35, fs, "#fff", "#0b3c6e", 3);
     }
     return {
       update(dt) {
@@ -108,31 +130,43 @@ export default {
         // 손잡이: 두 손이 보이고 엉덩이보다 위(가슴 앞)에 있으면 잡은 것
         const hipY = p && p[23].v && p[24].v ? (p[23].y + p[24].y) / 2 : (p && p[11].v ? p[11].y + sc * 1.7 : v.H);
         holding = hs[0].vis && hs[1].vis && hs[0].y < hipY - sc * 0.15 && hs[1].y < hipY - sc * 0.15;
-        const top = TOP * D.speed;
+        if (AUTO) holding = true;
+        const top = TOP * D.speed * (AUTO && env.slot === 1 ? 0.93 : 1);
         speed = holding ? Math.min(top, speed + dt * 30) : Math.max(0, speed - dt * 25);
         // 좌우: 내 몸 위치를 그대로 따라감. steer는 옆으로 움직이는 빠르기(손잡이·몸 기울기 모양에만 씀)
-        X = clamp(mover.follow(X, dt), -XMAX, XMAX);
+        if (AUTO) { if (gxNow != null) X += (gxNow - X) * Math.min(1, dt * 2.2); }
+        else X = clamp(mover.follow(X, dt), -XMAX, XMAX);
         steer += (clamp((X - prevX) / Math.max(dt, 1e-3) * 0.6, -1, 1) - steer) * Math.min(1, dt * 7); prevX = X;
         const zr = speed / 60 * 0.42;
         dist += zr * dt;
-        if (speed > 5) { spawnT -= dt; if (spawnT <= 0) spawn(); }
+        // 코스: 앞쪽까지 만들어 두고, 가까운 것만 화면에 둠
+        extend(C, dist + 1.25, env.progress(), D);
+        for (const it of C.items) { const rz = it.cz - dist; if (rz < 1.25 && rz > -0.12 && !live.has(it.id) && !done.has(it.id)) show(it); }
+        objs = [...live.values()];
+        for (const o of objs) o.z = o.src.cz - dist;
+        if (two) C.racers[env.slot] = { X, dist, speed, steer, color: env.color, name: env.name, score: env.player.score || 0 };   // 내 위치·점수
         const meS = st.toScreen(new THREE.Vector3(X * JS, 1.6, 0));
         for (const o of objs) {
-          o.z -= zr * dt;
           if (o.done || o.z > 0.04) continue;
-          o.done = true;
+          o.done = true; done.add(o.id);
+          if (o.kind === "star" && o.src.takenBy != null) continue;           // 상대가 먼저 잡은 별
           const dx = Math.abs(o.x - X), q = meS;
           if (o.kind === "gate") {
             if (dx < o.w) { gates++; sfx.catch(env.player.combo); env.award(1, q.x, q.y - v.U * 0.07); popup(q.x, q.y - v.U * 0.13, "통과!", { size: v.U * 0.045, color: "#fff", stroke: "#1d8f47" }); o.passed = 1; }
             else { missedG++; env.miss(z.cx, q.y - v.U * 0.07, "놓쳤어요"); }
           } else if (o.kind === "star" && dx < 0.22 * D.reach) {
-            stars++; o.meshes[0].visible = false; sfx.pop(); env.award(2, q.x, q.y - v.U * 0.07);
+            stars++; o.src.takenBy = env.slot; o.meshes[0].visible = false; sfx.pop(); env.award(2, q.x, q.y - v.U * 0.07);
             burst(q.x, q.y - v.U * 0.04, { n: 16, colors: ["#ffd400", "#ffffff"], shape: "star", speed: v.U * 0.5, gravity: v.U * 0.4, size: v.U * 0.016 });
           } else if (o.kind === "rock" && dx < 0.22 && safe <= 0) {
             bumps++; safe = 1; speed *= 0.3; sfx.thud(); shake(v.U * 0.02, 0.3); env.miss(q.x, q.y - v.U * 0.07, "바위에 쿵!");
           }
         }
-        objs = objs.filter(o => { if (o.z > -0.12) return true; drop(o); return false; });
+        for (const o of objs) if (o.z <= -0.12) { drop(o); live.delete(o.id); }
+        objs = objs.filter(o => o.z > -0.12);
+        if (C.items.length > 300) { const lo = Math.min(dist, ...C.racers.filter(Boolean).map(r => r.dist)) - 0.3; C.items = C.items.filter(it => it.cz > lo); }
+        // 경주가 끝날 무렵 앞선 사람에게 1등 보너스
+        const Rv0 = two ? C.racers[1 - env.slot] : null;
+        if (Rv0 && !finalDone && env.progress() > 0.97) { finalDone = true; if (dist >= Rv0.dist) { env.award(5, z.cx, v.H * 0.4); popup(z.cx, v.H * 0.47, "1등!", { size: v.U * 0.09, color: "#fff", stroke: "#e0306a", life: 1.6 }); sfx.fanfare(); } }
         // 가야 할 자리: 다음 부표 문 가운데 (바위가 문 가운데와 겹치면 바위 반대쪽으로 조금)
         goalG = objs.filter(o => o.kind === "gate" && !o.done && o.z > 0.01).sort((a, b) => a.z - b.z)[0] || null;
         let gx = null;
@@ -153,6 +187,7 @@ export default {
             o.line.children.forEach((f, i) => { const u = i / 8; f.position.set(a.x + (b.x - a.x) * u, 0.15 + (o.passed ? 0.3 : 0), a.z); });
           } else {
             const pt = wpos(o.x, o.z), m = o.meshes[0];
+            if (o.kind === "star" && o.src.takenBy != null && o.src.takenBy !== env.slot) m.visible = false;   // 상대가 잡은 별은 사라짐
             m.position.set(pt.x, o.kind === "star" ? 1.3 + Math.sin(t * 4) * 0.2 : waveY(pt.x, pt.z, t) - 0.1, pt.z);
             if (o.kind === "star") m.rotation.y = t * 3;
           }
@@ -168,6 +203,18 @@ export default {
         me.arm(0, 0.45 + steer * 0.3, 1.0, 0.5); me.arm(1, 0.45 - steer * 0.3, 1.0, 0.5);
         me.body.rotation.z = steer * 0.2; me.body.rotation.x = -0.2 * (speed / top);
         me.visible = !(safe > 0 && Math.floor(t * 10) % 2);
+        // 상대 수상오토바이: 같은 바다에서 앞뒤·옆 위치 그대로
+        if (two) {
+          const Rv = C.racers[1 - env.slot];
+          if (Rv && !rival) { rival = jetski(Rv.color || "#4dabf7"); const ra = playerAvatar({ color: Rv.color, name: Rv.name }); ra.rotation.y = Math.PI; ra.position.set(0, 0.32, 0.25); ra.leg(0, 1.25); ra.leg(1, 1.25); rival.add(ra); rival.av = ra; scene.add(rival); }
+          if (rival) {
+            rival.visible = !!Rv && Rv.dist - dist < 1.4 && (Rv.dist - dist) * ZD > -2;   // 뒤처진 상대는 카메라 앞을 가리지 않게 숨김
+            const rx = Rv.X * JS, rz = -(Rv.dist - dist) * ZD, sr = Rv.steer || 0;
+            rival.position.set(rx, waveY(rx, rz, t) + Math.sin(t * 7 + 1) * 0.04, rz);
+            rival.rotation.set(-0.06, -sr * 0.35, -sr * 0.35); rival.bar.rotation.y = sr * 0.45;
+            rival.av.arm(0, 0.45 + sr * 0.3, 1.0, 0.5); rival.av.arm(1, 0.45 - sr * 0.3, 1.0, 0.5);
+          }
+        }
         // 물보라
         if (speed > 15 && sprayT <= 0) {
           sprayT = 0.03;
@@ -192,18 +239,24 @@ export default {
         const bw = Math.min(z.w * 0.86, U * 0.62), bh = U * 0.07, top = v.H * 0.11;
         ctx.fillStyle = "rgba(8,60,110,.8)"; rr(ctx, z.cx - bw / 2, top, bw, bh, U * 0.02); ctx.fill();
         outlinedText(ctx, `${Math.round(speed)} km/h · 통과 ${gates} · ⭐ ${stars}`, z.cx, top + bh / 2, Math.min(U * 0.038, z.w / 15), "#fff", "#0b3c6e", 3);
+        if (two) raceHud(ctx, top + bh);
+        if (rival && rival.visible) {   // 상대 이름표
+          const Rv = C.racers[1 - env.slot], q = st.toScreen(rival.position.clone().add(new THREE.Vector3(0, 2.4, 0)));
+          if (!q.behind && q.x > z.x0 && q.x < z.x1) outlinedText(ctx, Rv.name || "상대", q.x, q.y, Math.min(U * 0.03, z.w / 22), "#fff", Rv.color || "#555", 3);
+        }
         if (!holding) outlinedText(ctx, "두 손을 가슴 앞으로 들어 손잡이를 잡아요!", z.cx, v.H * 0.8, Math.min(U * 0.042, z.w / 20), "#fff", "#b04a00", 4);
         if (gxNow != null && goalG) {   // 어디로 얼마나
           const ok = Math.abs(X - gxNow) < goalG.w * 0.8;
-          outlinedText(ctx, moveText((gxNow - X) * JS, ok, "좋아요! 그대로", 3), z.cx, top + bh + U * 0.06, Math.min(U * 0.045, z.w / 13), "#fff", ok ? "#2f8f2f" : "#c07800", 4);
+          outlinedText(ctx, moveText((gxNow - X) * JS, ok, "좋아요! 그대로", 3), z.cx, top + bh + U * (two ? 0.16 : 0.06), Math.min(U * 0.045, z.w / 13), "#fff", ok ? "#2f8f2f" : "#c07800", 4);
         }
       },
-      stop() { st.dispose(); },
+      stop() { st.dispose(); shared = null; },
       result: () => `부표 통과 ${gates} · 놓침 ${missedG} · 별 ${stars} · 바위 ${bumps}`,
       // 설명 시연용
       get X() { return X; }, get speed() { return speed; },
       get moveTo() { return gxNow == null ? null : mover.toScreenX(gxNow); },
       get objs() { return objs.filter(o => !o.done && o.z > 0); },
+      get dist() { return dist; },
     };
   },
   demo: {

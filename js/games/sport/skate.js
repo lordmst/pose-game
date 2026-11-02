@@ -14,6 +14,21 @@ const SPAN = 140;                        // 풍경이 되풀이되는 길이
 const LMAX = 1;                          // 보드가 갈 수 있는 좌우 끝(게임 좌표)
 const GUIDE_Z = -3.2;                    // 안내 점선을 그릴 곳(보드 앞, m)
 
+const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 점선 자리로 가고 발 구르기·점프
+// 코스: 동전·고깔·점프대·울타리를 '출발점에서의 거리(cz)'에 놓음. 2인은 같은 코스를 함께 씀
+const rng = seed => () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+function makeCourse() { return { items: [], nextCz: 0.5, id: 1, rnd: rng(1 + Math.floor(Math.random() * 1e9)), racers: [null, null] }; }
+let shared = null;   // 2인 경주: 같은 코스·서로의 위치
+function extend(C, upTo, p) {
+  while (C.nextCz < upTo) {
+    const r = C.rnd(), x = (C.rnd() - 0.5) * 1.6, cz = C.nextCz, push = (kind, xx, z, high) => C.items.push({ id: C.id++, kind, x: xx, cz: z, high });
+    if (r < 0.45) for (let i = 0; i < 3; i++) push("coin", x, cz + i * 0.08);
+    else if (r < 0.7) push("cone", x, cz);
+    else if (r < 0.85) { push("ramp", x, cz); push("coin", x, cz + 0.12, true); }
+    else push("bar", 0, cz);                                              // 길 전체 울타리: 점프로만
+    C.nextCz += 0.36 - 0.1 * p;
+  }
+}
 function skateboard(color) {
   const g = new THREE.Group();
   const deck = box(0.26, 0.05, 0.95, color, { rough: 0.5 }); deck.position.y = 0.12; g.add(deck);
@@ -74,30 +89,36 @@ export default {
     const mover = bodyMover(env, LMAX), guideM = moveGuide(scene);
     let target = null, prevL = 0;
 
-    let L = 0, speed = 18, t = 0, dist = 0, objs = [], spawnT = 0.8, air = 0, safe = 0, steer = 0, armsUp = false, hipBase = null;
-    let coins = 0, tricks = 0, crashes = 0, onRamp = false, pushT = 9, pushLeg = 0;
-    function spawnObj(kind, x, z0, high) {
-      const o = { kind, x, z: z0, high };
-      o.mesh = kind === "coin" ? coin() : kind === "cone" ? cone() : kind === "ramp" ? ramp() : bar();
-      scene.add(o.mesh); objs.push(o);
+    let L = 0, speed = 18, t = 0, dist = 0, objs = [], air = 0, safe = 0, steer = 0, armsUp = false, hipBase = null;
+    let coins = 0, tricks = 0, crashes = 0, onRamp = false, pushT = 9, pushLeg = 0, finalDone = false, autoPush = 0;
+    // 코스: 1인은 혼자, 2인은 함께 (같은 동전·장애물, 동전은 먼저 잡은 사람 것)
+    const two = env.mode === 2;
+    const C = two ? (shared = shared || makeCourse()) : makeCourse();
+    const done = new Set(), live = new Map();
+    let rival = null;                              // 2인: 상대 보드 (상대 정보가 처음 들어오면 만듦)
+    function show(it) {
+      const o = { ...it, src: it, z: it.cz - dist };
+      o.mesh = o.kind === "coin" ? coin() : o.kind === "cone" ? cone() : o.kind === "ramp" ? ramp() : bar();
+      scene.add(o.mesh); live.set(it.id, o);
     }
-    function spawn() {
-      const p = env.progress(), r = Math.random(), x = (Math.random() - 0.5) * 1.6;
-      if (r < 0.45) for (let i = 0; i < 3; i++) spawnObj("coin", x, 1 + i * 0.08);
-      else if (r < 0.7) spawnObj("cone", x, 1);
-      else if (r < 0.85) { spawnObj("ramp", x, 1); spawnObj("coin", x, 1.12, true); }
-      else spawnObj("bar", 0, 1);                                        // 길 전체 울타리: 점프로만
-      spawnT = (1.0 - 0.3 * p) / D.speed;
+    // 2인 경주 안내: 순위·거리 차이·두 사람 점수
+    function raceHud(ctx, y0) {
+      const U = v.U, Rv = C.racers[1 - env.slot], A = C.racers[0], B = C.racers[1]; if (!Rv || !A || !B) return;
+      const first = dist >= Rv.dist, gap = Math.round(Math.abs(dist - Rv.dist) * ZD);
+      const fs = Math.min(U * 0.032, z.w / 20), y = y0 + U * 0.045;
+      outlinedText(ctx, gap < 3 ? "🤝 나란히!" : `${first ? "🥇 1등" : "🥈 2등"} · ${first ? `${gap}m 앞서요` : `${gap}m 뒤져요`}`, z.cx, y, fs * 1.15, "#fff", first ? "#d08a00" : "#5a6b7d", 3);
+      outlinedText(ctx, `1P ${A.name} ${A.score} : ${B.score} ${B.name} 2P`, z.cx, y + fs * 1.35, fs, "#fff", "#333", 3);
     }
     function jump() { if (air <= 0) { air = AIR; onRamp = false; sfx.whoosh(); } }
     const wpos = (x, zz, y = 0) => new THREE.Vector3(x * RS, y, -zz * ZD);
-    const drop = m => { scene.remove(m); m.traverse(c => { if (c.geometry) c.geometry.dispose(); }); };
+    const drop = m => { scene.remove(m); m.traverse(c => { if (c.geometry && !c.geometry.userData.shared) c.geometry.dispose(); }); };
     return {
       update(dt) {
         t += dt; safe -= dt; pushT += dt;
         const p = env.tracker.pts, sc = env.tracker.scale || v.U * 0.13;
         // 좌우: 내 몸 위치를 그대로 따라감. steer는 옆으로 움직이는 빠르기(보드·몸 기울기 모양에만 씀)
-        L = clamp(mover.follow(L, dt), -LMAX, LMAX);
+        if (AUTO) { if (target != null) L += (target - L) * Math.min(1, dt * 2.5); }
+        else L = clamp(mover.follow(L, dt), -LMAX, LMAX);
         steer += (clamp((L - prevL) / Math.max(dt, 1e-3) * 0.7, -1, 1) - steer) * Math.min(1, dt * 8); prevL = L;
         if (p && p[11].v && p[12].v) {
           // 점프: 두 손을 머리 위로 번쩍 (들어가는 순간), 또는 엉덩이가 확 올라감
@@ -106,23 +127,30 @@ export default {
           if (p[23].v && p[24].v) { const hy = (p[23].y + p[24].y) / 2; hipBase = hipBase == null ? hy : Math.max(hy, hipBase - dt * sc * 0.1); if (hipBase - hy > sc * 0.35) jump(); }
         }
         // 발 구르기(무릎 들기)마다 빨라짐, 가만히 있으면 천천히 느려짐
-        const n = steps.update(p, t, dt);
+        let n = steps.update(p, t, dt);
+        if (AUTO) { autoPush -= dt; if (autoPush <= 0 && speed < (env.slot ? 38 : 44)) { n = 1; autoPush = 0.35; } else n = 0;   // 가상 선수: 발 구르기
+          const dz = objs.find(o => !o.done && (o.kind === "bar" || (o.kind === "cone" && Math.abs(o.x - L) < 0.3)) && o.z > 0 && o.z < 0.06);
+          if (dz && Math.random() < 0.85) jump(); }
         if (n) { speed = Math.min(48, speed + 3.5 * n); sfx.step(n % 2); pushT = 0; pushLeg = 1 - pushLeg; }
         speed = Math.max(10, speed - dt * 1.6);
         air = Math.max(0, air - dt);
         const zr = speed / 30 * 0.32 * D.speed;
         dist += zr * dt;
-        spawnT -= dt; if (spawnT <= 0) spawn();
+        extend(C, dist + 1.1, env.progress());
+        for (const it of C.items) { const rz = it.cz - dist; if (rz < 1.1 && rz > -0.12 && !live.has(it.id) && !done.has(it.id)) show(it); }
+        objs = [...live.values()];
+        for (const o of objs) if (!o.retry) o.z = o.src.cz - dist; else o.z -= zr * dt;
+        if (two) C.racers[env.slot] = { L, dist, speed, steer, air, onRamp, color: env.color, name: env.name, score: env.player.score || 0 };   // 내 위치·점수
         const meS = () => st.toScreen(new THREE.Vector3(L * RS, 1.2, 0));
         for (const o of objs) {
-          o.z -= zr * dt;
           if (o.done || o.z > 0.05) continue;
-          o.done = true;
+          o.done = true; done.add(o.id);
+          if (o.kind === "coin" && o.src.takenBy != null) continue;            // 상대가 먼저 잡은 동전
           const near = o.kind === "bar" || Math.abs(o.x - L) < 0.26 * D.reach, q = meS();
           if (!near) continue;
           if (o.kind === "coin") {
-            if (o.high && air <= 0) { o.done = false; o.z = -1; continue; }   // 점프대 위 동전은 점프해야
-            coins++; o.mesh.visible = false; sfx.catch(env.player.combo); env.award(1, q.x, q.y - v.U * 0.06);
+            if (o.high && air <= 0) { o.retry = true; o.z = -1; continue; }   // 점프대 위 동전은 점프해야
+            coins++; o.src.takenBy = env.slot; o.mesh.visible = false; sfx.catch(env.player.combo); env.award(1, q.x, q.y - v.U * 0.06);
             burst(q.x, q.y, { n: 10, colors: ["#ffd400", "#fff3a0"], shape: "star", speed: v.U * 0.4, gravity: v.U * 0.4, size: v.U * 0.013, life: 0.5 });
           } else if (o.kind === "ramp") {
             if (air <= 0) air = AIR * 1.1;                                    // 점프대를 타면 저절로 붕~ (한 바퀴 돌기)
@@ -136,7 +164,11 @@ export default {
             o.mesh.rotation.x = -1.2; o.mesh.position.y = 0.2;
           }
         }
-        objs = objs.filter(o => { if (o.z > -0.12) return true; drop(o.mesh); return false; });
+        for (const o of objs) if (o.z <= -0.12) { drop(o.mesh); live.delete(o.id); }
+        objs = objs.filter(o => o.z > -0.12);
+        if (C.items.length > 300) { const lo = Math.min(dist, ...C.racers.filter(Boolean).map(r => r.dist)) - 0.3; C.items = C.items.filter(it => it.cz > lo); }
+        const Rv0 = two ? C.racers[1 - env.slot] : null;   // 경주가 끝날 무렵 앞선 사람에게 1등 보너스
+        if (Rv0 && !finalDone && env.progress() > 0.97) { finalDone = true; if (dist >= Rv0.dist) { env.award(5, z.cx, v.H * 0.4); popup(z.cx, v.H * 0.47, "1등!", { size: v.U * 0.09, color: "#fff", stroke: "#e0306a", life: 1.6 }); sfx.fanfare(); } }
         // 가야 할 자리: 앞에 내 줄을 막는 고깔이 먼저 오면 피할 자리, 아니면 다음 동전 줄(점프대 포함)
         const ahead = objs.filter(o => !o.done && o.z > 0.02 && o.z < 0.95).sort((a, b) => a.z - b.z);
         const goodO = ahead.find(o => (o.kind === "coin" && !o.high) || o.kind === "ramp");
@@ -151,7 +183,7 @@ export default {
           if (o.z < -0.9) continue;
           const y = o.kind === "coin" ? (o.high ? 2.0 : 0.7) : (o.mesh.position.y || 0);
           o.mesh.position.copy(wpos(o.x, o.z, y));
-          if (o.kind === "coin") o.mesh.rotation.y = t * 4 + o.x * 9;
+          if (o.kind === "coin") { o.mesh.rotation.y = t * 4 + o.x * 9; if (o.src.takenBy != null && o.src.takenBy !== env.slot) o.mesh.visible = false; }   // 상대가 잡은 동전은 사라짐
         }
         const ws = zr * ZD;
         deco.forEach(d => { d.position.z += ws * dt; if (d.position.z > 12) d.position.z -= SPAN; });
@@ -169,6 +201,18 @@ export default {
         else if (env.tracker.pts) me.mimic(env.tracker.pts, true);
         else { me.arm(0, 0.9, 0, 0.3); me.arm(1, 0.9, 0, 0.3); }
         me.visible = !(safe > 0 && Math.floor(t * 10) % 2);
+        // 상대: 같은 길에서 앞뒤·옆 위치 그대로, 점프도 같이
+        if (two) {
+          const Rv = C.racers[1 - env.slot];
+          if (Rv && !rival) { rival = playerAvatar({ color: Rv.color, name: Rv.name }); rival.rotation.y = Math.PI; const bd = skateboard(Rv.color || "#4dabf7"); rival.add(bd); bd.position.y = -0.12; rival.body.position.y = 0.06; rival.leg(0, 0.18); rival.leg(1, 0.18); scene.add(rival); }
+          if (rival) {
+            rival.visible = Rv.dist - dist < 1.2 && (Rv.dist - dist) * ZD > -1.5;   // 뒤처진 상대는 카메라 앞을 가리지 않게 숨김
+            const ra = Rv.air || 0, rk = ra > 0 ? 1 - ra / AIR : 0, ry = ra > 0 ? Math.sin(Math.min(1, rk) * Math.PI) * (Rv.onRamp ? 2.2 : 1.3) : 0;
+            rival.position.set(Rv.L * RS, ry, -(Rv.dist - dist) * ZD);
+            rival.rotation.z = (Rv.steer || 0) * 0.28;
+            if (ra > 0) { rival.arm(0, 2.6, 0, 0.2); rival.arm(1, 2.6, 0, 0.2); } else { rival.arm(0, 0.9, 0, 0.3); rival.arm(1, 0.9, 0, 0.3); }
+          }
+        }
       },
       draw(ctx) {
         // 카메라: 캐릭터 뒤 위쪽에서 내리막길 아래를 봄
@@ -179,18 +223,24 @@ export default {
         const bw = Math.min(z.w * 0.86, U * 0.62), bh = U * 0.07, top = v.H * 0.11;
         ctx.fillStyle = "rgba(40,40,50,.78)"; rr(ctx, z.cx - bw / 2, top, bw, bh, U * 0.02); ctx.fill();
         outlinedText(ctx, `${Math.round(speed)} km/h · 🪙 ${coins}`, z.cx, top + bh / 2, Math.min(U * 0.04, z.w / 13), "#fff", "#333", 3);
+        if (two) raceHud(ctx, top + bh);
+        if (rival && rival.visible) {   // 상대 이름표
+          const Rv = C.racers[1 - env.slot], q = st.toScreen(rival.position.clone().add(new THREE.Vector3(0, 2.3, 0)));
+          if (!q.behind && q.x > z.x0 && q.x < z.x1) outlinedText(ctx, Rv.name || "상대", q.x, q.y, Math.min(U * 0.03, z.w / 22), "#fff", Rv.color || "#555", 3);
+        }
         if (target != null) {   // 어디로 얼마나
           const ok = Math.abs(target - L) < 0.22 * D.reach;
-          outlinedText(ctx, moveText((target - L) * RS, ok, "좋아요! 그대로"), z.cx, top + bh + U * 0.06, Math.min(U * 0.045, z.w / 13), "#fff", ok ? "#2f8f2f" : "#c07800", 4);
+          outlinedText(ctx, moveText((target - L) * RS, ok, "좋아요! 그대로"), z.cx, top + bh + U * (two ? 0.16 : 0.06), Math.min(U * 0.045, z.w / 13), "#fff", ok ? "#2f8f2f" : "#c07800", 4);
         }
         if (speed < 13 && t > 2) outlinedText(ctx, "무릎을 들어 발을 굴러요!", z.cx, v.H * 0.8, Math.min(U * 0.045, z.w / 14), "#fff", "#b04a00", 4);
       },
-      stop() { st.dispose(); },
+      stop() { st.dispose(); shared = null; },
       result: () => `동전 ${coins} · 트릭 ${tricks} · 쿵 ${crashes}`,
       // 설명 시연용
       get L() { return L; }, get speed() { return speed; }, get air() { return air; },
       get moveTo() { return target == null ? null : mover.toScreenX(target); },
       get objs() { return objs.filter(o => !o.done && o.z > 0); },
+      get dist() { return dist; },
     };
   },
   demo: {
