@@ -2,6 +2,8 @@
 // 동그란 경기장 안에서 내 엄지(손을 따라다님)로 상대 엄지를 눌러 '하나, 둘, 셋' 버티면 이김
 // 누르기 = 상대 엄지 위에서 손을 아래로 콱 내리기(또는 주먹 쥐기). 누른 뒤엔 상대가 빠져나가지 못하게 계속 따라가기
 // 상대 엄지가 내 엄지 위로 올라와 누르려 하면(노란 경고) 얼른 빠져나가기. 못 빠져나가면 짐
+// 2인 대결(env.mode 2): 두 선수가 한 쌍의 손에서 각자 자기 엄지로 겨룸. 각 화면은 자기 주먹이 앞에 오게 보여 줌
+//   상대 엄지 위에서 콱 누르면 누르기 시작, 하나·둘·셋 버티면 이김. 눌린 사람은 엄지를 멀리 빼면 빠져나감
 import { burst, popup, rr, outlinedText } from "../../fx.js?v=48";
 import { sfx } from "../../audio.js?v=48";
 import { stage, THREE, box, ball as sphere, cyl, mesh, ground, tree, cloud } from "./kit3d.js?v=48";
@@ -12,6 +14,15 @@ const WARN = 0.7;         // 상대가 누르기 전 경고 시간(초, 보통)
 const WORDS = ["하나!", "둘!", "셋!"];
 const AR = 1.45;          // 3D에서 엄지 끝이 다니는 원 반지름(m) — 깍지 낀 두 주먹 위
 const SKIN = "#f5c9a0", NAIL = "#ffe3ea";
+const RN = 0.19;          // 엄지 크기(경기장 반지름 대비)
+const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 쫓고 누르고 도망감
+// 2인 대결: 두 화면이 함께 쓰는 경기. 엄지 위치는 1P 화면 기준(경기장 반지름 = 1), 2P는 반대편에서 보므로 뒤집어서 씀
+let shared = null;
+function match(env) {
+  if (!shared) shared = { th: [{ x: -0.3, y: 0.3 }, { x: 0.3, y: -0.3 }], pin: null, rest: 1.2, wins: [0, 0], round: 1, ev: [[], []], info: [null, null] };
+  shared.info[env.slot] = { color: env.color || (env.slot ? "#3d8bff" : "#ff5a5a"), name: env.name || `${env.slot + 1}P` };
+  return shared;
+}
 
 // 3D 손: 주먹(가운데서 깍지) + 소매 + 엄지(뿌리→끝 통통한 막대, 손톱). sgn +1 = 내 손(카메라 쪽), -1 = 상대
 function hand3d(scene, sgn, sleeve, skin) {
@@ -79,6 +90,81 @@ export default {
       if (msg) popup(z.cx, v.H * 0.3, msg, { size: v.U * 0.05, color: "#fff", stroke: col, life: 1.1 });
     }
     reset(); round = 1;
+    // ---------- 2인 대결 ----------
+    const VS = env.mode === 2, M = VS ? match(env) : null, me_ = env.slot, ot = 1 - env.slot;
+    const flip = q => (me_ ? { x: -q.x, y: -q.y } : { x: q.x, y: q.y });   // 내 화면 ↔ 1P 기준 (2P는 뒤집힘)
+    let oppCol = null, lastN = 0, au = { tx: 0, ty: 0, wan: 0 };
+    function ensureOppHand() {   // 상대 소매를 상대 선수 색으로
+      const I = M.info[ot], col = I ? I.color : "#7a3fbf";
+      if (col === oppCol) return; oppCol = col;
+      scene.remove(T3[1].g); T3[1] = hand3d(scene, -1, col, me_ ? SKIN : "#e0ac69");
+    }
+    function vsUpdate(dt, R, r, h) {
+      ensureOppHand();
+      // 가상 선수(점검용): 상대를 쫓아가 누르고, 눌리면 도망
+      if (AUTO) {
+        const o = flip(M.th[ot]), ox = R.x + o.x * R.r, oy = R.y + o.y * R.r, dx = me.x - ox, dy = me.y - oy, d = Math.hypot(dx, dy) || 1;
+        let tx, ty;
+        if (M.pin && M.pin.by === ot) { tx = R.x - (ox - R.x) * 0.9 + dx / d * R.r * 0.3; ty = R.y - (oy - R.y) * 0.9 + dy / d * R.r * 0.3; }
+        else if (M.pin && M.pin.by === me_) { tx = ox; ty = oy; }
+        else { au.wan -= dt; if (au.wan <= 0) { au.wan = 0.5 + Math.random(); au.tx = (Math.random() - 0.5) * 0.6; au.ty = (Math.random() - 0.5) * 0.6; } tx = ox + au.tx * R.r; ty = oy + au.ty * R.r; }
+        const k = Math.min(1, dt * (M.pin ? 6 : 2.5)); me.x += (tx - me.x) * k; me.y += (ty - me.y) * k; me.seen = true; inRing(me, R, r);
+        pressT = !M.pin && Math.hypot(me.x - ox, me.y - oy) < r * 1.1 && Math.random() < dt * 2.5 ? 0.25 : Math.max(0, pressT - dt);
+      }
+      // 내 엄지 위치를 함께 쓰는 경기에 적음
+      M.th[me_] = flip({ x: (me.x - R.x) / R.r, y: (me.y - R.y) / R.r });
+      const o = flip(M.th[ot]); cpu.x = R.x + o.x * R.r; cpu.y = R.y + o.y * R.r;
+      // 상대가 알린 일
+      for (const e of M.ev[me_].splice(0)) {
+        const q = scr(me, 2.2);
+        if (e.type === "pinned") { sfx.bonk(); popup(z.cx, v.H * 0.3, "눌렸다! 빨리 빠져나가요!", { size: v.U * 0.04, color: "#fff", stroke: "#c00000" }); }
+        else if (e.type === "escape") { escapes++; env.award(1, q.x, q.y - r); popup(q.x, q.y + r, "탈출!", { size: v.U * 0.045, color: "#fff", stroke: "#2fb65a" }); }
+        else if (e.type === "escaped") { const c = scr(cpu, 2.2); popup(c.x, c.y, "빠져나갔다!", { size: v.U * 0.04, color: "#fff", stroke: "#888" }); sfx.whoosh(); }
+        else if (e.type === "win") { wins++; sfx.fanfare(); const c = scr(cpu); env.award(3, z.cx, v.H * 0.4); burst(c.x, c.y, { n: 30, colors: ["#ffd400", "#ff7aa2", "#7ae0ff", "#9dff7a"], shape: "confetti", speed: v.U * 0.9, gravity: v.U * 0.8, size: v.U * 0.016 }); popup(z.cx, v.H * 0.3, "이겼다! 👍", { size: v.U * 0.05, color: "#fff", stroke: "#2fb65a", life: 1.1 }); }
+        else if (e.type === "lose") { losses++; sfx.bad(); env.miss(z.cx, v.H * 0.4, "눌렸다!"); popup(z.cx, v.H * 0.3, "다시 해 봐요!", { size: v.U * 0.05, color: "#fff", stroke: "#b30000", life: 1.1 }); }
+      }
+      // 하나·둘·셋 (두 화면 모두)
+      if (M.pin) { const n = Math.min(3, Math.floor(M.pin.t / (COUNT / 3)) + 1); if (n > lastN) { lastN = n; sfx.tick(); popup(z.cx, v.H * 0.28, WORDS[n - 1], { size: v.U * 0.09, color: "#fff", stroke: (M.info[M.pin.by] || {}).color || "#333", life: 0.5 }); } } else lastN = 0;
+      // 경기 진행(쉬는 시간·누르기 시간·빠져나감·이김)은 1P 화면이 맡음
+      if (me_ === 0) {
+        if (M.rest > 0) M.rest -= dt;
+        if (M.pin) {
+          const P = M.pin, vic = 1 - P.by, dn = Math.hypot(M.th[0].x - M.th[1].x, M.th[0].y - M.th[1].y);
+          P.t += dt;
+          if (dn > RN * 1.6) { M.ev[vic].push({ type: "escape" }); M.ev[P.by].push({ type: "escaped" }); M.pin = null; }
+          else if (P.t >= COUNT) { M.wins[P.by]++; M.ev[P.by].push({ type: "win" }); M.ev[vic].push({ type: "lose" }); M.pin = null; M.rest = 1.2; M.round++; }
+        }
+      }
+      // 내가 누르기 시작: 상대 엄지 바로 위에서 콱
+      if (M.rest <= 0 && !M.pin && pressT > 0) {
+        const d2 = Math.hypot(me.x - cpu.x, me.y - cpu.y);
+        if (d2 < r * 1.15 * D.reach) {
+          M.pin = { by: me_, t: 0 }; sfx.hit(2); M.ev[ot].push({ type: "pinned" });
+          const q = scr(cpu); burst(q.x, q.y, { n: 12, colors: ["#ffffff", "#ffe14d"], shape: "star", speed: v.U * 0.5, gravity: v.U * 0.3, size: v.U * 0.014, life: 0.4 });
+        } else if (d2 < r * 2.2 && hint <= 0) { hint = 1.5; const q = scr(me, 2.2); popup(q.x, q.y, "더 가까이!", { size: v.U * 0.035, color: "#fff", stroke: "#b87a00" }); }
+      }
+    }
+    function vsDraw(ctx) {
+      const R = ring(), U = v.U, P = M.pin, wob = Math.sin(t * 9) * 0.06;
+      T3[0].set(to3(me), P && P.by === me_ ? 1.15 : 1.75 + wob);
+      T3[1].set(to3(cpu), P && P.by === ot ? 1.15 : 1.75 - wob);
+      T3[0].glow(P && P.by === me_ ? 0x33ff88 : 0); T3[1].glow(P && P.by === ot ? 0xffc800 : 0);
+      st.draw(ctx);
+      const I = M.info, qm = scr(me, 2.25), qc = scr(cpu, 2.25), top = v.H * 0.23;
+      qm.y = Math.max(top, qm.y); qc.y = Math.max(top, qc.y);
+      outlinedText(ctx, "나", qm.x, qm.y, U * 0.032, "#fff", env.color, 3);
+      outlinedText(ctx, I[ot] ? I[ot].name : "상대", qc.x, qc.y, U * 0.032, "#fff", I[ot] ? I[ot].color : "#7a3fbf", 3);
+      const lim = z.w / 13, by = v.H * 0.83;
+      if (P) {
+        const q = scr(P.by === me_ ? cpu : me, 1), col = (I[P.by] || {}).color || "#333";
+        ctx.strokeStyle = col; ctx.lineWidth = U * 0.014; ctx.beginPath(); ctx.arc(q.x, q.y, U * 0.09, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, P.t / COUNT)); ctx.stroke();
+        outlinedText(ctx, P.by === me_ ? "따라가며 버텨요!" : "눌렸다! 멀리 빠져나가요!", z.cx, by, Math.min(U * 0.04, lim), "#fff", P.by === me_ ? env.color : "#c00000", 3);
+      } else if (M.rest <= 0) outlinedText(ctx, "상대 엄지 위에서 콱 누르기!", z.cx, by, Math.min(U * 0.04, lim), "#fff", "#333", 3);
+      const bw = Math.min(z.w * 0.86, U * 0.7), bh = U * 0.07, bx = z.cx - bw / 2, bty = v.H * 0.11;
+      ctx.fillStyle = "rgba(90,50,10,.82)"; rr(ctx, bx, bty, bw, bh, U * 0.02); ctx.fill();
+      const nm = i => (I[i] ? I[i].name : `${i + 1}P`);
+      outlinedText(ctx, `${M.round}판 · 1P ${nm(0)} ${M.wins[0]} : ${M.wins[1]} ${nm(1)} 2P`, z.cx, bty + bh / 2, Math.min(U * 0.034, z.w / 17), "#fff", "#5a320a", 3);
+    }
     const inRing = (p, R, m) => { const d = Math.hypot(p.x - R.x, p.y - R.y), lim = R.r - m; if (d > lim) { p.x = R.x + (p.x - R.x) / d * lim; p.y = R.y + (p.y - R.y) / d * lim; } };
     return {
       update(dt) {
@@ -91,6 +177,7 @@ export default {
         // 누르기: 손을 아래로 빠르게 내리거나 주먹
         const press = h && ((h.vy / sw) > PRESS * D.punch || h.shape === "closed");
         pressT = press ? 0.25 : Math.max(0, pressT - dt);
+        if (VS) { vsUpdate(dt, R, r, h); return; }
         const dist = Math.hypot(me.x - cpu.x, me.y - cpu.y);
         if (rest > 0) { rest -= dt; return; }
         // 상대 엄지 움직임
@@ -135,6 +222,7 @@ export default {
         } else if (!pin && pressT > 0 && d2 < r * 2.2 && hint <= 0) { hint = 1.5; const q = scr(me, 2.2); popup(q.x, q.y, "더 가까이!", { size: v.U * 0.035, color: "#fff", stroke: "#b87a00" }); }
       },
       draw(ctx) {
+        if (VS) { vsDraw(ctx); return; }
         const R = ring(), r = TR(), U = v.U;
         // 엄지 3D 위치: 평소엔 서 있고, 누를 땐 상대 쪽으로 낮게 덮침
         const pm = to3(me), pc = to3(cpu), wob = Math.sin(t * 9) * 0.06;
@@ -165,8 +253,8 @@ export default {
         ctx.fillStyle = "rgba(90,50,10,.82)"; rr(ctx, bx, bty, bw, bh, U * 0.02); ctx.fill();
         outlinedText(ctx, `${round}판 · ${wins}승 ${losses}패`, z.cx, bty + bh / 2, Math.min(U * 0.036, z.w / 12), "#fff", "#5a320a", 3);
       },
-      stop() { st.dispose(); },
-      result: () => `이김 ${wins} · 짐 ${losses} · 빠져나감 ${escapes}`,
+      stop() { st.dispose(); shared = null; },
+      result: () => VS ? `이김 ${wins} · 짐 ${losses} · 빠져나감 ${escapes} · ${M.round}판` : `이김 ${wins} · 짐 ${losses} · 빠져나감 ${escapes}`,
       // 설명 시연용
       get me() { return { x: me.x, y: me.y }; }, get cpu() { return { x: cpu.x, y: cpu.y }; },
       get pinning() { return !!pin; }, get threat() { return cpuPin ? (cpuPin.on ? "on" : "warn") : null; },

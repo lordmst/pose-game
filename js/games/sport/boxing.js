@@ -1,6 +1,8 @@
 // 복싱 (스포츠 리조트처럼 3D 링): 내 눈높이에서 상대 선수를 봄. 화면 아래 빨간 내 글러브가 내 손을 그대로 따라감
 // 상대가 막고 있는 곳(얼굴/몸)이 아닌 빈 곳을 주먹으로 침. 상대가 주먹을 뒤로 빼면(빨간 경고) → 두 손으로 얼굴 막기, 또는 머리를 옆으로 피하기
 // 상대 체력을 다 깎으면 KO 보너스, 다음 상대 등장. 내가 맞으면 감점, 체력이 다 떨어지면 다운
+// 2인 대결(env.mode 2): 컴퓨터 상대 대신 다른 선수와 겨룸. 상대 캐릭터는 그 선수의 실제 팔·머리 동작을 따라 하고,
+//   그 선수가 막고(두 손 얼굴 = 얼굴, 두 손 배 앞 = 몸) 있지 않은 곳을 치면 맞음, 머리를 옆으로 빼면 얼굴은 피함. 체력 0이면 KO → 다음 라운드
 import { burst, popup, shake, rr, outlinedText } from "../../fx.js?v=48";
 import { sfx } from "../../audio.js?v=48";
 import { stage, THREE, box, ball as sphere, cyl, mesh, avatar } from "./kit3d.js?v=48";
@@ -11,6 +13,16 @@ const WIND = 0.85;       // 상대 공격 예고 시간(초, 보통)
 const MY_HP = 5;
 const SKIN = ["#f2c49b", "#c98b5e", "#8d5a3b"], TRUNKS = ["#3d8bff", "#2fb65a", "#a24bd6", "#ff8a00"], HAIR = ["#3b2414", "#1f1f1f", "#7a4a1f"];
 const RS = 3.6;          // 링 반 너비(m)
+const VS_HP = 10;        // 2인 대결 체력
+const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 치고 막음
+// 2인 대결: 두 화면이 함께 쓰는 경기 (체력·라운드·각 선수 상태·서로에게 알릴 일). 게임이 끝나면 stop()에서 지움
+let shared = null;
+function match(env) {
+  if (!shared) shared = { hp: [VS_HP, VS_HP], wins: [0, 0], round: 1, ko: 0, koBy: -1, ev: [[], []], info: [null, null],
+    p: [0, 1].map(() => ({ guard: null, dodge: 0, punch: [-9, -9], pts: null })) };
+  shared.info[env.slot] = { color: env.color || (env.slot ? "#3d8bff" : "#ff5a5a"), name: env.name || `${env.slot + 1}P` };
+  return shared;
+}
 
 // 링·관중·조명
 function arena(scene) {
@@ -73,6 +85,139 @@ export default {
       oppG = [0, 1].map(k => { const g = glove(0.1); g.rotation.x = -Math.PI / 2; g.position.y = -0.02; oppA.hold(k, g); return g; });
     }
     newOpp();
+    // ---------- 2인 대결 ----------
+    const VS = env.mode === 2, M = VS ? match(env) : null, me_ = env.slot, ot = 1 - env.slot;
+    let vsCol = null, myHitT = 0, au = { gT: 0, pT: 1.2, guard: null };
+    const nowS = () => performance.now() / 1000;
+    function ensureOpp() {      // 상대 캐릭터를 상대 선수 색으로
+      const I = M.info[ot], col = I ? I.color : "#3d8bff";
+      if (col === vsCol) return; vsCol = col;
+      if (oppA) scene.remove(oppA);
+      oppA = avatar({ shirt: col, pants: "#22264a", skin: SKIN[ot % 3], hair: HAIR[ot % 3], girl: /엄마|연제/.test(I ? I.name : "") });
+      oppA.scale.setScalar(1.3); scene.add(oppA);
+      const gear = mesh(new THREE.SphereGeometry(0.235, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), col); gear.position.y = 0.02; gear.rotation.x = -0.15; oppA.headG.add(gear);
+      oppG = [0, 1].map(k => { const g = glove(0.1); g.rotation.x = -Math.PI / 2; g.position.y = -0.02; oppA.hold(k, g); return g; });
+    }
+    // 내 막기 자세: 두 손이 얼굴 앞 = 얼굴, 두 손이 배 앞 = 몸
+    function myGuard() {
+      const p = env.tracker.pts; if (!p || !p[0].v) return null;
+      const sw = Math.max(env.tracker.scale || 0, v.U * 0.06);
+      if ([15, 16].every(i => p[i].v && Math.hypot(p[i].x - p[0].x, p[i].y - p[0].y) < sw * 1.1)) return "head";
+      if (p[11].v && p[12].v) {
+        const shY = (p[11].y + p[12].y) / 2, hipY = p[23].v && p[24].v ? (p[23].y + p[24].y) / 2 : shY + sw * 1.6, cx = (p[11].x + p[12].x) / 2, cy = shY + (hipY - shY) * 0.5;
+        if ([15, 16].every(i => p[i].v && Math.hypot(p[i].x - cx, p[i].y - cy) < sw * 0.95)) return "body";
+      }
+      return null;
+    }
+    // 내 주먹이 상대에게: 막은 곳이면 막힘, 아니면 맞음 (머리를 옆으로 뺐으면 얼굴은 피함)
+    function strikeVS(k, h, part) {
+      const P = part === "head" ? head() : body(), O = M.p[ot];
+      cool[k] = 0.35; gState[k].push = 1; M.p[me_].punch[k] = nowS();
+      if (M.ko > 0) return;
+      if (O.guard === part || (part === "head" && Math.abs(O.dodge) > 0.5)) {
+        blocked++; sfx.bonk(); popup(P.x, P.y - P.r * 1.3, O.guard === part ? "막혔다!" : "피했다!", { size: v.U * 0.04, color: "#fff", stroke: "#666" });
+        burst(h.x, h.y, { n: 6, colors: ["#ffffff", "#cccccc"], speed: v.U * 0.4, gravity: v.U, size: v.U * 0.01, life: 0.3 });
+        M.ev[ot].push({ type: O.guard === part ? "block" : "dodge" }); return;
+      }
+      const strong = h.bodySpeed >= STRONG * D.punch, dmg = strong ? 2 : 1;
+      hits++; M.hp[ot] = Math.max(0, M.hp[ot] - dmg); opp.hitT = 0.25; opp.hitPart = part;
+      sfx.hit(dmg); shake(v.U * (strong ? 0.014 : 0.007), 0.18);
+      env.award(strong ? 2 : 1, P.x, P.y - P.r * 1.4);
+      if (strong) popup(P.x, P.y + P.r * 1.5, "강펀치!", { size: v.U * 0.05, color: "#fff", stroke: "#d0451b" });
+      burst(h.x, h.y, { n: strong ? 18 : 10, colors: ["#ffffff", "#ffe14d", "#ff7a7a"], shape: "star", speed: v.U * 0.6, gravity: v.U * 0.5, size: v.U * 0.016, life: 0.5 });
+      M.ev[ot].push({ type: "hit", dmg, part });
+      if (M.hp[ot] <= 0) {
+        kos++; M.ko = 1.8; M.koBy = me_; M.wins[me_]++; cheer = 2; sfx.fanfare(); env.award(5, z.cx, v.H * 0.36);
+        popup(z.cx, v.H * 0.2, "K.O.!", { size: v.U * 0.1, color: "#ffe14d", stroke: "#b30000", life: 1.4 });
+        M.ev[ot].push({ type: "ko" });
+      }
+    }
+    // 상대 캐릭터 = 상대 선수의 실제 동작 (팔·막기·피하기·주먹 뻗기)
+    function poseVsOpp(dt) {
+      const O = M.p[ot], a = oppA, now = nowS(), fall = M.koBy === me_ && M.ko > 0 ? Math.min(1, (1.8 - M.ko) * 2) : 0;
+      a.position.x += (-O.dodge * 0.35 - a.position.x) * Math.min(1, dt * 10);        // 마주 보므로 상대가 자기 오른쪽으로 빼면 내 화면 왼쪽
+      a.rotation.x = -fall * 1.35; a.position.z = -fall * 0.6; a.body.position.y = Math.abs(Math.sin(t * 5)) * 0.04;
+      const hit = opp.hitT > 0 ? opp.hitT / 0.25 : 0;
+      a.headG.rotation.x = opp.hitPart === "head" ? -0.45 * hit : 0; a.body.rotation.x = opp.hitPart === "body" ? 0.3 * hit : 0;
+      a.headG.rotation.z = -O.dodge * 0.25;
+      if (fall) { a.arm(0, 1.2, 0.2, 0.2); a.arm(1, 1.2, 0.2, 0.2); return; }
+      if (O.pts && !AUTO) a.mimic(O.pts, true);
+      else [0, 1].forEach(k => (O.guard === "head" ? a.arm(k, 0.45, 0.55, 2.35) : O.guard === "body" ? a.arm(k, 0.35, 0.65, 1.55) : a.arm(k, 0.3, 0.6, 1.9)));
+      let lunge = 0;
+      [0, 1].forEach(k => { const e = now - O.punch[k]; if (e >= 0 && e < 0.3) { const u = 1 - e / 0.3; a.arm(k, 0.3, 0.4 + 1.15 * u, 2.2 * (1 - u)); lunge = Math.max(lunge, u); a.body.rotation.y = (k ? 1 : -1) * 0.3 * u; } });
+      a.position.z = Math.max(a.position.z, 0.4 * lunge);
+      if (!lunge) a.body.rotation.y *= Math.max(0, 1 - dt * 6);
+    }
+    function vsUpdate(dt) {
+      ensureOpp(); oppA.updateMatrixWorld(true);
+      const p = env.tracker.pts, sw = Math.max(env.tracker.scale || 0, v.U * 0.06), mine = M.p[me_];
+      myHitT = Math.max(0, myHitT - dt);
+      // 내 상태를 상대 화면에 알림
+      if (AUTO) {
+        au.gT -= dt; if (au.gT <= 0) { au.guard = [null, "head", "body"][Math.floor(Math.random() * 3)]; au.gT = 1 + Math.random() * 1.5; }
+        mine.guard = au.guard; mine.dodge = 0; mine.pts = null;
+      } else {
+        mine.guard = myGuard(); mine.dodge = p && p[0].v && noseBase ? (p[0].x - noseBase.x) / sw : 0; mine.pts = p;
+      }
+      // 상대가 알린 일: 맞음·막음·피함·KO
+      for (const e of M.ev[me_].splice(0)) {
+        if (e.type === "hit") { taken++; myHitT = 0.45; sfx.thud(); shake(v.U * 0.03, 0.4); env.miss(z.cx, v.H * 0.45, e.dmg > 1 ? "강펀치 맞았다!" : "맞았다!"); }
+        else if (e.type === "block" || e.type === "dodge") { defended++; env.award(1, z.cx, v.H * 0.4); popup(z.cx, v.H * 0.48, e.type === "block" ? "막았다!" : "피했다!", { size: v.U * 0.05, color: "#fff", stroke: "#2fb65a" }); }
+        else if (e.type === "ko") { downs++; env.miss(z.cx, v.H * 0.55, "다운!"); popup(z.cx, v.H * 0.62, "일어나요! 다음 라운드!", { size: v.U * 0.045, color: "#fff", stroke: "#b30000", life: 1.6 }); }
+      }
+      // 라운드 진행은 1P 화면이 맡음
+      if (me_ === 0 && M.ko > 0) { M.ko -= dt; if (M.ko <= 0) { M.hp = [VS_HP, VS_HP]; M.round++; M.koBy = -1; M.ko = 0; } }
+      if (M.ko <= 0) {
+        if (AUTO) {
+          au.pT -= dt;
+          if (au.pT <= 0) {
+            au.pT = 0.7 + Math.random() * 0.8;
+            const O = M.p[ot], part = Math.random() < 0.75 ? (O.guard === "head" ? "body" : "head") : (O.guard || "head"), P = part === "head" ? head() : body(), k = Math.random() < 0.5 ? 0 : 1;
+            strikeVS(k, { x: P.x, y: P.y, bodySpeed: 4 + Math.random() * 4 }, part);
+          }
+        } else env.tracker.hands.forEach((h, k) => {
+          if (!h.vis || cool[k] > 0 || h.bodySpeed < PUNCH * D.punch) return;
+          mine.punch[k] = nowS();
+          for (const part of ["head", "body"]) {
+            const P = part === "head" ? head() : body();
+            if (Math.hypot(h.x - P.x, h.y - P.y) > P.r * 1.25 * D.reach) continue;
+            if ((P.x - h.x) * h.vx + (P.y - h.y) * h.vy <= 0 && Math.hypot(h.x - P.x, h.y - P.y) > P.r * 0.4) continue;
+            strikeVS(k, h, part); break;
+          }
+        });
+      }
+      poseVsOpp(dt);
+    }
+    function vsDraw(ctx) {
+      const shakeK = myHitT / 0.45, down = M.koBy === ot && M.ko > 0 ? Math.min(1, (1.8 - M.ko) * 2) : 0;
+      camera.position.set(Math.sin(t * 60) * 0.05 * shakeK, 1.95 - down * 0.6, 3.6); camera.lookAt(0, 1.55 - down * 0.3, 0);
+      camera.rotation.z += down * 0.35;
+      st.draw(ctx);
+      const U = v.U, bw = z.w * 0.38, by = v.H * 0.115, bh = Math.max(12, U * 0.024), I = M.info, O = M.p[ot];
+      const bar = (x, label, k, col) => {
+        ctx.fillStyle = "rgba(0,0,0,.6)"; rr(ctx, x - 3, by - 3, bw + 6, bh + 6, bh / 2 + 3); ctx.fill();
+        ctx.fillStyle = col; rr(ctx, x, by, Math.max(bh, bw * k), bh, bh / 2); ctx.fill();
+        outlinedText(ctx, label, x + bw / 2, by + bh + U * 0.026, Math.min(U * 0.027, z.w / 22), "#fff", "#333", 3);
+      };
+      bar(z.x0 + z.w * 0.06, `상대 ${I[ot] ? I[ot].name : ""}`, M.hp[ot] / VS_HP, I[ot] ? I[ot].color : "#ff5a5a");
+      bar(z.x1 - z.w * 0.06 - bw, "나", M.hp[me_] / VS_HP, env.color);
+      outlinedText(ctx, `ROUND ${M.round}`, z.cx, by + bh / 2, Math.min(U * 0.035, z.w / 14), "#ffe14d", "#7a0000", 3);
+      const names = [0, 1].map(i => (I[i] ? I[i].name : `${i + 1}P`));
+      outlinedText(ctx, `1P ${names[0]} ${M.wins[0]} : ${M.wins[1]} ${names[1]} 2P`, z.cx, by + bh + U * 0.07, Math.min(U * 0.032, z.w / 18), "#fff", "#7a0000", 3);
+      // 노릴 곳: 상대가 막지 않은 곳
+      if (M.ko <= 0) {
+        const H = head(), B = body(), Tg = O.guard === "head" ? B : H, G = O.guard === "head" ? H : O.guard === "body" ? B : null;
+        ctx.save(); ctx.globalAlpha = 0.85; ctx.setLineDash([U * 0.012, U * 0.01]); ctx.lineWidth = U * 0.006;
+        ctx.strokeStyle = "#ffe14d"; ctx.beginPath(); ctx.arc(Tg.x, Tg.y, Tg.r * 1.05, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+        outlinedText(ctx, "여기!", Tg.x + Tg.r * 1.45, Tg.y, U * 0.03, "#ffe14d", "#333", 3);
+        if (G) outlinedText(ctx, "🛡️", G.x + G.r * 1.3, G.y, U * 0.035, "#fff", "#333", 2);
+        // 상대가 주먹을 뻗는 중이면 경고 (막거나 피하기)
+        const e = Math.min(nowS() - O.punch[0], nowS() - O.punch[1]);
+        if (e >= 0 && e < 0.35) outlinedText(ctx, "! 막거나 피해요", z.cx, v.H * 0.66, Math.min(U * 0.045, z.w / 11), "#fff", "#c00000", 4);
+      }
+      if (shakeK) { ctx.fillStyle = `rgba(255,0,0,${(0.3 * shakeK).toFixed(3)})`; ctx.fillRect(z.x0, 0, z.w, v.H); }
+      if (down) { ctx.fillStyle = `rgba(0,0,0,${(0.35 * down).toFixed(3)})`; ctx.fillRect(z.x0, 0, z.w, v.H); outlinedText(ctx, "다운!", z.cx, v.H * 0.42, U * 0.09, "#fff", "#b30000", 5); }
+    }
     const wpos = (o, dy = 0) => { const p = new THREE.Vector3(); o.getWorldPosition(p); p.y += dy; return p; };
     // 상대 몸 위치(화면 좌표): 3D 상대의 머리·가슴을 화면에 투영
     const head = () => { const q = st.toScreen(wpos(oppA.headG)); return { x: q.x, y: q.y, r: R() * 0.75 }; };
@@ -152,6 +297,7 @@ export default {
         A.fans.forEach(f => { f.position.y = f.userData.y + Math.abs(Math.sin(t * (cheer ? 12 : 2.5) + f.userData.b)) * (cheer ? 0.35 : 0.06); });
         A.beams.forEach(b => { b.material.opacity = 0.04 + 0.025 * Math.sin(t * 2 + b.userData.i); });
         poseMine(dt);
+        if (VS) { vsUpdate(dt); return; }
         if (opp.ko > 0) { poseOpp(dt); opp.ko -= dt; if (opp.ko <= 0) { newOpp(); popup(z.cx, v.H * 0.2, `${opp.n}번째 상대!`, { size: v.U * 0.05, color: "#fff", stroke: opp.trunk }); atkT = 1.8; } return; }
         // 상대 가드 바꾸기
         opp.guardT -= dt;
@@ -195,6 +341,7 @@ export default {
         poseOpp(dt);
       },
       draw(ctx) {
+        if (VS) { vsDraw(ctx); return; }
         // 맞으면 화면이 흔들림
         const hitShake = atk && atk.done && atk.res === "hit" ? (1 - atk.rt / 0.45) : 0;
         camera.position.set(Math.sin(t * 60) * 0.05 * hitShake, 1.95, 3.6); camera.lookAt(0, 1.55, 0);
@@ -227,8 +374,8 @@ export default {
         }
         if (hitShake) { ctx.fillStyle = `rgba(255,0,0,${(0.3 * hitShake).toFixed(3)})`; ctx.fillRect(z.x0, 0, z.w, v.H); }
       },
-      stop() { st.dispose(); },
-      result: () => `맞힘 ${hits} · 막힘 ${blocked} · KO ${kos} · 방어 ${defended} · 맞음 ${taken}${downs ? ` · 다운 ${downs}` : ""}`,
+      stop() { st.dispose(); shared = null; },
+      result: () => VS ? `맞힘 ${hits} · 막힘 ${blocked} · KO ${kos} · 방어 ${defended} · 맞음 ${taken} · 라운드 승리 ${M.wins[me_]}` : `맞힘 ${hits} · 막힘 ${blocked} · KO ${kos} · 방어 ${defended} · 맞음 ${taken}${downs ? ` · 다운 ${downs}` : ""}`,
       // 설명 시연용
       get head() { return head(); }, get body() { return body(); },
       get guard() { return opp.guard; }, get ko() { return opp.ko > 0; },
