@@ -1,8 +1,8 @@
 // 테니스 (스포츠 리조트처럼 3D 복식): 내 캐릭터 뒤에서 코트를 봄. 상대가 친 공이 바운드되어 오면 타이밍 맞춰 팔을 휘둘러 받아치기
 // 캐릭터는 공 쪽으로 저절로 움직임. 휘두른 순간이 좋을수록 세고 코너로 감. 상대가 못 받으면 내 점수. 점수는 테니스식(15·30·40·게임)
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=47";
-import { sfx } from "../../audio.js?v=47";
-import { stage, THREE, ground, box, ball as sphere, mesh, mat, tree, cloud, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=47";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=48";
+import { sfx } from "../../audio.js?v=48";
+import { stage, THREE, ground, box, ball as sphere, mesh, mat, tree, cloud, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=48";
 
 const FLIGHT = 1.7;    // 상대 → 나 공 시간(초, 보통)
 const BACK = 1.2;      // 나 → 상대
