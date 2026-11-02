@@ -1,9 +1,14 @@
 // 볼링 (스포츠 리조트처럼 3D 실내 레인): 내 캐릭터 뒤에서 레인을 봄. 공 든 손을 허리 아래로 내렸다가 앞(위)으로 빠르게 휘두르면 공이 굴러감
 // 조준 = 내 몸의 좌우 위치(옆으로 걸어서 맞춤), 휘두를 때 손이 옆으로 쏠리면 공이 휘어짐(커브). 굴러가는 공을 카메라가 따라감
 // 던지기 전에 추천 자리(1구: 1·3번 핀 사이, 2구: 남은 핀 쪽)를 점선으로 안내. 안내일 뿐이라 어디서 던져도 됨
+// 2인: 같은 볼링장의 바로 옆 레인에서 상대가 동시에 침(상대 캐릭터·공·핀이 실시간으로 보임). 위쪽 점수표는 두 줄(1P·2P), 프레임마다 이긴 쪽 표시
 import { burst, popup, shake, outlinedText, rr, clamp, FONT } from "../../fx.js?v=48";
 import { sfx } from "../../audio.js?v=48";
-import { stage, THREE, box, ball as sphere, mesh, mat, cyl, playerAvatar, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=48";
+import { stage, THREE, box, ball as sphere, mesh, mat, cyl, avatar, playerAvatar, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=48";
+
+const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 조준하고 던짐
+// 2인 대결: 두 화면이 서로의 상태를 공개(pub)하고, 상대 레인을 그 상태대로 그림. 각자 자기 공·핀은 자기 화면이 계산
+let shared = null;
 
 const LANE_LEN = 18;            // 레인 길이(레인 좌표, 레인 폭 = 2)
 const PIN_R = 0.12, BALL_R = 0.21;
@@ -36,7 +41,7 @@ function arrowShape(color) {
   const s = new THREE.Shape(); s.moveTo(0, 0.09); s.lineTo(-0.035, -0.04); s.lineTo(0.035, -0.04); s.lineTo(0, 0.09);
   const m = mesh(new THREE.ShapeGeometry(s), color, { cast: false }); m.rotation.x = -Math.PI / 2; return m;
 }
-function hall(scene) {
+function hall(scene, oppN = 0) {
   const wood = new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.38, metalness: 0.05 });
   const len = -wz(LANE_LEN + 1.5);
   // 내 레인 + 양옆 레인들 (도랑 포함)
@@ -51,8 +56,8 @@ function hall(scene) {
     });
     // 핀 뒤 검은 벽 + 레인 번호 판
     const back = box(1.7, 1.2, 0.2, "#151826"); back.position.set(ox, 0.6, -len - 0.6); scene.add(back);
-    const hood = box(1.9, 0.5, 1.6, n === 0 ? "#ff6b9d" : n % 2 ? "#4dabf7" : "#845ef7", { glow: n === 0 ? "#40102a" : "#0a1830" }); hood.position.set(ox, 1.45, -len + 0.2); scene.add(hood);
-    if (n !== 0) {   // 옆 레인 핀(가만히 서 있음)
+    const hood = box(1.9, 0.5, 1.6, n === 0 ? "#ff6b9d" : n === oppN ? "#ffd43b" : n % 2 ? "#4dabf7" : "#845ef7", { glow: n === 0 ? "#40102a" : n === oppN ? "#403000" : "#0a1830" }); hood.position.set(ox, 1.45, -len + 0.2); scene.add(hood);
+    if (n !== 0 && n !== oppN) {   // 옆 레인 핀(가만히 서 있음). 상대 레인은 상대 상태대로 따로 그림
       PINS.forEach(p => { const m = pinMesh(false); m.position.set(ox + wx(p.x), 0, wz(p.y)); scene.add(m); });
     }
   }
@@ -80,7 +85,10 @@ export default {
     const st = stage(env, { fov: 50, sky: ["#1c1838", "#2b2357"], shadowSize: 6 });
     const { scene, camera, sun, hemi } = st;
     hemi.intensity = 1.3; sun.intensity = 1.2; sun.position.set(3, 9, 4); sun.target.position.set(0, 0, -6);
-    hall(scene);
+    // 2인: 상대 레인은 내 레인 바로 옆 (1P 화면에선 오른쪽, 2P 화면에선 왼쪽)
+    const two = env.mode === 2, slot = two ? env.slot : 0, other = 1 - slot, oppN = two ? (slot === 0 ? 1 : -1) : 0, OX = oppN * 1.9;
+    if (two && slot === 0) shared = { p: [null, null] };   // 새 경기마다 1P 화면이 먼저 만들어지며 새로 시작 (끝난 뒤 결과 글자에도 쓰려고 stop에서 지우지 않음)
+    hall(scene, oppN);
     const me = playerAvatar(env); me.scale.setScalar(1.15); me.rotation.y = Math.PI; scene.add(me);
     // 공 (손가락 구멍 3개)
     const bmesh = new THREE.Group(), core = sphere(0.11, env.color || "#3b5bdb", { rough: 0.12, metal: 0.25 }); bmesh.add(core);
@@ -98,6 +106,46 @@ export default {
     let phase = "aim", ball = null, pins = [], frame = 1, roll = 1, settleT = 0, aimX = 0, lowT = -9, t = 0;
     let total = 0, strikes = 0, spares = 0, frameDown = 0, lastRelease = -9, swingT = 9, camZ = 3.4;
     const frames = [];       // 프레임 기록 [{a, b, mark}]
+    let autoT = 0, finDone = false, finText = "";
+    // 내 상태 공개 (상대 화면이 내 레인을 그대로 그림)
+    if (two) shared.p[slot] = { name: env.name, color: env.color, get aimX() { return aimX; }, get phase() { return phase; }, get ball() { return ball; }, get pins() { return pins; },
+      get frames() { return frames; }, get total() { return total; }, get frame() { return frame; }, get roll() { return roll; }, get swingT() { return swingT; }, get pts() { return env.tracker.pts; } };
+    // 상대 레인 물건 (상대가 화면에 들어오면 만듦)
+    let opp = null;
+    function makeOpp(O) {
+      const av = avatar({ shirt: O.color || "#3b5bdb", pants: "#2b3a67", girl: /엄마|연제/.test(O.name || "") }); av.scale.setScalar(1.15); av.rotation.y = Math.PI; scene.add(av);
+      const ob = sphere(0.11, O.color || "#3b5bdb", { rough: 0.12, metal: 0.25 }); scene.add(ob);
+      const op = PINS.map(() => { const m = pinMesh(false); scene.add(m); return m; });
+      const tag = textBoard(1.4, 0.32, { bg: "rgba(0,0,0,.55)" }); tag.set(O.name || "상대"); scene.add(tag);
+      return { av, ob, op, tag };
+    }
+    function syncOpp(dt) {
+      const O = two && shared.p[other]; if (!O) return;
+      if (!opp) opp = makeOpp(O);
+      const { av, ob, op, tag } = opp;
+      av.position.set(OX + wx(O.aimX), 0, 1.2);
+      if (O.swingT < 0.7) { const u = Math.min(1, O.swingT / 0.3); av.arm(1, 0.1, -0.9 + 2.2 * u, 0.1); av.body.rotation.x = 0.35 * Math.sin(u * Math.PI); }
+      else { av.body.rotation.x = 0; av.mimic(O.pts, true); if (O.phase === "aim") av.arm(1, 0.12, 0.25, 0.9); }
+      av.idle(t + 1);
+      tag.position.set(OX + wx(O.aimX), 2.35, 1.2); tag.lookAt(camera.position);
+      const B = O.ball;
+      if (B) { ob.visible = true; ob.position.set(OX + wx(B.x), 0.11 + (B.gutter ? -0.05 : 0), wz(B.y)); ob.rotation.x -= B.vy * dt * 3.2; }
+      else if (O.phase === "aim") { av.updateMatrixWorld(true); ob.visible = true; ob.position.copy(av.handWorld(1)).add(new THREE.Vector3(0, -0.03, -0.08)); }
+      else ob.visible = false;
+      O.pins.forEach((p, i) => {
+        const m = op[i]; m.visible = !p.gone; if (p.gone) return;
+        m.position.set(OX + wx(p.x), p.down ? 0.06 * Math.sin(p.tilt) : 0, wz(p.y));
+        m.rotation.set(0, 0, 0); m.rotateY(-p.head); m.rotateX(-p.tilt);
+      });
+    }
+    // 게임 끝: 더 많이 쓰러뜨린 쪽이 승리 보너스
+    function finish() {
+      if (!two || finDone || env.progress() < 0.985) return;
+      finDone = true; const O = shared.p[other], mine = total, theirs = O ? O.total : 0;
+      if (mine > theirs) { finText = `🏆 ${env.name} 승리!`; env.award(10, z.cx, v.H * 0.4); sfx.fanfare(); }
+      else if (mine === theirs) finText = "무승부!";
+      else finText = `${O.name} 승리! 다음엔 이겨요`;
+    }
     const resetPins = () => { pins = PINS.map(p => ({ ...p, vx: 0, vy: 0, down: false, gone: false, tilt: 0, head: 0, spinR: 0 })); };
     resetPins();
     function body() {
@@ -185,12 +233,57 @@ export default {
         st.pipMark = { x: mover.toScreenX(rec), ok };
       } else { guide.hide(); st.pipMark = null; }
     }
+    // 2인 점수표: 두 줄(1P·2P) × 최근 5프레임 + 합계. 둘 다 끝낸 프레임은 이긴 쪽 칸을 초록으로
+    const done = F => F && (F.mark === "X" || F.b != null);
+    function drawVersus(ctx) {
+      const U = v.U, P = [shared.p[0], shared.p[1]], n = 5;
+      const nm = Math.min(U * 0.13, z.w * 0.2), cw = Math.min(U * 0.075, (z.w * 0.92 - nm) / (n + 1.4)), ch = cw * 0.72, w = nm + cw * n + cw * 1.4, x0 = z.cx - w / 2, y0 = v.H * 0.1;
+      const maxF = Math.max(...P.map(p => (p ? p.frames.length : 0))), first = Math.max(0, maxF - n);
+      ctx.fillStyle = "rgba(20,16,50,.88)"; rr(ctx, x0 - 6, y0 - 6, w + 12, ch * 2 + 16, U * 0.015); ctx.fill();
+      P.forEach((p, r) => {
+        const y = y0 + r * (ch + 4), Q = P[1 - r];
+        ctx.fillStyle = p ? p.color : "#888"; ctx.fillRect(x0, y, nm - 4, ch);
+        ctx.fillStyle = "#fff"; ctx.font = `bold ${Math.round(ch * 0.42)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(`${r + 1}P ${p ? p.name : ""}`.slice(0, 7), x0 + (nm - 4) / 2, y + ch / 2);
+        for (let i = 0; i < n; i++) {
+          const k = first + i, F = p && p.frames[k], G = Q && Q.frames[k], x = x0 + nm + i * cw;
+          const sum = H => (H ? (H.a || 0) + (H.b || 0) : 0), win = done(F) && done(G) && sum(F) > sum(G);
+          ctx.fillStyle = win ? "#b9f6ca" : "#ffffff"; ctx.fillRect(x + 1, y, cw - 2, ch);
+          if (r === 0) { ctx.fillStyle = "#999"; ctx.font = `${Math.round(ch * 0.26)}px ${FONT}`; ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText(String(k + 1), x + 3, y + 1); }
+          if (!F) continue;
+          const s1 = F.mark === "X" ? "X" : F.a === 0 ? "-" : String(F.a), s2 = F.mark === "/" ? "/" : F.b == null ? "" : F.b === 0 ? "-" : String(F.b);
+          ctx.font = `bold ${Math.round(ch * 0.5)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillStyle = F.mark === "X" ? "#e0306a" : "#222"; ctx.fillText(s1, x + cw * 0.32, y + ch * 0.58);
+          ctx.fillStyle = F.mark === "/" ? "#2f8bff" : "#222"; ctx.fillText(s2, x + cw * 0.7, y + ch * 0.58);
+        }
+        const lead = p && Q && p.total > Q.total;
+        ctx.fillStyle = lead ? "#ffd43b" : "#e9ecef"; ctx.fillRect(x0 + nm + n * cw + 1, y, cw * 1.4 - 2, ch);
+        ctx.fillStyle = "#222"; ctx.font = `bold ${Math.round(ch * 0.58)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(String(p ? p.total : 0), x0 + nm + n * cw + cw * 0.7, y + ch * 0.55);
+      });
+      // 앞서는 사람 · 이번 프레임
+      const a = P[0] ? P[0].total : 0, b2 = P[1] ? P[1].total : 0, ly = y0 + ch * 2 + U * 0.04;
+      const lt = a === b2 ? "동점!" : `${(a > b2 ? P[0] : P[1]).name} ${Math.abs(a - b2)}점 앞섬`;
+      outlinedText(ctx, `${frame}프레임 · ${roll}구 · ${lt}`, z.cx, ly, Math.min(U * 0.03, z.w / 20), "#fff", "#2b2357", 3);
+      if (phase === "aim" && !finDone) {
+        const ok = aimOk(), mt = moveText(recommend() - aimX, ok, "좋아요! 추천 자리", 0.3);
+        outlinedText(ctx, mt, z.cx, ly + U * 0.055, Math.min(U * 0.04, z.w / 13), "#fff", ok ? "#2f8f2f" : "#c07800", 4);
+        const pw = Math.min(z.w * 0.2, U * 0.3), left = env.slot === 0, hx = left ? z.x0 + pw + (z.w - pw) / 2 : z.x0 + (z.w - pw) / 2;
+        const txt = roll === 1 ? "손을 내렸다가 앞으로 쭉!" : "남은 핀을 노려요!";
+        outlinedText(ctx, txt, hx, v.H * 0.88, Math.min(U * 0.04, (z.w - pw) / (txt.length * 0.95)), "#fff", "#8a2a5a", 4);
+      }
+      if (finDone) outlinedText(ctx, finText, z.cx, v.H * 0.45, Math.min(U * 0.08, z.w / 9), "#ffe14d", "#7a1a4a", 6);
+    }
     return {
       update(dt) {
         t += dt; swingT += dt;
         const b = body(), hands = env.tracker.hands;
         if (phase === "aim") {
           if (b) aimX = mover.toCourt(b.x);                                 // 옆으로 걸어서 조준
+          if (AUTO) {                                                        // 점검용: 추천 자리 근처로 가서 던짐
+            autoT += dt; aimX = clamp(recommend() + (Math.random() - 0.5) * 0.02 + (slot ? 0.05 : -0.05), -AIM_MAX, AIM_MAX);
+            if (autoT > 1.6 && t - lastRelease > 1) { autoT = 0; release({ bodySpeed: 7 + Math.random() * 5, vx: (Math.random() - 0.5) * 0.5 }, { sw: 1 }); }
+          }
           if (b && t - lastRelease > 1) hands.forEach(h => {
             if (!h.vis || phase !== "aim") return;
             if (h.y > b.hipY - b.sw * 0.35) lowT = t;                       // 손을 허리 아래로 내림
@@ -222,17 +315,18 @@ export default {
           if (!ball && settleT > 1.0) endRoll();
           if (settleT > 6) endRoll();
         }
-        syncScene(dt);
+        syncScene(dt); syncOpp(dt); finish();
       },
       draw(ctx) {
         // 카메라: 던지기 전엔 캐릭터 뒤, 굴러가면 공을 따라 핀 쪽으로
         const target = phase === "roll" && ball ? Math.max(wz(LANE_LEN) + 6.5, wz(ball.y) + 3.6) : phase === "roll" ? camZ : 5.0;
         camZ += (target - camZ) * 0.12;
         const near = clamp((camZ - 1) / 4, 0, 1);             // 1 = 캐릭터 뒤(던지기 전), 0 = 레인 위(공 따라감)
-        const cx = wx(aimX) * 0.5 + 0.45 * near;
+        const cx = wx(aimX) * 0.5 + 0.45 * near + (two ? OX * 0.32 : 0);   // 2인: 옆 레인 상대도 보이게
         camera.position.set(cx, 1.5 + 1.4 * near, camZ); camera.lookAt(cx * 0.5 - 0.2 * near, 0.2, camZ - 10);
         st.draw(ctx);
         const U = v.U;
+        if (two) { drawVersus(ctx); return; }
         // 점수표 (위쪽): 최근 5프레임 + 합계
         const n = 5, cw = Math.min(U * 0.1, z.w * 0.13), ch = cw * 0.95, w = cw * n + cw * 1.4, x0 = z.cx - w / 2, y0 = v.H * 0.105;
         ctx.fillStyle = "rgba(20,16,50,.85)"; rr(ctx, x0 - 6, y0 - 6, w + 12, ch + 12, U * 0.015); ctx.fill();
@@ -261,7 +355,7 @@ export default {
         }
       },
       stop() { st.dispose(); },
-      result: () => `쓰러뜨린 핀 ${total} · 스트라이크 ${strikes} · 스페어 ${spares}`,
+      result: () => `쓰러뜨린 핀 ${total} · 스트라이크 ${strikes} · 스페어 ${spares}` + (two && shared && shared.p[other] ? ` · 상대 ${shared.p[other].total}` : ""),
       // 설명 시연용
       get phase() { return phase; },
       get aimX() { return aimX; },

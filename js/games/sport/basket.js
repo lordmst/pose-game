@@ -1,9 +1,13 @@
 // 농구 (스포츠 리조트 3점 슛 대회처럼 3D): 바닷가 야외 코트, 3점 라인을 따라 놓인 공 랙 5곳에서 차례로 슛
 // 두 손을 머리 위로 올리면 슛 준비 → 힘 막대가 오르내림 → 초록 칸일 때 손을 위로 '휙' 튕기면 슛
 // 랙 5개 × 공 5개, 랙의 마지막 공(무지개 머니볼)은 2배. 깨끗하게 들어가면(스위시) 보너스
+// 2인: 같은 골대에 동시에 슛하는 대결. 상대 캐릭터가 내 옆에서 자기 랙 순서대로 슛하는 모습이 실시간으로 보임. 위쪽에 두 사람 점수·랙 진행
 import { burst, popup, outlinedText, rr } from "../../fx.js?v=48";
 import { sfx } from "../../audio.js?v=48";
-import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, playerAvatar } from "./kit3d.js?v=48";
+import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, avatar, playerAvatar, textBoard } from "./kit3d.js?v=48";
+
+const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 슛
+let shared = null;   // 2인 대결: 두 화면이 서로의 상태를 공개(p[slot])하고 상대를 그대로 그림
 
 const FLICK = 1.6;                  // 튕기기로 인정하는 손 속도(어깨너비/초)
 const SWEET = 0.8;                  // 힘 막대의 가장 좋은 자리 (0~1)
@@ -68,6 +72,9 @@ export default {
     const st = stage(env, { fov: 42, sky: ["#3fa3ef", "#dff3ff"], shadowSize: 14 });
     const { scene, camera } = st;
     court(scene);
+    const two = env.mode === 2, slot = two ? env.slot : 0, other = 1 - slot;
+    if (two && slot === 0) shared = { p: [null, null] };   // 새 경기마다 1P 화면이 먼저 만들어지며 새로 시작 (끝난 뒤 결과 글자에도 쓰려고 stop에서 지우지 않음)
+    const SIDE = slot === 0 ? 1 : -1;    // 상대는 내 오른쪽(1P 화면) / 왼쪽(2P 화면)에 1.3m 떨어져 섬
     // 랙 5곳 × 공 5개 (마지막은 머니볼)
     const racks = SPOTS.map(a => {
       const side = new THREE.Vector3(Math.cos(a), 0, -Math.sin(a)), base = spotPos(a, SPOT_R - 0.9).add(side.clone().multiplyScalar(-1.1));   // 내 캐릭터 왼쪽 앞 (오른쪽 아래 카메라 화면에 안 가리게)
@@ -82,6 +89,7 @@ export default {
     const fly = bball(false); scene.add(fly); fly.visible = false;
     const shadow = mesh(new THREE.CircleGeometry(BR * 1.1, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 }), { cast: false }); shadow.rotation.x = -Math.PI / 2; scene.add(shadow); shadow.visible = false;
 
+    let pts = 0, autoQ = null, finDone = false, finText = "", opp = null;
     let lastQ = 0, phase = "ready", setT = 0, stillT = 0, meter = 0, ball = null, rack = 1, idx = 0, waitT = 0.6, t = 0, made = 0, shots = 0, swish = 0, net = 0, flickT = 9, cheer = 0;
     const halfW = 0.07 * env.diff.reach, inW = 0.15 * env.diff.reach, period = 1.5 / env.diff.speed;
     const spotA = () => SPOTS[(rack - 1) % SPOTS.length];
@@ -109,7 +117,7 @@ export default {
     function score() {
       const b = ball, inn = b.res === "swish" || b.res === "rim", s = st.toScreen(RIM);
       if (inn) {
-        made++; net = 1; cheer = 1.4;
+        made++; net = 1; cheer = 1.4; pts += (b.money ? 2 : 1) + (b.res === "swish" ? 1 : 0);
         env.award(b.money ? 2 : 1, s.x, s.y - v.U * 0.08);
         if (b.res === "swish") { swish++; env.award(1, s.x + v.U * 0.1, s.y - v.U * 0.02); popup(s.x, s.y + v.U * 0.12, "깨끗하게!", { size: v.U * 0.05, color: "#fff", stroke: "#e0306a" }); sfx.fever(); }
         else { popup(s.x, s.y + v.U * 0.12, "들어갔다!", { size: v.U * 0.045, color: "#fff", stroke: "#2fb65a" }); sfx.catch(env.player.combo); }
@@ -128,11 +136,48 @@ export default {
       me.position.copy(p); me.rotation.y = a + Math.PI;
       return { a, p };
     }
+    // 내 상태 공개 (상대 화면이 그대로 그림)
+    if (two) shared.p[slot] = { name: env.name, color: env.color, get pts() { return pts; }, get made() { return made; }, get shots() { return shots; }, get rack() { return rack; }, get idx() { return idx; },
+      get phase() { return phase; }, get flickT() { return flickT; }, get fly() { return fly.visible ? fly.position : null; }, get money() { return !!(ball && ball.money); }, get pose() { return env.tracker.pts; } };
+    // 상대: 같은 골대에 슛. 자기 랙 자리에서 내 옆(SIDE)으로 비켜 서서 보임
+    function syncOpp(dt) {
+      const O = two && shared.p[other]; if (!O) return;
+      if (!opp) {
+        const av = avatar({ shirt: O.color || "#3b5bdb", pants: "#2b3a67", girl: /엄마|연제/.test(O.name || "") }); scene.add(av);
+        const hb = bball(false), fb = bball(false); scene.add(hb, fb);
+        const tag = textBoard(1.3, 0.3, { bg: "rgba(0,0,0,.55)" }); tag.set(O.name || "상대"); scene.add(tag);
+        opp = { av, hb, fb, tag };
+      }
+      const a = SPOTS[(O.rack - 1) % SPOTS.length], tan = new THREE.Vector3(Math.cos(a), 0, -Math.sin(a)), off = tan.multiplyScalar(1.3 * SIDE);
+      const base = spotPos(a).add(off), { av, hb, fb, tag } = opp;
+      av.position.copy(base); av.rotation.y = a + Math.PI;
+      if (O.flickT < 0.45) { av.arm(0, 2.9, 0.4, 0.1); av.arm(1, 2.9, 0.4, 0.1); }
+      else if (O.phase === "set") { av.arm(0, 2.7, 0.3, 1.4); av.arm(1, 2.7, 0.3, 1.4); }
+      else av.mimic(O.pose, true);
+      av.idle(t + 1.3);
+      tag.position.copy(base).add(new THREE.Vector3(0, 2.25, 0)); tag.lookAt(camera.position);
+      hb.visible = O.phase !== "fly";
+      if (hb.visible) { av.updateMatrixWorld(true); hb.position.copy(av.handWorld(0).add(av.handWorld(1)).multiplyScalar(0.5)); }
+      const F = O.fly; fb.visible = !!F;
+      if (F) { const k = Math.min(1, F.distanceTo(RIM) / SPOT_R); fb.position.copy(F).add(off.clone().multiplyScalar(k)); fb.rotation.x -= dt * 8; }   // 골대 가까이 갈수록 옆으로 비킨 만큼을 줄여 골대로 들어감
+    }
+    // 게임 끝: 점수가 높은 쪽 승리 보너스
+    function finish() {
+      if (!two || finDone || env.progress() < 0.985) return;
+      finDone = true; const O = shared.p[other], th = O ? O.pts : 0;
+      if (pts > th) { finText = `🏆 ${env.name} 승리!`; env.award(10, z.cx, v.H * 0.4); sfx.fanfare(); }
+      else if (pts === th) finText = "무승부!"; else finText = `${O.name} 승리! 다음엔 이겨요`;
+    }
     return {
       update(dt) {
         t += dt; net = Math.max(0, net - dt * 1.5); flickT += dt; cheer = Math.max(0, cheer - dt);
         const b = body(), hs = env.tracker.hands.filter(h => h.vis);
-        if (phase === "ready") {
+        if (AUTO && phase === "ready" && waitT <= 0) { phase = "set"; setT = 0; stillT = 0.2; meter = 0; autoQ = null; }   // 점검용: 저절로 슛 준비
+        if (AUTO && phase === "set") {
+          if (autoQ == null) autoQ = Math.random() < 0.75 ? SWEET + (Math.random() - 0.5) * 0.08 : Math.random();
+          setT += dt; meter = 0.5 - 0.5 * Math.cos(Math.PI * 2 * setT / period);
+          if (setT > 0.25 && Math.abs(meter - autoQ) < 0.04) shoot(meter); else if (setT > 3.2) shoot(meter);
+        } else if (phase === "ready") {
           waitT -= dt;
           if (waitT <= 0 && b && hs.length && hs.every(h => h.y < b.sy - b.sw * 0.5)) { phase = "set"; setT = 0; stillT = 0; meter = 0; }   // 두 손을 머리 위로
         } else if (phase === "set") {
@@ -178,11 +223,12 @@ export default {
         scene.userData.fans.forEach(f => { f.position.y += Math.sin(t * (cheer ? 14 : 3) + f.userData.bob) * dt * (cheer ? 1.2 : 0.12); });
         scene.userData.sea.update(t);
         shadow.visible = fly.visible; if (fly.visible) shadow.position.set(fly.position.x, 0.06, fly.position.z);
+        syncOpp(dt); finish();
       },
       draw(ctx) {
         // 카메라: 내 캐릭터 뒤 오른쪽 위에서 골대를 봄
         const a = spotA(), out = spotPos(a).normalize(), side = new THREE.Vector3(out.z, 0, -out.x);
-        const cp = spotPos(a, SPOT_R + 3.9).add(side.multiplyScalar(-0.7)); cp.y = 2.75;
+        const cp = spotPos(a, SPOT_R + (two ? 4.8 : 3.9)).add(side.multiplyScalar(two ? 0.6 * SIDE : -0.7)); cp.y = two ? 3.1 : 2.75;   // 2인: 옆의 상대도 보이게
         camera.position.copy(cp); camera.lookAt(0, 2.2, 0);
         st.draw(ctx);
         const U = v.U;
@@ -192,6 +238,22 @@ export default {
         ctx.fillStyle = "rgba(255,212,0,.6)"; ctx.fillRect(mx - mw / 2, my + mh * (1 - SWEET - inW), mw, mh * inW * 2);
         ctx.fillStyle = "#37d67a"; ctx.fillRect(mx - mw / 2, my + mh * (1 - SWEET - halfW), mw, mh * halfW * 2);
         if (phase === "set" && setT > 0) { const yy = my + mh * (1 - meter); ctx.fillStyle = "#fff"; ctx.fillRect(mx - mw, yy - 3, mw * 2, 6); }
+        // 2인 점수판: 두 사람 점수 · 랙 진행(머니볼까지 누가 먼저)
+        if (two) {
+          const P = [shared.p[0], shared.p[1]], bw2 = Math.min(z.w * 0.94, U * 0.8), bx2 = z.cx - bw2 / 2, by2 = v.H * 0.1, bh2 = U * 0.1;
+          ctx.fillStyle = "rgba(120,50,0,.85)"; rr(ctx, bx2, by2, bw2, bh2, U * 0.02); ctx.fill();
+          const fs = Math.min(U * 0.034, z.w / 20);
+          P.forEach((p, r) => {
+            const cx2 = bx2 + bw2 * (r ? 0.75 : 0.25), Q = P[1 - r], lead = p && Q && p.pts > Q.pts;
+            outlinedText(ctx, `${r + 1}P ${p ? p.name : ""} ${p ? p.pts : 0}점${lead ? " 👑" : ""}`, cx2, by2 + bh2 * 0.35, fs, "#fff", p ? p.color : "#555", 3);
+            outlinedText(ctx, p ? `랙 ${p.rack} · ${p.idx + 1}번째 공 ${p.idx === 4 ? "🌈" : ""}` : "", cx2, by2 + bh2 * 0.75, fs * 0.8, "#ffe8c0", "#4a1d00", 2);
+          });
+          outlinedText(ctx, ":", z.cx, by2 + bh2 * 0.35, fs, "#fff", "#4a1d00", 2);
+          if (finDone) outlinedText(ctx, finText, z.cx, v.H * 0.45, Math.min(U * 0.08, z.w / 9), "#ffe14d", "#7a3000", 6);
+          else if (phase === "ready") outlinedText(ctx, idx === 4 ? "머니볼! 두 손을 머리 위로!" : "두 손을 머리 위로!", z.cx, v.H * 0.8, Math.min(U * 0.045, z.w / 12), "#fff", "#c05000");
+          else if (phase === "set") outlinedText(ctx, "초록 칸에서 위로 휙!", z.cx, v.H * 0.8, Math.min(U * 0.045, z.w / 12), "#fff", "#1d8f47");
+          return;
+        }
         // 점수판: 랙 · 성공 · 남은 공 (머니볼은 무지개)
         const bw = Math.min(z.w * 0.86, U * 0.72), bx = z.cx - bw / 2, by = v.H * 0.11, bh = U * 0.075;
         ctx.fillStyle = "rgba(120,50,0,.82)"; rr(ctx, bx, by, bw, bh, U * 0.02); ctx.fill();
@@ -207,7 +269,7 @@ export default {
         else if (phase === "set") outlinedText(ctx, "초록 칸에서 위로 휙!", z.cx, v.H * 0.8, Math.min(U * 0.045, z.w / 12), "#fff", "#1d8f47");
       },
       stop() { st.dispose(); },
-      result: () => `${shots}개 중 ${made}개 성공 · 깨끗한 슛 ${swish}`,
+      result: () => `${shots}개 중 ${made}개 성공 · 깨끗한 슛 ${swish}` + (two && shared && shared.p[other] ? ` · 대결 ${pts}:${shared.p[other].pts}` : ""),
       // 설명 시연용
       get phase() { return phase; },
       get meter() { return meter; },

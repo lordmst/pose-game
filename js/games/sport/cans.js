@@ -2,9 +2,13 @@
 // 공 기계가 보낸 공이 내 쪽에 바운드되어 오면 타이밍 맞춰 휘둘러 받아침. 손을 휘두른 방향(옆)과 손 높이(위·아래)로 노리는 곳이 정해짐
 // 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임. 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받아칠 수 있음
 // 깡통 하나에 1점, 받침이 없어진 깡통은 같이 무너짐. 다 쓰러뜨리면 보너스
+// 2인: 탁구대 두 개를 나란히 놓고 각자 자기 피라미드를 무너뜨리는 대결. 상대 캐릭터·공·깡통이 옆 탁구대에서 실시간으로 보임. 먼저 올 클리어하면 보너스
 import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=48";
 import { sfx } from "../../audio.js?v=48";
-import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, playerAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=48";
+import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, avatar, playerAvatar, racket, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=48";
+
+const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 움직이고 침
+let shared = null;   // 2인 대결: 두 화면이 서로의 상태를 공개(p[slot])하고 상대 탁구대를 그대로 그림. firstClear: 먼저 올 클리어한 자리
 
 const FLIGHT = 1.2;    // 공이 나에게 오는 시간(초, 보통)
 const SHOT = 0.55;     // 받아친 공이 깡통까지 가는 시간(초)
@@ -21,22 +25,24 @@ const GS = 0.42;       // 이동 안내(점선) 크기 비율 (탁구대에 맞�
 
 const arc = (a, b, h, u) => new THREE.Vector3(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u + 4 * h * u * (1 - u), a.z + (b.z - a.z) * u);
 
-function hall(scene) {
-  ground(scene, "#2c4a78", 200);
-  const floor = box(9, 0.02, 12, "#3a6fb0", { receive: true, cast: false }); floor.position.y = 0.01; scene.add(floor);
-  // 탁구대: 파란 판 + 흰 줄 + 다리 + 네트
-  const top = box(TW * 2, 0.04, TL * 2, "#1f5fa8", { receive: true }); top.position.y = TOP - 0.02; scene.add(top);
-  const line = (w, d, x, z) => { const m = box(w, 0.005, d, "#ffffff", { cast: false, receive: true }); m.position.set(x, TOP + 0.002, z); scene.add(m); };
+// 탁구대 하나 (ox: 좌우 위치): 파란 판 + 흰 줄 + 다리 + 네트 + 공 기계
+function table(scene, ox = 0) {
+  const top = box(TW * 2, 0.04, TL * 2, "#1f5fa8", { receive: true }); top.position.set(ox, TOP - 0.02, 0); scene.add(top);
+  const line = (w, d, x, z) => { const m = box(w, 0.005, d, "#ffffff", { cast: false, receive: true }); m.position.set(ox + x, TOP + 0.002, z); scene.add(m); };
   line(TW * 2, 0.02, 0, TL - 0.01); line(TW * 2, 0.02, 0, -TL + 0.01); line(0.02, TL * 2, TW - 0.01, 0); line(0.02, TL * 2, -TW + 0.01, 0); line(0.006, TL * 2, 0, 0);
-  [[-1, -1], [-1, 1], [1, -1], [1, 1]].forEach(([sx, sz]) => { const l = box(0.06, TOP - 0.04, 0.06, "#333"); l.position.set(sx * (TW - 0.15), (TOP - 0.04) / 2, sz * (TL - 0.25)); scene.add(l); });
+  [[-1, -1], [-1, 1], [1, -1], [1, 1]].forEach(([sx, sz]) => { const l = box(0.06, TOP - 0.04, 0.06, "#333"); l.position.set(ox + sx * (TW - 0.15), (TOP - 0.04) / 2, sz * (TL - 0.25)); scene.add(l); });
   const net = mesh(new THREE.PlaneGeometry(TW * 2 + 0.3, 0.15), new THREE.MeshStandardMaterial({ color: "#111", transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
-  net.position.set(0, TOP + 0.075, 0); scene.add(net);
-  const tape = box(TW * 2 + 0.3, 0.015, 0.01, "#fff"); tape.position.set(0, TOP + 0.15, 0); scene.add(tape);
-  // 공 기계 (먼 쪽 왼편)
+  net.position.set(ox, TOP + 0.075, 0); scene.add(net);
+  const tape = box(TW * 2 + 0.3, 0.015, 0.01, "#fff"); tape.position.set(ox, TOP + 0.15, 0); scene.add(tape);
   const mc = new THREE.Group(), body = box(0.3, 0.35, 0.3, "#ff8c1a"); body.position.y = 0.95; const pole = cyl(0.03, 0.03, 0.8, "#555"); pole.position.y = 0.4;
   const mouth = cyl(0.07, 0.07, 0.12, "#222"); mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 0.98, 0.18);
   const hop = cyl(0.18, 0.1, 0.18, "#ffffff", { opacity: 0.7 }); hop.position.y = 1.2;
-  mc.add(body, pole, mouth, hop); mc.position.set(-TW - 0.35, 0, -TL - 0.2); mc.rotation.y = 0.35; scene.add(mc);
+  mc.add(body, pole, mouth, hop); mc.position.set(ox - TW - 0.35, 0, -TL - 0.2); mc.rotation.y = 0.35; scene.add(mc);
+}
+function hall(scene, oppX = 0) {
+  ground(scene, "#2c4a78", 200);
+  const floor = box(9, 0.02, 12, "#3a6fb0", { receive: true, cast: false }); floor.position.y = 0.01; scene.add(floor);
+  table(scene, 0); if (oppX) table(scene, oppX);   // 2인: 상대 탁구대를 옆에
   // 경기장 울타리·관중석·바깥 나무
   [-1, 1].forEach(s => { const w = box(0.15, 0.7, 12, "#1d3f73"); w.position.set(s * 4.4, 0.35, 0); scene.add(w); });
   const back = box(9, 0.7, 0.15, "#1d3f73"); back.position.set(0, 0.35, -5.9); scene.add(back);
@@ -64,7 +70,9 @@ export default {
     const z = env.zone, v = env.view, D = env.diff;
     const st = stage(env, { fov: 42, sky: ["#4aa8f0", "#d4efff"], shadowSize: 8 });
     const { scene, camera } = st;
-    hall(scene);
+    const two = env.mode === 2, slot = two ? env.slot : 0, other = 1 - slot, OX = two ? (slot === 0 ? 2.3 : -2.3) : 0;   // 상대 탁구대: 1P 화면 오른쪽 / 2P 화면 왼쪽
+    if (two && slot === 0) shared = { p: [null, null], firstClear: -1 };   // 새 경기마다 1P 화면이 먼저 만들어지며 새로 시작 (끝난 뒤 결과 글자에도 쓰려고 stop에서 지우지 않음)
+    hall(scene, OX);
     const me = playerAvatar(env); me.scale.setScalar(0.85); me.rotation.y = Math.PI; me.position.set(0.55, 0, TL + 0.45); scene.add(me);
     me.hold(1, racket(env.color || "#ff6b6b", true));
     const pball = sphere(0.035, "#ffffff", { rough: 0.3 }); scene.add(pball);
@@ -77,6 +85,7 @@ export default {
     guideG.position.y = TOP + 0.004;   // 발밑은 화면 아래로 가려서, 탁구대 내 쪽 가장자리 위에 표시
     const guideM = moveGuide(guideG), FEET_Z = TL - 0.2;
 
+    let finDone = false, finText = "", opp = null;
     let B = null, wait = 1.0, cans = [], refill = 0, knocked = 0, clears = 0, shots = 0, t = 0, swingT = 9, swingDir = -1, myX = 0, cheer = 0, camX = 0;
     const near = () => !!B && B.dir === 1 && Math.abs(myX - B.spot) <= REACH * D.reach;
     // 지금 자리에서 lo~hi(m) 떨어진 자리 (범위 안쪽으로)
@@ -121,12 +130,43 @@ export default {
       if (p && p[11].v && p[12].v) { const sw = Math.hypot(p[11].x - p[12].x, p[11].y - p[12].y); return { x: (p[11].x + p[12].x) / 2, y: (p[11].y + p[12].y) / 2, sw: Math.max(sw, v.U * 0.08) }; }
       return { x: z.cx, y: v.H * 0.45, sw: v.U * 0.13 };
     };
+    // 내 상태 공개 (상대 화면이 내 탁구대를 그대로 그림)
+    if (two) shared.p[slot] = { name: env.name, color: env.color, get myX() { return myX; }, get knocked() { return knocked; }, get clears() { return clears; }, get cans() { return cans; },
+      get ball() { return pball.visible ? pball.position : null; }, get swingT() { return swingT; }, get swingDir() { return swingDir; }, get pose() { return env.tracker.pts; } };
+    function syncOpp() {
+      const O = two && shared.p[other]; if (!O) return;
+      if (!opp) {
+        const av = avatar({ shirt: O.color || "#3b5bdb", pants: "#2b3a67", girl: /엄마|연제/.test(O.name || "") }); av.scale.setScalar(0.85); av.rotation.y = Math.PI; av.hold(1, racket(O.color || "#3b5bdb", true)); scene.add(av);
+        const ob = sphere(0.035, "#ffffff", { rough: 0.3 }); scene.add(ob);
+        const oc = []; ROWS.forEach((n, r) => { for (let i = 0; i < n; i++) { const m = makeCan(COLORS[(r + i) % COLORS.length]); scene.add(m); oc.push(m); } });
+        const tag = textBoard(1.0, 0.24, { bg: "rgba(0,0,0,.55)" }); tag.set(O.name || "상대"); scene.add(tag);
+        opp = { av, ob, oc, tag };
+      }
+      const { av, ob, oc, tag } = opp;
+      av.position.set(OX + O.myX, 0, TL + 0.45);
+      if (O.swingT < 0.4) { const u = Math.min(1, O.swingT / 0.22); av.body.rotation.y = O.swingDir * (0.7 - 1.4 * u); av.arm(1, 1.1, 0.5 + 0.7 * u, 0.5); }
+      else { av.body.rotation.y *= 0.8; av.mimic(O.pose, true); }
+      tag.position.set(OX + O.myX, 1.75, TL + 0.45); tag.lookAt(camera.position);
+      const P = O.ball; ob.visible = !!P; if (P) ob.position.set(OX + P.x, P.y, P.z);
+      oc.forEach((m, i) => { const c = O.cans[i]; m.visible = !!c && c.m.visible; if (!c) return; m.position.set(OX + c.m.position.x, c.m.position.y, c.m.position.z); m.rotation.copy(c.m.rotation); });
+    }
+    function finish() {
+      if (!two || finDone || env.progress() < 0.985) return;
+      finDone = true; const O = shared.p[other], th = O ? O.knocked : 0;
+      if (knocked > th) { finText = `🏆 ${env.name} 승리!`; env.award(10, z.cx, v.H * 0.4); sfx.fanfare(); }
+      else if (knocked === th) finText = "무승부!"; else finText = `${O.name} 승리! 다음엔 이겨요`;
+    }
     return {
       update(dt) {
         t += dt; swingT += dt; cheer = Math.max(0, cheer - dt);
+        syncOpp(); finish();
         const hands = env.tracker.hands, fast = hands.find(h => h.vis && h.bodySpeed >= SWING * D.punch);
         if (fast && swingT > 0.45) { swingT = 0; swingDir = fast.vx > 0 ? 1 : -1; B && (B.hand = fast); }
         myX = mover.follow(myX, dt); me.position.x = myX;                      // 좌우는 내 몸으로
+        if (AUTO && B && B.dir === 1) {                                          // 점검용: 점선 자리로 가서 때에 맞춰 휘두름
+          myX = B.spot; me.position.x = myX; const k0 = B.t / B.T;
+          if (k0 > 0.86 && !B.autoDone) { B.autoDone = true; if (Math.random() < 0.8) { const bb = body(); swingT = 0; swingDir = Math.random() < 0.5 ? 1 : -1; B.hand = { vis: true, x: bb.x + (Math.random() - 0.5) * bb.sw, y: bb.y + bb.sw * (1 - Math.random() * 2.2), vx: swingDir, speed: 1, bodySpeed: 8 }; } }
+        }
         const guide = !!B && B.dir === 1;
         if (guide) guideM.show(myX / GS, B.spot / GS, FEET_Z / GS, near(), t); else guideM.hide();
         st.pipMark = guide ? { x: mover.toScreenX(B.spot), ok: near() } : null;
@@ -152,6 +192,10 @@ export default {
         else if (cans.length && cans.every(c => c.st !== "stand")) {
           clears++; refill = 1.6; cheer = 1.6; sfx.fanfare(); env.award(5, z.cx, v.H * 0.4);
           popup(z.cx, v.H * 0.32, "올 클리어!", { size: v.U * 0.07, color: "#fff", stroke: "#e0306a", life: 1.3 });
+          if (two && shared.firstClear < 0) {   // 2인: 먼저 올 클리어한 사람에게 보너스
+            shared.firstClear = slot; env.award(5, z.cx, v.H * 0.5);
+            popup(z.cx, v.H * 0.4, "먼저 올 클리어! 보너스", { size: v.U * 0.05, color: "#ffe14d", stroke: "#7a1a4a", life: 1.6 });
+          }
         }
         if (!B) { wait -= dt; if (wait <= 0) send(); pball.visible = pshadow.visible = mark.visible = false; return; }
         B.t += dt;
@@ -188,11 +232,17 @@ export default {
       draw(ctx) {
         const cx = B && B.dir === 1 ? (myX + B.spot) / 2 : myX;   // 내 캐릭터와 가야 할 자리가 함께 보이게
         camX += (cx - camX) * 0.12;
-        camera.position.set(camX * 0.5 + 0.1, 3.0, TL + 2.9); camera.lookAt(camX * 0.25, TOP - 0.2, CZ + 0.3);
+        if (two) { camera.position.set(camX * 0.4 + OX * 0.42, 3.3, TL + 3.6); camera.lookAt(camX * 0.2 + OX * 0.38, TOP - 0.2, CZ + 0.3); }   // 2인: 옆 탁구대 상대도 보이게
+        else { camera.position.set(camX * 0.5 + 0.1, 3.0, TL + 2.9); camera.lookAt(camX * 0.25, TOP - 0.2, CZ + 0.3); }
         st.draw(ctx);
         const U = v.U, left = cans.filter(c => c.st === "stand").length;
         const bw = Math.min(z.w * 0.86, U * 0.7), bx = z.cx - bw / 2, by = v.H * 0.11, bh = U * 0.07;
         ctx.fillStyle = "rgba(120,20,70,.8)"; rr(ctx, bx, by, bw, bh, U * 0.02); ctx.fill();
+        if (two) {   // 2인: 두 사람이 쓰러뜨린 깡통 수 (앞서는 쪽 👑)
+          const P = [shared.p[0], shared.p[1]], a = P[0] ? P[0].knocked : 0, b2 = P[1] ? P[1].knocked : 0;
+          outlinedText(ctx, `1P ${P[0] ? P[0].name : ""} ${a}${a > b2 ? "👑" : ""}  :  ${b2}${b2 > a ? "👑" : ""} ${P[1] ? P[1].name : ""} 2P`, z.cx, by + bh / 2, Math.min(U * 0.034, z.w / 17), "#fff", "#5a0d33", 3);
+          if (finDone) outlinedText(ctx, finText, z.cx, v.H * 0.45, Math.min(U * 0.08, z.w / 9), "#ffe14d", "#7a1a4a", 6);
+        } else
         outlinedText(ctx, `남은 깡통 ${left} · 쓰러뜨린 깡통 ${knocked}`, z.cx, by + bh / 2, Math.min(U * 0.034, z.w / 16), "#fff", "#5a0d33", 3);
         if (B && B.dir === 1) {
           const ok = near(), fs = Math.min(U * 0.045, z.w / 12), y = by + bh + U * 0.1;   // 안내 줄 아래
@@ -203,7 +253,7 @@ export default {
         outlinedText(ctx, "옆으로 휘두르면 옆으로, 손을 높이 치면 위쪽 깡통!", z.cx, by + bh + U * 0.03, Math.min(U * 0.028, z.w / 22), "#fff", "#555", 3);
       },
       stop() { st.dispose(); },
-      result: () => `쓰러뜨린 깡통 ${knocked} · 올 클리어 ${clears}번 · 받아친 공 ${shots}`,
+      result: () => `쓰러뜨린 깡통 ${knocked} · 올 클리어 ${clears}번 · 받아친 공 ${shots}` + (two && shared && shared.p[other] ? ` · 대결 ${knocked}:${shared.p[other].knocked}` : ""),
       get ball() { return B ? { incoming: B.dir === 1, k: B.t / B.T, moveTo: B.dir === 1 ? mover.toScreenX(B.spot) : null, near: near() } : null; },
       get left() { return cans.filter(c => c.st === "stand").length; },
     };
