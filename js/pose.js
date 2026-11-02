@@ -173,11 +173,12 @@ export class Tracker {
 }
 
 /* ---------- 선수 배정: '만세'를 한 사람만 선수로 인정 ----------
-   1) 어깨·엉덩이가 보이는 사람이 두 손을 머리 위로 올려 CLAIM_SEC 동안 유지하면 그 자리의 선수가 됨
+   1) 어깨가 보이는 사람이 두 팔을 머리 위로 올려 CLAIM_SEC 동안 유지하면 그 자리의 선수가 됨
       (태블릿을 들고 있는 사람, 구경하는 사람은 만세를 하지 않으므로 선수가 되지 않음)
-   2) 한 번 잡힌 선수는 위치를 따라가며 고정 → 다른 사람이 화면에 들어와도 바뀌지 않음
+   2) 화면의 사람마다 번호를 붙여(위치가 이어지고 몸 크기가 비슷해야 같은 사람) 따라가고, 선수는 자기 번호로만 따라감
+      → 다른 사람이 앞으로 걸어 들어오거나 선수 앞을 지나가도 선수가 바뀌지 않음 (가까이 온 사람은 몸 크기가 확 달라서 구분됨)
    3) 게임 밖(메뉴·자리 잡기)에서는 다른 사람이 같은 구역에서 만세하면 선수가 바뀜. 게임 중에는 안 바뀜
-   4) 선수가 2초 넘게 안 보이면 해제 → 다시 만세하면 인식 */
+   4) 선수가 3초 넘게 안 보이면 해제 → 다시 만세하면 인식 */
 export const CLAIM_SEC = 0.7;
 // 만세 판정 (선수 인식용). 예전엔 엉덩이까지 보이고 두 손목이 화면 안에서 코보다 위여야 했음 → 가까이 서거나 손이 화면 위로 나가면 실패
 // 지금: 두 어깨만 보이면 되고, 팔마다 ① 손목이 머리보다 위 또는 ② 팔꿈치가 어깨보다 확실히 위(손목은 화면 밖이어도 됨)면 '든 팔'
@@ -199,47 +200,78 @@ const LOST_SEC = 3.0;   // 선수가 이만큼(초) 안 보이면 해제 (잠깐
 export class Assigner {
   constructor(n) {
     this.n = n; this.locks = Array.from({ length: n }, () => null);
-    this.claims = Array.from({ length: n }, () => ({ t: 0, x: 0, y: 0, sc: 0 }));   // 만세 진행 중인 사람
-    this.ignored = [];
+    this.claims = Array.from({ length: n }, () => ({ t: 0, x: 0, y: 0, sc: 0, tid: -1 }));   // 만세 진행 중인 사람
+    this.ignored = []; this.tracks = []; this.nextId = 1;
   }
-  reset() { this.locks = this.locks.map(() => null); this.claims.forEach(c => { c.t = 0; }); }
+  reset() { this.locks = this.locks.map(() => null); this.claims.forEach(c => { c.t = 0; c.tid = -1; }); }
   claimProgress(i) { return Math.min(1, this.claims[i].t / CLAIM_SEC); }
+  // 화면에 보이는 사람마다 번호(track)를 붙여 따라감: 위치가 이어지고 크기가 비슷해야 같은 사람.
+  // 앞으로 걸어 들어온 사람은 갑자기 크게(가깝게) 보이므로 선수와 다른 사람으로 구분됨
+  matchTracks(cands, dt, view) {
+    const pairs = [];
+    for (const T of this.tracks) {
+      const px = T.x + T.vx * Math.min(T.miss + dt, 0.3), py = T.y + T.vy * Math.min(T.miss + dt, 0.3);
+      for (const c of cands) {
+        const ratio = c.sz / T.sz;
+        if (ratio < 0.67 || ratio > 1.5) continue;                                   // 크기가 확 달라지면 다른 사람
+        const d = Math.hypot(c.cx - px, c.cy - py);
+        if (d > T.sz * (1.0 + 2.5 * Math.min(T.miss, 1.5)) + view.U * 0.03) continue;  // 너무 멀리 튀면 다른 사람 (안 보인 시간만큼 넉넉히)
+        pairs.push({ T, c, cost: d / T.sz + 2.5 * Math.abs(Math.log(ratio)) });
+      }
+    }
+    pairs.sort((a, b) => a.cost - b.cost);
+    for (const T of this.tracks) T.cand = null;
+    for (const { T, c, cost } of pairs) {
+      if (T.cand || c.tid) continue;
+      T.cand = c; c.tid = T.id;
+      const k = Math.min(1, dt / 0.15);
+      T.vx += ((c.cx - T.x) / Math.max(dt, 0.016) - T.vx) * k; T.vy += ((c.cy - T.y) / Math.max(dt, 0.016) - T.vy) * k;
+      T.x = c.cx; T.y = c.cy; T.sz = T.sz * 0.8 + c.sz * 0.2; T.sc = c.sc; T.miss = 0;
+    }
+    for (const T of this.tracks) if (!T.cand) { T.miss += dt; T.vx *= 0.9; T.vy *= 0.9; }
+    this.tracks = this.tracks.filter(T => T.miss <= LOST_SEC);
+    for (const c of cands) if (!c.tid) { const T = { id: this.nextId++, x: c.cx, y: c.cy, vx: 0, vy: 0, sz: c.sz, sc: c.sc, miss: 0, cand: c }; c.tid = T.id; this.tracks.push(T); }
+  }
   assign(raws, cam, view, dt, visSupported, allowTakeover) {
     const cands = raws.map(r => {
-      const a = cam.toScreen(r[11]), b = cam.toScreen(r[12]);
-      const up = armsUp(r, cam, visSupported);   // 만세 (가까이 서도, 손이 화면 위로 나가도 인식)
-      return { r, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, sc: Math.hypot(a.x - b.x, a.y - b.y), up, used: false };
+      const a = cam.toScreen(r[11]), b = cam.toScreen(r[12]), sc = Math.hypot(a.x - b.x, a.y - b.y);
+      // 몸 크기: 어깨너비와 몸통 길이 중 큰 쪽 (옆으로 돌아서 어깨너비가 줄어도 크기는 그대로)
+      let sz = sc;
+      if (r[23] && r[24] && [23, 24].every(i => r[i].y < 1.05 && (!visSupported || (r[i].visibility == null ? 1 : r[i].visibility) > 0.3))) {
+        const h1 = cam.toScreen(r[23]), h2 = cam.toScreen(r[24]);
+        sz = Math.max(sc, 0.75 * Math.hypot((a.x + b.x - h1.x - h2.x) / 2, (a.y + b.y - h1.y - h2.y) / 2));
+      }
+      return { r, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, sc, sz: Math.max(sz, view.U * 0.02), up: armsUp(r, cam, visSupported), used: false, tid: 0 };
     });
+    this.matchTracks(cands, dt, view);
     const out = this.locks.map(() => null);
-    // 1) 이미 잡힌 선수 따라가기
+    // 1) 이미 잡힌 선수: 자기 번호(track)만 따라감. 다른 사람이 그 자리로 와도 바뀌지 않음
     this.locks.forEach((L, i) => {
       if (!L) return;
-      let best = null, bd = Infinity;
-      for (const c of cands) {
-        if (c.used) continue;
-        const d = Math.hypot(c.cx - L.x, c.cy - L.y), ratio = c.sc / L.sc;
-        if (d < Math.max(L.sc * 1.6, view.U * 0.12) && ratio > 0.5 && ratio < 2 && d < bd) { best = c; bd = d; }
-      }
-      if (best) { best.used = true; out[i] = best.r; L.x = best.cx; L.y = best.cy; L.sc = L.sc * 0.8 + best.sc * 0.2; L.lostT = 0; }
-      else if ((L.lostT += dt) > LOST_SEC) this.locks[i] = null;
+      const T = this.tracks.find(t => t.id === L.tid);
+      if (!T) { this.locks[i] = null; return; }                       // 오래 안 보여서 번호가 없어짐 → 해제 (다시 만세)
+      L.lostT = T.miss;
+      if (T.cand) { T.cand.used = true; out[i] = T.cand.r; L.x = T.x; L.y = T.y; L.sc = T.sc; }
     });
-    // 2) 만세 하는 사람 찾기 (빈자리, 또는 게임 밖이면 선수 교체)
+    // 2) 만세 하는 사람 찾기 (빈자리, 또는 게임 밖이면 선수 교체). 다른 자리 선수는 후보에서 뺌
+    const lockedIds = new Set(this.locks.filter(Boolean).map(L => L.tid));
     this.claims.forEach((C, i) => {
       if (this.locks[i] && !allowTakeover) { C.t = 0; return; }
       const x0 = view.W * i / this.n, x1 = view.W * (i + 1) / this.n;
       let best = null, bd = Infinity;
       for (const c of cands) {
-        if (c.used || !c.up) continue;
+        if (c.used || !c.up || (lockedIds.has(c.tid) && !(this.locks[i] && this.locks[i].tid === c.tid))) continue;
+        if (this.locks[i] && this.locks[i].tid === c.tid) continue;     // 이미 이 자리 선수면 다시 셀 필요 없음
         if (this.n === 2 && (c.cx < x0 - view.W * 0.06 || c.cx > x1 + view.W * 0.06)) continue;   // 가운데 선 근처에 서도 인식
-        const d = C.t > 0 ? Math.hypot(c.cx - C.x, c.cy - C.y) : Math.abs(c.cx - (x0 + x1) / 2);
+        const d = c.tid === C.tid ? -1 : Math.abs(c.cx - (x0 + x1) / 2);   // 세던 사람을 먼저
         if (d < bd) { best = c; bd = d; }
       }
       if (!best) { C.t = Math.max(0, C.t - dt); return; }                       // 잠깐 끊겨도 바로 0이 되지 않게 천천히 줄어듦
-      if (C.t > 0 && Math.hypot(best.cx - C.x, best.cy - C.y) > Math.max(C.sc * 1.5, view.U * 0.12)) C.t = 0;   // 다른 사람이면 처음부터
+      if (best.tid !== C.tid) { C.t = 0; C.tid = best.tid; }                     // 다른 사람이면 처음부터
       C.t += dt; C.x = best.cx; C.y = best.cy; C.sc = best.sc;
       if (C.t >= CLAIM_SEC) {
         best.used = true; out[i] = best.r; C.t = 0;
-        this.locks[i] = { x: best.cx, y: best.cy, sc: best.sc, lostT: 0, fresh: true };
+        this.locks[i] = { tid: best.tid, x: best.cx, y: best.cy, sc: best.sc, lostT: 0, fresh: true };
       }
     });
     this.ignored = cands.filter(c => !c.used).map(c => ({ cx: c.cx, cy: c.cy, sc: c.sc, up: c.up }));
@@ -256,7 +288,22 @@ class SimDetector {
     // &op=1 : 카메라 바로 앞에서 태블릿을 조작하는 사람(크게 보이고 엉덩이는 화면 밖)을 맨 앞에 추가
     if (/op=1/.test(location.search)) { this.op = new SimPerson(0.45, 0.26, 0.7); this.op.op = true; }
   }
-  detect(video, ts) { const t = ts / 1000; const L = this.people.map(p => p.landmarks(t)); if (this.op) L.unshift(this.op.landmarks(t)); return L; }
+  detect(video, ts) {
+    const t = ts / 1000; let L = this.people.map(p => p.landmarks(t)); if (this.op) L.unshift(this.op.landmarks(t));
+    // &intruder=1 : 시작 8초 뒤 크게(가까이) 보이는 사람이 오른쪽에서 왼쪽으로 선수 앞을 지나감. 지나가는 동안 선수는 가려져 안 보임
+    if (/intruder=1/.test(location.search)) {
+      if (this.t00 == null) this.t00 = t;
+      const e = t - this.t00 - 8;
+      if (e > 0 && e < 6) {
+        if (!this.intr) this.intr = new SimPerson(0.95, 0.12, 0.42);
+        this.intr.cx = 0.95 - 0.9 * (e / 6);
+        const I = this.intr.landmarks(t);
+        L = L.filter((P, i) => !(Math.abs(this.people[i] ? this.people[i].cx - this.intr.cx : 9) < 0.12));   // 가려진 선수는 안 보임
+        L.unshift(I);
+      }
+    }
+    return L;
+  }
 }
 class SimPerson {
   constructor(cx, sw = 0.07, sy = 0.32) { this.cx = cx; this.sw = sw; this.sy = sy; this.lastT = null; this.hands = [0.1, -0.1].map(o => ({ x: cx + o, y: sy + 0.18, tx: cx + o, ty: sy + 0.18, sp: 0.5, next: 0 })); }

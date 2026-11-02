@@ -1,27 +1,27 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=46";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=46";
-import * as R from "./records.js?v=46";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=46";
-import copy from "./games/copy.js?v=46";
-import math from "./games/math.js?v=46";
-import ice from "./games/ice.js?v=46";
-import star from "./games/star.js?v=46";
-import fruit from "./games/fruit.js?v=46";
-import mole from "./games/mole.js?v=46";
-import wall from "./games/wall.js?v=46";
-import rhythm from "./games/rhythm.js?v=46";
-import goalie from "./games/goalie.js?v=46";
-import { hangul, english } from "./games/word.js?v=46";
-import clockGame from "./games/clock.js?v=46";
-import run from "./games/run.js?v=46";
-import simon from "./games/simon.js?v=46";
-import conductor from "./games/conductor.js?v=46";
-import SPORTS from "./games/sports.js?v=46";
-import LEARN from "./games/learn.js?v=46";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=46";
-import { DIFFS, diffOf } from "./difficulty.js?v=46";
-import { startDemo } from "./demo.js?v=46";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=47";
+import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=47";
+import * as R from "./records.js?v=47";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=47";
+import copy from "./games/copy.js?v=47";
+import math from "./games/math.js?v=47";
+import ice from "./games/ice.js?v=47";
+import star from "./games/star.js?v=47";
+import fruit from "./games/fruit.js?v=47";
+import mole from "./games/mole.js?v=47";
+import wall from "./games/wall.js?v=47";
+import rhythm from "./games/rhythm.js?v=47";
+import goalie from "./games/goalie.js?v=47";
+import { hangul, english } from "./games/word.js?v=47";
+import clockGame from "./games/clock.js?v=47";
+import run from "./games/run.js?v=47";
+import simon from "./games/simon.js?v=47";
+import conductor from "./games/conductor.js?v=47";
+import SPORTS from "./games/sports.js?v=47";
+import LEARN from "./games/learn.js?v=47";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=47";
+import { DIFFS, diffOf } from "./difficulty.js?v=47";
+import { startDemo } from "./demo.js?v=47";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -881,7 +881,8 @@ function goFullscreen() {
   try { const r = f && f.call(d); if (r && r.catch) r.catch(() => {}); } catch (e) {}
 }
 
-if (SIM) window.__dbg = { get demo() { return demo; }, get state() { return state; }, setTime: s => { timeLeft = s; }, players: () => players, scales: () => trackers.map(t => Math.round(t.scale)) };
+if (SIM) window.__dbg = { get demo() { return demo; }, get state() { return state; }, setTime: s => { timeLeft = s; }, players: () => players, scales: () => trackers.map(t => Math.round(t.scale)),
+  bodyX: () => trackers.map(t => (t.pts && t.pts[11].v && t.pts[12].v ? Math.round((t.pts[11].x + t.pts[12].x) / 2) : null)) };   // 점검: 선수 몸 위치(화면 x)
 
 renderSetup();
 setState("setup");

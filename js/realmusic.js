@@ -1,6 +1,6 @@
 // 지휘자 게임용 실제 연주 녹음: 위키미디어 공용(Wikimedia Commons)의 퍼블릭 도메인·CC 녹음을 브라우저가 직접 받아 옴
 // 받아 온 녹음에서 박자(비트) 시각을 찾아(박자 추적) 지휘 화살표를 맞춤. 못 받으면 합성음으로 대신함
-import { audioOut, clock, settings } from "./audio.js?v=46";
+import { audioOut, clock, settings } from "./audio.js?v=47";
 
 // 녹음 목록: 파일 이름, 저장 위치(md5 앞 두 자리), 연주자, 이용 허락, 박자표(한 마디 박 수: 2·3·4)
 export const RECORDINGS = {
