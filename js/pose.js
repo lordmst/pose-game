@@ -179,7 +179,23 @@ export class Tracker {
    3) 게임 밖(메뉴·자리 잡기)에서는 다른 사람이 같은 구역에서 만세하면 선수가 바뀜. 게임 중에는 안 바뀜
    4) 선수가 2초 넘게 안 보이면 해제 → 다시 만세하면 인식 */
 export const CLAIM_SEC = 0.7;
-const LOST_SEC = 2.0;
+// 만세 판정 (선수 인식용). 예전엔 엉덩이까지 보이고 두 손목이 화면 안에서 코보다 위여야 했음 → 가까이 서거나 손이 화면 위로 나가면 실패
+// 지금: 두 어깨만 보이면 되고, 팔마다 ① 손목이 머리보다 위 또는 ② 팔꿈치가 어깨보다 확실히 위(손목은 화면 밖이어도 됨)면 '든 팔'
+export function armsUp(r, cam, visSupported) {
+  const conf = (p, v) => !visSupported || (p.visibility == null ? 1 : p.visibility) > v;
+  const inX = p => p.x > -0.05 && p.x < 1.05;
+  if (![11, 12].every(i => inX(r[i]) && r[i].y > -0.02 && r[i].y < 1.02 && conf(r[i], VIS))) return false;
+  const S = i => cam.toScreen(r[i]), a = S(11), b = S(12), sw = Math.hypot(a.x - b.x, a.y - b.y) || 1, shY = (a.y + b.y) / 2;
+  const headY = conf(r[0], 0.3) && r[0].y > -0.02 ? Math.min(S(0).y, shY - 0.6 * sw) : shY - 0.9 * sw;
+  const usable = p => inX(p) && (conf(p, 0.25) || p.y < 0.03);      // 화면 위로 나간 관절은 신뢰도가 낮아도 씀
+  const side = (el, wr) => {
+    const W = S(wr), E = S(el), wOk = usable(r[wr]), eOk = usable(r[el]);
+    if (wOk && W.y < headY) return true;                                                  // 손목이 머리보다 위
+    return eOk && E.y < shY - 0.35 * sw && (!wOk || W.y < E.y + 0.25 * sw);               // 팔꿈치가 어깨보다 위로 쭉
+  };
+  return side(13, 15) && side(14, 16);
+}
+const LOST_SEC = 3.0;   // 선수가 이만큼(초) 안 보이면 해제 (잠깐 가려져도 다시 만세할 필요 없게 넉넉히)
 export class Assigner {
   constructor(n) {
     this.n = n; this.locks = Array.from({ length: n }, () => null);
@@ -189,12 +205,9 @@ export class Assigner {
   reset() { this.locks = this.locks.map(() => null); this.claims.forEach(c => { c.t = 0; }); }
   claimProgress(i) { return Math.min(1, this.claims[i].t / CLAIM_SEC); }
   assign(raws, cam, view, dt, visSupported, allowTakeover) {
-    const vis = p => p.x > -0.02 && p.x < 1.02 && p.y > -0.02 && p.y < 1.02 && (!visSupported || (p.visibility == null ? 1 : p.visibility) > VIS);
     const cands = raws.map(r => {
       const a = cam.toScreen(r[11]), b = cam.toScreen(r[12]);
-      const body = [11, 12, 23, 24].every(i => vis(r[i]));
-      // 만세: 두 손목이 코보다 위 (영상 좌표는 y가 작을수록 위)
-      const up = body && [0, 15, 16].every(i => vis(r[i])) && r[15].y < r[0].y && r[16].y < r[0].y;
+      const up = armsUp(r, cam, visSupported);   // 만세 (가까이 서도, 손이 화면 위로 나가도 인식)
       return { r, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, sc: Math.hypot(a.x - b.x, a.y - b.y), up, used: false };
     });
     const out = this.locks.map(() => null);
@@ -217,12 +230,12 @@ export class Assigner {
       let best = null, bd = Infinity;
       for (const c of cands) {
         if (c.used || !c.up) continue;
-        if (this.n === 2 && (c.cx < x0 || c.cx > x1)) continue;
+        if (this.n === 2 && (c.cx < x0 - view.W * 0.06 || c.cx > x1 + view.W * 0.06)) continue;   // 가운데 선 근처에 서도 인식
         const d = C.t > 0 ? Math.hypot(c.cx - C.x, c.cy - C.y) : Math.abs(c.cx - (x0 + x1) / 2);
         if (d < bd) { best = c; bd = d; }
       }
-      if (!best) { C.t = Math.max(0, C.t - dt * 2); return; }
-      if (C.t > 0 && Math.hypot(best.cx - C.x, best.cy - C.y) > Math.max(C.sc, view.U * 0.1)) C.t = 0;   // 다른 사람이면 처음부터
+      if (!best) { C.t = Math.max(0, C.t - dt); return; }                       // 잠깐 끊겨도 바로 0이 되지 않게 천천히 줄어듦
+      if (C.t > 0 && Math.hypot(best.cx - C.x, best.cy - C.y) > Math.max(C.sc * 1.5, view.U * 0.12)) C.t = 0;   // 다른 사람이면 처음부터
       C.t += dt; C.x = best.cx; C.y = best.cy; C.sc = best.sc;
       if (C.t >= CLAIM_SEC) {
         best.used = true; out[i] = best.r; C.t = 0;
@@ -266,6 +279,11 @@ class SimPerson {
     const [hl, hr] = this.hands;
     set(15, hl.x, hl.y); set(13, (L[11].x + hl.x) / 2 + 0.03, (L[11].y + hl.y) / 2 + 0.03);
     set(16, hr.x, hr.y); set(14, (L[12].x + hr.x) / 2 - 0.03, (L[12].y + hr.y) / 2 + 0.03);
+    // &simclose=1 : 태블릿 가까이 선 사람 (엉덩이는 화면 밖, 만세하면 손목이 화면 위로 나가 신뢰도가 낮음)
+    if (/simclose=1/.test(location.search)) {
+      [23, 24, 25, 26, 27, 28].forEach(i => { L[i] = { ...L[i], y: 1.1, visibility: 0.05 }; });
+      if (cheer) { L[15] = { ...L[15], y: -0.06, visibility: 0.08 }; L[16] = { ...L[16], y: -0.06, visibility: 0.08 }; L[13].y = sy - 0.1 * k; L[14].y = sy - 0.1 * k; }
+    }
     return L;
   }
 }

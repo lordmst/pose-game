@@ -2,9 +2,9 @@
 // 공 기계가 보낸 공이 내 쪽에 바운드되어 오면 타이밍 맞춰 휘둘러 받아침. 손을 휘두른 방향(옆)과 손 높이(위·아래)로 노리는 곳이 정해짐
 // 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임. 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받아칠 수 있음
 // 깡통 하나에 1점, 받침이 없어진 깡통은 같이 무너짐. 다 쓰러뜨리면 보너스
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=45";
-import { sfx } from "../../audio.js?v=45";
-import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, playerAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=45";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=46";
+import { sfx } from "../../audio.js?v=46";
+import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, playerAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=46";
 
 const FLIGHT = 1.2;    // 공이 나에게 오는 시간(초, 보통)
 const SHOT = 0.55;     // 받아친 공이 깡통까지 가는 시간(초)
