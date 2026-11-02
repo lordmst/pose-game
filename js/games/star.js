@@ -1,6 +1,6 @@
 // 별 따기: 떨어지는 별을 손으로 잡기. 큰 별은 두 손으로 함께 잡아야 함(3점)
-import { burst, popup, outlinedText, starPath } from "../fx.js?v=39";
-import { sfx } from "../audio.js?v=39";
+import { burst, popup, outlinedText, starPath } from "../fx.js?v=40";
+import { sfx } from "../audio.js?v=40";
 
 export default {
   id: "star", title: "별 따기", icon: "⭐", sec: 45, cursor: "✋", cat: "move", bg: "#55efc4", desc: "큰 별은 두 손으로",

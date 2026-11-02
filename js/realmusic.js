@@ -1,6 +1,6 @@
 // 지휘자 게임용 실제 연주 녹음: 위키미디어 공용(Wikimedia Commons)의 퍼블릭 도메인·CC 녹음을 브라우저가 직접 받아 옴
 // 받아 온 녹음에서 박자(비트) 시각을 찾아(박자 추적) 지휘 화살표를 맞춤. 못 받으면 합성음으로 대신함
-import { audioOut, clock, settings } from "./audio.js?v=39";
+import { audioOut, clock, settings } from "./audio.js?v=40";
 
 // 녹음 목록: 파일 이름, 저장 위치(md5 앞 두 자리), 연주자, 이용 허락, 박자표(한 마디 박 수: 2·3·4)
 export const RECORDINGS = {
@@ -23,11 +23,22 @@ export const RECORDINGS = {
   airg: { title: "G선상의 아리아", by: "바흐", icon: "🎻", file: "Air_-_Air_Force_Strings_-_United_States_Air_Force_Band.mp3", dir: "e/ec", performer: "미 공군 현악단 (U.S. Air Force Strings)", license: "퍼블릭 도메인", licenseUrl: "https://commons.wikimedia.org/wiki/Template:PD-USGov-Military-Air_Force", meter: 4 },
   summer: { title: "사계 중 여름 1악장", by: "비발디", icon: "☀️", file: "Vivaldi_-_Four_Seasons_2_Summer_mvt_1_Allegro_non_molto_-_John_Harrison_violin.oga", dir: "a/a5", performer: "존 해리슨(바이올린) · 위치토 주립대 체임버 플레이어스", license: "CC BY-SA", licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/", meter: 3 },
   winter: { title: "사계 중 겨울 3악장", by: "비발디", icon: "❄️", file: "12_-_Vivaldi_Winter_mvt_3_Allegro_-_John_Harrison_violin.ogg", dir: "2/21", performer: "존 해리슨(바이올린) · 위치토 주립대 체임버 플레이어스", license: "CC BY-SA", licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/", meter: 3 },
+  // ↓ 리듬 박자용 신나는 무료 음원 (CC BY · CC0). 화면에 곡명·작곡자·이용 허락 표시
+  monkeys: { game: "rhythm", title: "빙글빙글 원숭이", by: "무료 음원", icon: "🐒", file: "Monkeys_Spinning_Monkeys_by_Kevin_MacLeod.ogg", dir: "f/fe", performer: "Kevin MacLeod (incompetech.com)", license: "CC BY", licenseUrl: "https://creativecommons.org/licenses/by/4.0/", meter: 4 },
+  pixelpolka: { game: "rhythm", title: "픽셀 폴카", by: "무료 음원", icon: "👾", file: "Kevin_MacLeod_-_Pixel_Peeker_Polka_-_faster.ogg", dir: "f/f6", performer: "Kevin MacLeod (incompetech.com)", license: "CC BY 3.0", licenseUrl: "https://creativecommons.org/licenses/by/3.0/", meter: 4 },
+  duck: { game: "rhythm", title: "꽥꽥 오리", by: "무료 음원", icon: "🦆", file: "Kevin_MacLeod_-_Fluffing_a_Duck.ogg", dir: "c/c3", performer: "Kevin MacLeod (incompetech.com)", license: "CC BY", licenseUrl: "https://creativecommons.org/licenses/by/3.0/", meter: 4 },
+  meowsic: { game: "rhythm", title: "고양이 댄스 대회", by: "무료 음원", icon: "🐱", file: "Komiku_-_18_-_Dance_contest_to_the_meowsic.ogg", dir: "4/48", performer: "Komiku", license: "CC0", licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/", meter: 4 },
+  osaka: { game: "rhythm", title: "오사카로 출발", by: "무료 음원", icon: "🚄", file: "Kevin_MacLeod_-_Off_to_Osaka.ogg", dir: "5/52", performer: "Kevin MacLeod (incompetech.com)", license: "CC BY", licenseUrl: "https://creativecommons.org/licenses/by/3.0/", meter: 4 },
+  funkorama: { game: "rhythm", title: "펑코라마", by: "무료 음원", icon: "🕺", file: "Funkorama_(MacLeod,_Kevin)_(ISRC_USUAN1100474).oga", dir: "7/7c", performer: "Kevin MacLeod (incompetech.com)", license: "CC BY 3.0", licenseUrl: "https://creativecommons.org/licenses/by/3.0/", meter: 4 },
+  disco: { game: "rhythm", title: "현악 디스코", by: "무료 음원", icon: "🪩", file: "Stringed_Disco_(MacLeod,_Kevin)_(ISRC_USUAN1100059).oga", dir: "0/0e", performer: "Kevin MacLeod (incompetech.com)", license: "CC BY", licenseUrl: "https://creativecommons.org/licenses/by/3.0/", meter: 4 },
+  aceshigh: { game: "rhythm", title: "에이스 하이", by: "무료 음원", icon: "✈️", file: "Kevin_MacLeod_-_01_-_Aces_High.ogg", dir: "6/68", performer: "Kevin MacLeod (incompetech.com)", license: "CC BY 3.0", licenseUrl: "https://creativecommons.org/licenses/by/3.0/", meter: 4 },
+  cipher: { game: "rhythm", title: "사이퍼", by: "무료 음원", icon: "🤖", file: "Cipher_(ISRC_USUAN1100844).oga", dir: "0/0c", performer: "Kevin MacLeod (incompetech.com)", license: "CC BY", licenseUrl: "https://creativecommons.org/licenses/by/3.0/", meter: 4 },
+  rollin5: { game: "rhythm", title: "다섯 시의 그루브", by: "무료 음원", icon: "🛼", file: "Kevin_MacLeod_-_Rollin_at_5_-_210_-_full.ogg", dir: "9/99", performer: "Kevin MacLeod (incompetech.com)", license: "CC BY", licenseUrl: "https://creativecommons.org/licenses/by/3.0/", meter: 4 },
 };
 // 합성음 대신이 없는 곡(실제 녹음만): 노래 고르기 화면에 쓰는 정보. title·by·icon이 있는 녹음
 // game: 그 녹음을 쓰는 게임 (없으면 지휘자). 리듬 박자용 신나는 곡은 game: "rhythm"
 export const extraSongs = (synthIds, game = "conductor") => Object.entries(RECORDINGS).filter(([id, R]) => R.title && !synthIds.includes(id) && (R.game || "conductor") === game)
-  .map(([id, R]) => ({ id, title: R.title, by: R.by, icon: R.icon || "🎼", real: true, synth: false }));
+  .map(([id, R]) => ({ id, title: R.title, by: R.by, icon: R.icon || "🎼", real: game === "conductor", synth: false }));
 export const pageUrl = id => `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(RECORDINGS[id].file)}`;
 // 받을 주소: MP3 변환본(아이패드 사파리도 재생) → 원본(ogg). ?realbase=주소 로 시험용 로컬 파일을 쓸 수 있음
 function urls(id) {

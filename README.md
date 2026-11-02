@@ -83,6 +83,23 @@
 
 점검: 주소 끝에 `&realbase=/.testaudio` 를 붙이면 위키미디어 대신 로컬 시험 파일(곡 id.wav)을 씁니다.
 
+## 리듬 박자 무료 음원 (녹음 곡)
+
+합성음 노래 6곡 외에, 아래 무료 음원 10곡을 노래를 고를 때 위키미디어 공용에서 받아 옵니다(인터넷 필요). 박은 녹음에서 자동으로 찾아 화살표를 만듭니다. 실제 K-pop 곡은 저작권 때문에 넣지 않았습니다.
+
+| 곡 | 작곡·연주 | 이용 허락 | 원본 |
+|---|---|---|---|
+| 빙글빙글 원숭이 (Monkeys Spinning Monkeys by Kevin MacLeod) | Kevin MacLeod (incompetech.com) | CC BY | [Commons](https://commons.wikimedia.org/wiki/File:Monkeys_Spinning_Monkeys_by_Kevin_MacLeod.ogg) |
+| 픽셀 폴카 (faster) | Kevin MacLeod (incompetech.com) | CC BY 3.0 | [Commons](https://commons.wikimedia.org/wiki/File:Kevin_MacLeod_-_Pixel_Peeker_Polka_-_faster.ogg) |
+| 꽥꽥 오리 (Fluffing a Duck) | Kevin MacLeod (incompetech.com) | CC BY | [Commons](https://commons.wikimedia.org/wiki/File:Kevin_MacLeod_-_Fluffing_a_Duck.ogg) |
+| 고양이 댄스 대회 (Dance contest to the meowsic) | Komiku | CC0 | [Commons](https://commons.wikimedia.org/wiki/File:Komiku_-_18_-_Dance_contest_to_the_meowsic.ogg) |
+| 오사카로 출발 (Off to Osaka) | Kevin MacLeod (incompetech.com) | CC BY | [Commons](https://commons.wikimedia.org/wiki/File:Kevin_MacLeod_-_Off_to_Osaka.ogg) |
+| 펑코라마 (Funkorama (MacLeod, Kevin) (ISRC USUAN1100474)) | Kevin MacLeod (incompetech.com) | CC BY 3.0 | [Commons](https://commons.wikimedia.org/wiki/File:Funkorama_(MacLeod,_Kevin)_(ISRC_USUAN1100474).oga) |
+| 현악 디스코 (Stringed Disco (MacLeod, Kevin) (ISRC USUAN1100059)) | Kevin MacLeod (incompetech.com) | CC BY | [Commons](https://commons.wikimedia.org/wiki/File:Stringed_Disco_(MacLeod,_Kevin)_(ISRC_USUAN1100059).oga) |
+| 에이스 하이 (Aces High) | Kevin MacLeod (incompetech.com) | CC BY 3.0 | [Commons](https://commons.wikimedia.org/wiki/File:Kevin_MacLeod_-_01_-_Aces_High.ogg) |
+| 사이퍼 (Cipher (ISRC USUAN1100844)) | Kevin MacLeod (incompetech.com) | CC BY | [Commons](https://commons.wikimedia.org/wiki/File:Cipher_(ISRC_USUAN1100844).oga) |
+| 다섯 시의 그루브 (full) | Kevin MacLeod (incompetech.com) | CC BY | [Commons](https://commons.wikimedia.org/wiki/File:Kevin_MacLeod_-_Rollin_at_5_-_210_-_full.ogg) |
+
 ## 파일 구조
 
 ```

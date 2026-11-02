@@ -2,9 +2,9 @@
 // 리시브(두 손 모아 아래로) → 같은 편 토스 → 스파이크(높이 들었다 세게 내려치기) → 상대가 받아 공격하면 블로킹(두 손 번쩍)
 // 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임(앞뒤는 저절로). 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받기·때리기·막기 가능
 // 블로킹을 못 하면 상대 스파이크가 내 쪽으로 와서 다시 리시브
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=39";
-import { sfx } from "../../audio.js?v=39";
-import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, playerAvatar, randomAvatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=39";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=40";
+import { sfx } from "../../audio.js?v=40";
+import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, playerAvatar, randomAvatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=40";
 
 const SERVE = 1.6;     // 상대 서브가 나에게 오는 시간(초, 보통)
 const SPIKE = 3.0;     // 스파이크로 인정하는 손 속도(어깨너비/초, 아래 방향)
