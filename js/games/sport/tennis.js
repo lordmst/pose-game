@@ -3,9 +3,9 @@
 // 캐릭터의 라켓 팔은 내 손을 그대로 따라 하고, 휘두르면 휘두른 방향·세기대로 포핸드·백핸드·스매시. 공은 라켓에 맞는 자리에서 날아감
 // 1인: 컴퓨터 상대 · 2인: 네트를 사이에 두고 둘이 대결(각자 화면은 자기 편 뒤에서 봄, 편마다 네트 앞에 컴퓨터 짝꿍)
 // 점수는 테니스식(15·30·40, 듀스·어드밴티지, 게임). 2인은 게임마다 서브가 바뀜
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=54";
-import { sfx } from "../../audio.js?v=54";
-import { stage, THREE, ground, box, ball as sphere, mesh, tree, cloud, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=54";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=55";
+import { sfx } from "../../audio.js?v=55";
+import { stage, THREE, ground, box, ball as sphere, mesh, tree, cloud, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=55";
 
 const FLIGHT = 1.7;    // 공이 상대에게서 나에게 오는 시간(초, 보통)
 const SWING = 2.4;     // 스윙으로 인정하는 손 속도(어깨너비/초)

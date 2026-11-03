@@ -1,29 +1,29 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=54";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=54";
-import * as R from "./records.js?v=54";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=54";
-import copy from "./games/copy.js?v=54";
-import math from "./games/math.js?v=54";
-import ice from "./games/ice.js?v=54";
-import star from "./games/star.js?v=54";
-import fruit from "./games/fruit.js?v=54";
-import mole from "./games/mole.js?v=54";
-import wall from "./games/wall.js?v=54";
-import rhythm from "./games/rhythm.js?v=54";
-import goalie from "./games/goalie.js?v=54";
-import { hangul, english } from "./games/word.js?v=54";
-import clockGame from "./games/clock.js?v=54";
-import run from "./games/run.js?v=54";
-import simon from "./games/simon.js?v=54";
-import conductor from "./games/conductor.js?v=54";
-import SPORTS from "./games/sports.js?v=54";
-import LEARN from "./games/learn.js?v=54";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=54";
-import { DIFFS, diffOf } from "./difficulty.js?v=54";
-import { startDemo } from "./demo.js?v=54";
-import * as REAL from "./realmusic.js?v=54";
-import * as FACE from "./face.js?v=54";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=55";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=55";
+import * as R from "./records.js?v=55";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=55";
+import copy from "./games/copy.js?v=55";
+import math from "./games/math.js?v=55";
+import ice from "./games/ice.js?v=55";
+import star from "./games/star.js?v=55";
+import fruit from "./games/fruit.js?v=55";
+import mole from "./games/mole.js?v=55";
+import wall from "./games/wall.js?v=55";
+import rhythm from "./games/rhythm.js?v=55";
+import goalie from "./games/goalie.js?v=55";
+import { hangul, english } from "./games/word.js?v=55";
+import clockGame from "./games/clock.js?v=55";
+import run from "./games/run.js?v=55";
+import simon from "./games/simon.js?v=55";
+import conductor from "./games/conductor.js?v=55";
+import SPORTS from "./games/sports.js?v=55";
+import LEARN from "./games/learn.js?v=55";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=55";
+import { DIFFS, diffOf } from "./difficulty.js?v=55";
+import { startDemo } from "./demo.js?v=55";
+import * as REAL from "./realmusic.js?v=55";
+import * as FACE from "./face.js?v=55";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -118,7 +118,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 54;
+const APP_V = 55;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -867,7 +867,11 @@ function drawLost() {
     if (tr.lostT < 0.6) return;
     const z = zones[i];
     outlinedText(ctx, `${i + 1}P ${slots[i].name}`, z.cx, view.H * 0.45, view.U * 0.06, "#fff", slots[i].color);
-    outlinedText(ctx, "화면 안으로 들어와요 (안 되면 만세!)", z.cx, view.H * 0.53, view.U * 0.045, "#fff", "#333");
+    // 2인은 구역이 좁으니 두 줄로, 구역 너비에 맞춰 글자 크기를 줄임
+    ctx.font = `${Math.round(view.U * 0.045)}px ${FONT}`;
+    const fit = t => view.U * 0.045 * Math.min(1, z.w * 0.88 / ctx.measureText(t).width);
+    outlinedText(ctx, "화면 안으로 들어와요", z.cx, view.H * 0.53, fit("화면 안으로 들어와요"), "#fff", "#333");
+    outlinedText(ctx, "안 되면 만세!", z.cx, view.H * 0.59, fit("화면 안으로 들어와요") * 0.85, "#fff", "#333");
   });
 }
 
