@@ -3,9 +3,9 @@
 // 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임. 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받아칠 수 있음
 // 깡통 하나에 1점, 받침이 없어진 깡통은 같이 무너짐. 다 쓰러뜨리면 보너스
 // 2인: 탁구대 두 개를 나란히 놓고 각자 자기 피라미드를 무너뜨리는 대결. 상대 캐릭터·공·깡통이 옆 탁구대에서 실시간으로 보임. 먼저 올 클리어하면 보너스
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=51";
-import { sfx } from "../../audio.js?v=51";
-import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, avatar, playerAvatar, racket, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=51";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=52";
+import { sfx } from "../../audio.js?v=52";
+import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, avatar, playerAvatar, racket, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=52";
 
 const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 움직이고 침
 let shared = null;   // 2인 대결: 두 화면이 서로의 상태를 공개(p[slot])하고 상대 탁구대를 그대로 그림. firstClear: 먼저 올 클리어한 자리

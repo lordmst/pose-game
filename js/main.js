@@ -1,28 +1,28 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=51";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=51";
-import * as R from "./records.js?v=51";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=51";
-import copy from "./games/copy.js?v=51";
-import math from "./games/math.js?v=51";
-import ice from "./games/ice.js?v=51";
-import star from "./games/star.js?v=51";
-import fruit from "./games/fruit.js?v=51";
-import mole from "./games/mole.js?v=51";
-import wall from "./games/wall.js?v=51";
-import rhythm from "./games/rhythm.js?v=51";
-import goalie from "./games/goalie.js?v=51";
-import { hangul, english } from "./games/word.js?v=51";
-import clockGame from "./games/clock.js?v=51";
-import run from "./games/run.js?v=51";
-import simon from "./games/simon.js?v=51";
-import conductor from "./games/conductor.js?v=51";
-import SPORTS from "./games/sports.js?v=51";
-import LEARN from "./games/learn.js?v=51";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=51";
-import { DIFFS, diffOf } from "./difficulty.js?v=51";
-import { startDemo } from "./demo.js?v=51";
-import * as REAL from "./realmusic.js?v=51";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=52";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=52";
+import * as R from "./records.js?v=52";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=52";
+import copy from "./games/copy.js?v=52";
+import math from "./games/math.js?v=52";
+import ice from "./games/ice.js?v=52";
+import star from "./games/star.js?v=52";
+import fruit from "./games/fruit.js?v=52";
+import mole from "./games/mole.js?v=52";
+import wall from "./games/wall.js?v=52";
+import rhythm from "./games/rhythm.js?v=52";
+import goalie from "./games/goalie.js?v=52";
+import { hangul, english } from "./games/word.js?v=52";
+import clockGame from "./games/clock.js?v=52";
+import run from "./games/run.js?v=52";
+import simon from "./games/simon.js?v=52";
+import conductor from "./games/conductor.js?v=52";
+import SPORTS from "./games/sports.js?v=52";
+import LEARN from "./games/learn.js?v=52";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=52";
+import { DIFFS, diffOf } from "./difficulty.js?v=52";
+import { startDemo } from "./demo.js?v=52";
+import * as REAL from "./realmusic.js?v=52";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -51,6 +51,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;",
 const view = { W: 0, H: 0, U: 0, dpr: 1 };
 const canvas = $("#canvas"), ctx = canvas.getContext("2d"), video = $("#video");
 const cam = new Camera(video);
+const sampler = new SigSampler();
 const zones = [];
 
 let detector = null;
@@ -107,7 +108,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 51;
+const APP_V = 52;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -705,7 +706,8 @@ function frame(now) {
   if (detector && cam.ready) { try { raws = detector.detect(video, now); } catch (e) { console.warn(e); } }
   if (!visSupported && raws.some(r => r.some(p => p.visibility > 0.01))) visSupported = true;
   const inGame = state === "play" || state === "countdown";
-  const as = assigner ? assigner.assign(raws, cam, view, dt, visSupported, !inGame) : [];
+  if (raws.length) sampler.frame(cam.sim ? null : video);   // 몸통 옷 색을 보려고 카메라 화면을 작게 한 장 읽음
+  const as = assigner ? assigner.assign(raws, cam, view, dt, visSupported, !inGame, sampler) : [];
   trackers.forEach((tr, i) => tr.update(as[i], cam, dt, t, visSupported));
   if (assigner) for (const i of assigner.takeFresh()) {
     const L = assigner.locks[i];
@@ -837,7 +839,7 @@ function drawLost() {
     if (tr.lostT < 0.6) return;
     const z = zones[i];
     outlinedText(ctx, `${i + 1}P ${slots[i].name}`, z.cx, view.H * 0.45, view.U * 0.06, "#fff", slots[i].color);
-    outlinedText(ctx, "화면 안으로 들어와서 만세!", z.cx, view.H * 0.53, view.U * 0.045, "#fff", "#333");
+    outlinedText(ctx, "화면 안으로 들어와요 (안 되면 만세!)", z.cx, view.H * 0.53, view.U * 0.045, "#fff", "#333");
   });
 }
 
