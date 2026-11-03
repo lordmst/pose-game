@@ -1,29 +1,29 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=55";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=55";
-import * as R from "./records.js?v=55";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=55";
-import copy from "./games/copy.js?v=55";
-import math from "./games/math.js?v=55";
-import ice from "./games/ice.js?v=55";
-import star from "./games/star.js?v=55";
-import fruit from "./games/fruit.js?v=55";
-import mole from "./games/mole.js?v=55";
-import wall from "./games/wall.js?v=55";
-import rhythm from "./games/rhythm.js?v=55";
-import goalie from "./games/goalie.js?v=55";
-import { hangul, english } from "./games/word.js?v=55";
-import clockGame from "./games/clock.js?v=55";
-import run from "./games/run.js?v=55";
-import simon from "./games/simon.js?v=55";
-import conductor from "./games/conductor.js?v=55";
-import SPORTS from "./games/sports.js?v=55";
-import LEARN from "./games/learn.js?v=55";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=55";
-import { DIFFS, diffOf } from "./difficulty.js?v=55";
-import { startDemo } from "./demo.js?v=55";
-import * as REAL from "./realmusic.js?v=55";
-import * as FACE from "./face.js?v=55";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=56";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=56";
+import * as R from "./records.js?v=56";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=56";
+import copy from "./games/copy.js?v=56";
+import math from "./games/math.js?v=56";
+import ice from "./games/ice.js?v=56";
+import star from "./games/star.js?v=56";
+import fruit from "./games/fruit.js?v=56";
+import mole from "./games/mole.js?v=56";
+import wall from "./games/wall.js?v=56";
+import rhythm from "./games/rhythm.js?v=56";
+import goalie from "./games/goalie.js?v=56";
+import { hangul, english } from "./games/word.js?v=56";
+import clockGame from "./games/clock.js?v=56";
+import run from "./games/run.js?v=56";
+import simon from "./games/simon.js?v=56";
+import conductor from "./games/conductor.js?v=56";
+import SPORTS from "./games/sports.js?v=56";
+import LEARN from "./games/learn.js?v=56";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=56";
+import { DIFFS, diffOf } from "./difficulty.js?v=56";
+import { startDemo } from "./demo.js?v=56";
+import * as REAL from "./realmusic.js?v=56";
+import * as FACE from "./face.js?v=56";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -118,7 +118,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 55;
+const APP_V = 56;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -461,7 +461,16 @@ $("#btnReadyBack").onclick = () => { stopSongPreview(); setState("select"); };
 $("#btnDemo").onclick = () => openDemo();
 
 /* ---------- 게임 설명 시연 (선수별로 게임마다 처음 한 번, 이후엔 '설명 보기') ---------- */
-let demo = null, demoCap = "";
+let demo = null, demoCap = "", demoStep = 0;
+// 설명 글: 단계 번호 + 글. 바뀔 때마다 톡 튀어나옴
+function showDemoCap(text) {
+  const el = $("#demoCap"); el.innerHTML = "";
+  if (!text) return;
+  const last = /직접 해 봐요/.test(text);
+  const b = document.createElement("span"); b.className = "demo-step" + (last ? " go" : ""); b.textContent = last ? "GO" : String(++demoStep);
+  const t = document.createElement("span"); t.className = "demo-text"; t.textContent = text;
+  el.append(b, t); el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
+}
 const sessionSeen = new Set();       // 이름 없는 손님은 이번 접속 동안만 기억
 function needDemo(id) {
   const seen = R.getSettings().demoSeen || {};
@@ -479,7 +488,7 @@ function openDemo() {
   const g = GAMES[gameId];
   if (demo) try { demo.stop(); } catch (e) {}
   clearFx(); stopSpeak();
-  demo = startDemo(gameId, g, view); demoCap = "";
+  demo = startDemo(gameId, g, view); demoCap = ""; demoStep = 0;
   $("#demoTitle").textContent = `${g.icon} ${g.title}`;
   $("#demoCap").textContent = ""; $("#demoProg").style.width = "0%";
   setState("demo");
@@ -735,7 +744,7 @@ function frame(now) {
 function tick(dt) {
   if (state === "demo" && demo) {
     demo.update(dt);
-    if (demo.caption !== demoCap) { demoCap = demo.caption; $("#demoCap").textContent = demoCap; }
+    if (demo.caption !== demoCap) { demoCap = demo.caption; showDemoCap(demoCap); }
     $("#demoProg").style.width = (demo.progress * 100).toFixed(1) + "%";
     if (demo.done) finishDemo();
   } else if (state === "ready") {

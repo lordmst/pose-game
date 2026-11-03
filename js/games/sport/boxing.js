@@ -3,9 +3,9 @@
 // 상대 체력을 다 깎으면 KO 보너스, 다음 상대 등장. 내가 맞으면 감점, 체력이 다 떨어지면 다운
 // 2인 대결(env.mode 2): 컴퓨터 상대 대신 다른 선수와 겨룸. 상대 캐릭터는 그 선수의 실제 팔·머리 동작을 따라 하고,
 //   그 선수가 막고(두 손 얼굴 = 얼굴, 두 손 배 앞 = 몸) 있지 않은 곳을 치면 맞음, 머리를 옆으로 빼면 얼굴은 피함. 체력 0이면 KO → 다음 라운드
-import { burst, popup, shake, rr, outlinedText } from "../../fx.js?v=55";
-import { sfx } from "../../audio.js?v=55";
-import { stage, THREE, box, ball as sphere, cyl, mesh, avatar } from "./kit3d.js?v=55";
+import { burst, popup, shake, rr, outlinedText } from "../../fx.js?v=56";
+import { sfx } from "../../audio.js?v=56";
+import { stage, THREE, box, ball as sphere, cyl, mesh, avatar } from "./kit3d.js?v=56";
 
 const PUNCH = 3.0;       // 펀치로 인정하는 손 속도 (어깨너비/초)
 const STRONG = 7.0;      // 이 이상이면 강펀치(체력 2칸)

@@ -1,8 +1,8 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=55";
-import { DIFFS } from "./difficulty.js?v=55";
-import { speak } from "./audio.js?v=55";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=56";
+import { DIFFS } from "./difficulty.js?v=56";
+import { speak } from "./audio.js?v=56";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
@@ -26,6 +26,7 @@ class Puppet {
     this.legs = ["stand", "stand"]; this.legCur = null;
     this.hands = [0, 1].map(() => ({ vis: true, x: 0, y: 0, vx: 0, vy: 0, speed: 0, bodySpeed: 0, shape: "unknown" }));
     this.lean = 0; this.leanT = 0; this.active = -1; this.present = true; this.fullBody = true; this.lowerSeen = true; this.lostT = 0; this.pts = null;
+    this.time = 0; this.trails = [[], []]; this.happy = 0; this.oops = 0;   // 손 지나간 자리(움직임 꼬리), 표정
     this.update(0.016);
   }
   get u() { return Math.min(this.v.U * 0.115, this.v.H * 0.11); }
@@ -79,37 +80,120 @@ class Puppet {
     P[25] = { ...this.legCur[0].k, v: true }; P[26] = { ...this.legCur[1].k, v: true };
     P[27] = { ...this.legCur[0].a, v: true }; P[28] = { ...this.legCur[1].a, v: true };
     this.pts = P; this.head = head;
+    // 표정·손 꼬리
+    this.time += dt; this.happy = Math.max(0, this.happy - dt); this.oops = Math.max(0, this.oops - dt);
+    this.hands.forEach((h, k) => { const T = this.trails[k]; T.push({ x: h.x, y: h.y, t: this.time, sp: h.bodySpeed }); while (T.length && this.time - T[0].t > 0.28) T.shift(); });
   }
+  cheer() { this.happy = 0.9; this.oops = 0; }
+  sad() { this.oops = 0.7; this.happy = 0; }
   draw(ctx) {
-    const u = this.u, P = this.pts, line = (pts, w, c) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); };
+    const u = this.u, P = this.pts, O = "#3a2a1e";   // O: 외곽선 색
+    // 팔다리: 진한 외곽선 → 색 → 밝은 윤기 (만화 같은 입체감)
+    const limb = (pts, w, c, hi = "rgba(255,255,255,.35)") => {
+      const path = () => { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); };
+      ctx.strokeStyle = O; ctx.lineWidth = w + u * 0.1; path(); ctx.stroke();
+      ctx.strokeStyle = c; ctx.lineWidth = w; path(); ctx.stroke();
+      ctx.save(); ctx.translate(-w * 0.18, -w * 0.18); ctx.strokeStyle = hi; ctx.lineWidth = w * 0.28; path(); ctx.stroke(); ctx.restore();
+    };
     ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
-    for (const [h, k, a] of [[23, 25, 27], [24, 26, 28]]) line([P[h], P[k], P[a]], u * 0.42, "#3b5bdb");
-    ctx.fillStyle = "#2b2b2b";
-    for (const a of [27, 28]) { ctx.beginPath(); ctx.ellipse(P[a].x, P[a].y + u * 0.12, u * 0.32, u * 0.16, 0, 0, Math.PI * 2); ctx.fill(); }
+    // 바닥 그림자
+    const fy = Math.max(P[27].y, P[28].y) + u * 0.26, air = this.jumpT > 0 ? 0.6 : 1;
+    ctx.fillStyle = `rgba(60,40,20,${0.22 * air})`; ctx.beginPath(); ctx.ellipse(this.cx, fy, u * 1.5 * air, u * 0.32 * air, 0, 0, Math.PI * 2); ctx.fill();
+    // 다리·신발
+    for (const [h, k, a] of [[23, 25, 27], [24, 26, 28]]) limb([P[h], P[k], P[a]], u * 0.44, "#3b5bdb");
+    for (const [a, sd] of [[27, -1], [28, 1]]) {
+      const x = P[a].x + sd * u * 0.08, y = P[a].y + u * 0.12;
+      ctx.fillStyle = O; ctx.beginPath(); ctx.ellipse(x, y, u * 0.38, u * 0.21, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ff5a5f"; ctx.beginPath(); ctx.ellipse(x, y - u * 0.02, u * 0.32, u * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.fillRect(x - u * 0.32, y + u * 0.06, u * 0.64, u * 0.07);
+    }
     // 몸통: 엉덩이 가운데 → 어깨 가운데 (기울이면 같이 기욺)
     const shm = { x: (P[11].x + P[12].x) / 2, y: (P[11].y + P[12].y) / 2 }, hpm = { x: (P[23].x + P[24].x) / 2, y: (P[23].y + P[24].y) / 2 + 0.1 * u };
     const ta = Math.atan2(shm.x - hpm.x, hpm.y - shm.y), tl = Math.hypot(shm.x - hpm.x, shm.y - hpm.y);
     ctx.save(); ctx.translate(hpm.x, hpm.y + 0.15 * u); ctx.rotate(ta);
-    ctx.fillStyle = "#ff8a3d"; rr(ctx, -0.75 * u, -tl - 0.3 * u, 1.5 * u, tl + 0.3 * u, 0.4 * u); ctx.fill(); ctx.restore();
-    ctx.fillStyle = "#ffd23d"; ctx.beginPath(); ctx.arc(shm.x + (hpm.x - shm.x) * 0.38, shm.y + (hpm.y - shm.y) * 0.38, 0.28 * u, 0, Math.PI * 2); ctx.fill();   // 셔츠 무늬
-    for (const [s, e, w] of [[11, 13, 15], [12, 14, 16]]) { line([P[s], P[e]], u * 0.36, "#ff8a3d"); line([P[e], P[w]], u * 0.28, "#ffcf9e"); }
+    ctx.fillStyle = "#2b3a67"; rr(ctx, -0.72 * u, -0.25 * u, 1.44 * u, 0.42 * u, 0.18 * u); ctx.fill();   // 바지 허리
+    const tg = ctx.createLinearGradient(-0.8 * u, -tl, 0.8 * u, 0); tg.addColorStop(0, "#ffb068"); tg.addColorStop(0.55, "#ff8a3d"); tg.addColorStop(1, "#e8691f");
+    ctx.fillStyle = tg; ctx.strokeStyle = O; ctx.lineWidth = u * 0.06; rr(ctx, -0.78 * u, -tl - 0.32 * u, 1.56 * u, tl + 0.3 * u, 0.45 * u); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(-0.28 * u, -tl - 0.3 * u); ctx.lineTo(0, -tl + 0.05 * u); ctx.lineTo(0.28 * u, -tl - 0.3 * u); ctx.closePath(); ctx.fill();   // 옷깃
+    ctx.fillStyle = "#ffd23d"; ctx.strokeStyle = "#c98a00"; ctx.lineWidth = u * 0.04; star(ctx, 0, -tl * 0.5, 0.3 * u); ctx.fill(); ctx.stroke();   // 셔츠 별 무늬
+    ctx.restore();
+    // 팔: 소매(셔츠 색) + 팔뚝(살색)
+    for (const [s, e, w] of [[11, 13, 15], [12, 14, 16]]) { limb([P[s], P[e]], u * 0.38, "#ff8a3d"); limb([P[e], P[w]], u * 0.3, "#ffcf9e", "rgba(255,255,255,.45)"); }
     // 얼굴
-    const hx = this.head.x, hy = this.head.y, r = 0.55 * u;
-    ctx.fillStyle = "#ffcf9e"; ctx.strokeStyle = "#c98a5a"; ctx.lineWidth = u * 0.05; ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = "#4a2b12"; ctx.beginPath(); ctx.arc(hx, hy, r * 1.02, Math.PI * 1.02, Math.PI * 1.98); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#222"; for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(hx + s * 0.2 * u, hy + 0.02 * u, 0.065 * u, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = "rgba(255,120,140,.45)"; for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(hx + s * 0.33 * u, hy + 0.18 * u, 0.09 * u, 0, Math.PI * 2); ctx.fill(); }
-    ctx.strokeStyle = "#7a3b1a"; ctx.lineWidth = u * 0.05; ctx.beginPath(); ctx.arc(hx, hy + 0.1 * u, 0.2 * u, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
-    // 손: 손 모양 그대로 표시, 고르는 손은 노란 테두리
+    const hx = this.head.x, hy = this.head.y, r = 0.58 * u, t = this.time;
+    ctx.fillStyle = "#ffcf9e"; ctx.strokeStyle = O; ctx.lineWidth = u * 0.07;
+    for (const sd of [-1, 1]) { ctx.beginPath(); ctx.arc(hx + sd * r * 0.98, hy + r * 0.08, r * 0.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }   // 귀
+    const fg = ctx.createRadialGradient(hx - r * 0.3, hy - r * 0.3, r * 0.1, hx, hy, r * 1.1); fg.addColorStop(0, "#ffe2c4"); fg.addColorStop(1, "#f6b98a");
+    ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // 머리카락 + 윤기
+    ctx.fillStyle = "#4a2b12"; ctx.beginPath(); ctx.arc(hx, hy, r * 1.04, Math.PI * 1.0, Math.PI * 2.0); ctx.quadraticCurveTo(hx + r * 0.5, hy - r * 0.15, hx + r * 0.05, hy - r * 0.38); ctx.quadraticCurveTo(hx - r * 0.5, hy - r * 0.2, hx - r * 1.04, hy); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = u * 0.06; ctx.beginPath(); ctx.arc(hx - r * 0.1, hy - r * 0.2, r * 0.62, Math.PI * 1.25, Math.PI * 1.5); ctx.stroke();
+    // 눈: 깜빡임, 기쁘면 웃는 눈
+    const blink = (t % 3.4) < 0.12, happy = this.happy > 0, oops = this.oops > 0;
+    for (const sd of [-1, 1]) {
+      const ex = hx + sd * 0.22 * u, ey = hy + 0.06 * u;
+      if (happy) { ctx.strokeStyle = "#222"; ctx.lineWidth = u * 0.06; ctx.beginPath(); ctx.arc(ex, ey + 0.04 * u, 0.09 * u, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+      else if (blink) { ctx.strokeStyle = "#222"; ctx.lineWidth = u * 0.05; ctx.beginPath(); ctx.moveTo(ex - 0.08 * u, ey); ctx.lineTo(ex + 0.08 * u, ey); ctx.stroke(); }
+      else { ctx.fillStyle = "#222"; ctx.beginPath(); ctx.ellipse(ex, ey, 0.075 * u, 0.1 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex - 0.025 * u, ey - 0.035 * u, 0.028 * u, 0, Math.PI * 2); ctx.fill(); }
+    }
+    ctx.fillStyle = "rgba(255,110,130,.5)"; for (const sd of [-1, 1]) { ctx.beginPath(); ctx.ellipse(hx + sd * 0.36 * u, hy + 0.22 * u, 0.11 * u, 0.07 * u, 0, 0, Math.PI * 2); ctx.fill(); }
+    // 입: 보통 미소, 기쁘면 활짝, 놓치면 '앗'
+    ctx.strokeStyle = "#7a3b1a"; ctx.lineWidth = u * 0.05;
+    if (happy) { ctx.fillStyle = "#c0392b"; ctx.beginPath(); ctx.arc(hx, hy + 0.16 * u, 0.2 * u, 0, Math.PI); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    else if (oops) { ctx.fillStyle = "#7a3b1a"; ctx.beginPath(); ctx.ellipse(hx, hy + 0.27 * u, 0.08 * u, 0.1 * u, 0, 0, Math.PI * 2); ctx.fill(); }
+    else { ctx.beginPath(); ctx.arc(hx, hy + 0.12 * u, 0.2 * u, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke(); }
+    if (happy) sparkles(ctx, hx, hy - r * 0.2, r * 1.7, t, u);
+    // 손: 손 모양 그대로 표시, 고르는 손은 노란 빛
     this.hands.forEach((h, k) => {
-      if (this.active === k) { ctx.strokeStyle = "#ffd400"; ctx.lineWidth = u * 0.1; ctx.beginPath(); ctx.arc(h.x, h.y, u * 0.48, 0, Math.PI * 2); ctx.stroke(); }
+      if (this.active === k) { const g = ctx.createRadialGradient(h.x, h.y, u * 0.1, h.x, h.y, u * 0.7); g.addColorStop(0, "rgba(255,230,80,.75)"); g.addColorStop(1, "rgba(255,230,80,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, u * 0.7, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#ffd400"; ctx.lineWidth = u * 0.09; ctx.beginPath(); ctx.arc(h.x, h.y, u * 0.5, 0, Math.PI * 2); ctx.stroke(); }
       if (h.shape === "open" || h.shape === "closed") {
+        ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.beginPath(); ctx.arc(h.x, h.y, u * 0.42, 0, Math.PI * 2); ctx.fill();
         ctx.font = `${Math.round(u * 0.75)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText(h.shape === "open" ? "✋" : "✊", h.x, h.y);
-      } else { ctx.fillStyle = "#ffcf9e"; ctx.beginPath(); ctx.arc(h.x, h.y, u * 0.2, 0, Math.PI * 2); ctx.fill(); }
+      } else { ctx.fillStyle = "#ffcf9e"; ctx.strokeStyle = O; ctx.lineWidth = u * 0.06; ctx.beginPath(); ctx.arc(h.x, h.y, u * 0.22, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
     });
     ctx.restore();
   }
+  // 이해를 돕는 표시: 빠르게 움직인 손의 꼬리, 손이 갈 곳 화살표, 옆으로 걸어갈 방향
+  drawGuides(ctx) {
+    const u = this.u, t = this.time;
+    ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    this.trails.forEach(T => {   // 휘두른 손 꼬리 (빠를수록 진하게)
+      if (T.length < 3) return;
+      const sp = Math.max(...T.map(q => q.sp)); if (sp < 2.2) return;
+      for (let i = 1; i < T.length; i++) {
+        const a = i / T.length; ctx.strokeStyle = `rgba(255,255,255,${0.75 * a * Math.min(1, sp / 5)})`; ctx.lineWidth = u * 0.32 * a;
+        ctx.beginPath(); ctx.moveTo(T[i - 1].x, T[i - 1].y); ctx.lineTo(T[i].x, T[i].y); ctx.stroke();
+      }
+    });
+    this.arms.forEach((a, k) => {   // 손이 갈 곳: 점선 화살표 + 깜빡이는 동그라미
+      if (a.mode !== "reach") return;
+      const h = this.hands[k], d = Math.hypot(a.tx - h.x, a.ty - h.y);
+      if (d < u * 0.6) return;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 9);
+      ctx.strokeStyle = "rgba(255,212,0,.95)"; ctx.lineWidth = u * 0.09; ctx.setLineDash([u * 0.18, u * 0.14]); ctx.lineDashOffset = -t * u * 2;
+      const ex = a.tx - (a.tx - h.x) / d * u * 0.45, ey = a.ty - (a.ty - h.y) / d * u * 0.45;
+      ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(ex, ey); ctx.stroke(); ctx.setLineDash([]);
+      const ang = Math.atan2(ey - h.y, ex - h.x); ctx.fillStyle = "#ffd400"; ctx.beginPath(); ctx.moveTo(ex + Math.cos(ang) * u * 0.25, ey + Math.sin(ang) * u * 0.25);
+      ctx.lineTo(ex + Math.cos(ang + 2.4) * u * 0.25, ey + Math.sin(ang + 2.4) * u * 0.25); ctx.lineTo(ex + Math.cos(ang - 2.4) * u * 0.25, ey + Math.sin(ang - 2.4) * u * 0.25); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = `rgba(255,212,0,${0.5 + 0.5 * pulse})`; ctx.lineWidth = u * 0.07; ctx.beginPath(); ctx.arc(a.tx, a.ty, u * (0.42 + 0.12 * pulse), 0, Math.PI * 2); ctx.stroke();
+    });
+    const dx = this.tcx - this.cx;   // 옆으로 걸어감: 발밑에 겹화살표
+    if (Math.abs(dx) > u * 0.5) {
+      const dir = Math.sign(dx), y = Math.max(this.pts[27].y, this.pts[28].y) + u * 0.3;
+      for (let i = 0; i < 3; i++) {
+        const x = this.cx + dir * u * (1.6 + i * 0.55) + dir * ((t * 2) % 1) * u * 0.55, al = 0.9 - i * 0.25;
+        ctx.strokeStyle = `rgba(255,140,0,${al})`; ctx.lineWidth = u * 0.14; ctx.beginPath(); ctx.moveTo(x - dir * u * 0.25, y - u * 0.3); ctx.lineTo(x, y); ctx.lineTo(x - dir * u * 0.25, y + u * 0.3); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+}
+function star(ctx, x, y, r) { ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr2 = i % 2 ? r * 0.45 : r; ctx.lineTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2); } ctx.closePath(); }
+function sparkles(ctx, x, y, R, t, u) {
+  ctx.fillStyle = "#ffd400";
+  for (let i = 0; i < 5; i++) { const a = t * 2 + i * 1.256, s = u * (0.12 + 0.06 * Math.sin(t * 8 + i)); star(ctx, x + Math.cos(a) * R, y + Math.sin(a) * R * 0.6, s); ctx.fill(); }
 }
 function within(s, x, y, max) { const dx = x - s.x, dy = y - s.y, d = Math.hypot(dx, dy); return d > max ? [s.x + dx / d * max, s.y + dy / d * max] : [x, y]; }
 function lerpP(a, b, f) { return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; }
@@ -377,15 +461,31 @@ const SCRIPTS = {
   },
 };
 
+// 시연 무대: 벽(가운데 조명) + 원근감 있는 나무 바닥
+function drawStudio(ctx, view, p) {
+  const { W, H } = view, fy = H * 0.84;
+  const g = ctx.createLinearGradient(0, 0, 0, fy); g.addColorStop(0, "#a9d8ff"); g.addColorStop(1, "#e9f5ff");
+  ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, fy + 20);
+  ctx.fillStyle = "rgba(255,255,255,.22)"; for (let x = 0; x < W; x += view.U * 0.16) ctx.fillRect(x, 0, view.U * 0.06, fy);   // 줄무늬 벽지
+  const sp = ctx.createRadialGradient(p.cx, H * 0.5, view.U * 0.05, p.cx, H * 0.5, view.U * 0.75); sp.addColorStop(0, "rgba(255,250,220,.85)"); sp.addColorStop(1, "rgba(255,250,220,0)");
+  ctx.fillStyle = sp; ctx.fillRect(-20, -20, W + 40, fy + 20);
+  ctx.fillStyle = "#f3c98b"; ctx.fillRect(-20, fy - H * 0.012, W + 40, H * 0.012);       // 걸레받이
+  const fg = ctx.createLinearGradient(0, fy, 0, H); fg.addColorStop(0, "#d9a066"); fg.addColorStop(1, "#b87a42");
+  ctx.fillStyle = fg; ctx.fillRect(-20, fy, W + 40, H - fy + 20);
+  ctx.strokeStyle = "rgba(90,50,20,.25)"; ctx.lineWidth = Math.max(1, view.U * 0.003);
+  for (let i = -8; i <= 8; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * W * 0.04, fy); ctx.lineTo(W / 2 + i * W * 0.16, H); ctx.stroke(); }   // 원근 바닥 줄
+  for (const k of [0.25, 0.55, 0.9]) { const y = fy + (H - fy) * k; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+}
+
 export function startDemo(id, game, view) {
   const p = new Puppet(view), zone = { x0: 0, x1: view.W, w: view.W, cx: view.W / 2 };
   const me = { combo: 0 }, stats = { ok: 0, miss: 0, pen: 0 };
   const env = {
     slot: 0, player: me, tracker: p, zone, view, mode: 1, level: "add10", song: game.demoSong || "london", diff: DIFFS.normal, color: "#ff8a3d", name: "도우미",
     progress: () => 0.1, fever: () => false, speak: () => {},
-    award: (base, x, y) => { me.combo++; stats.ok++; popup(x, y, `+${base * DIFFS.normal.points}`, { size: view.U * 0.065, color: "#fff", stroke: "#ff8a3d" }); },
-    miss: (x, y, label) => { me.combo = 0; stats.miss++; if (label) popup(x, y, label, { size: view.U * 0.04, color: "#eee", stroke: "#555" }); },
-    penalty: (n, x, y, label) => { me.combo = 0; stats.pen++; popup(x, y, `${label} -${n * DIFFS.normal.points}`, { size: view.U * 0.06, color: "#fff", stroke: "#d02020" }); },
+    award: (base, x, y) => { me.combo++; stats.ok++; p.cheer(); popup(x, y, `+${base * DIFFS.normal.points}`, { size: view.U * 0.065, color: "#fff", stroke: "#ff8a3d" }); },
+    miss: (x, y, label) => { me.combo = 0; stats.miss++; p.sad(); if (label) popup(x, y, label, { size: view.U * 0.04, color: "#eee", stroke: "#555" }); },
+    penalty: (n, x, y, label) => { me.combo = 0; stats.pen++; p.sad(); popup(x, y, `${label} -${n * DIFFS.normal.points}`, { size: view.U * 0.06, color: "#fff", stroke: "#d02020" }); },
     // 3D 스포츠의 카메라 작은 화면 자리에 도우미 캐릭터를 줄여서 그림
     pip: (c, x, y, w, h, mark) => {
       const s = h / view.H, P = p.pts, U = view.U;
@@ -421,13 +521,11 @@ export function startDemo(id, game, view) {
     },
     draw(ctx) {
       const { W, H } = view;
-      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#bfe3ff"); g.addColorStop(0.75, "#fff3d6"); g.addColorStop(1, "#ffe2a8");
-      ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
-      ctx.fillStyle = "#c9e8a6"; ctx.fillRect(-20, H * 0.965, W + 40, H);
+      if (!game.scene3d) drawStudio(ctx, view, p);
       // 리듬·지휘자·탈것 게임은 게임 화면을 캐릭터 위에 (판정 글자·탈것이 가려지지 않게), 나머지는 캐릭터를 위에
       if (game.scene3d) inst.draw(ctx);    // 3D 스포츠: 캐릭터는 구석 작은 화면(pip)에만
-      else if (["rhythm", "conductor", "plane", "skate", "jetski"].includes(id)) { p.draw(ctx); inst.draw(ctx); }
-      else { inst.draw(ctx); p.draw(ctx); }
+      else if (["rhythm", "conductor", "plane", "skate", "jetski"].includes(id)) { p.draw(ctx); inst.draw(ctx); p.drawGuides(ctx); }
+      else { inst.draw(ctx); p.draw(ctx); p.drawGuides(ctx); }
     },
   };
 }

@@ -1,6 +1,6 @@
 // 시계 만들기: 두 팔을 시곗바늘처럼 뻗어 주어진 시각을 만들기. 몸(어깨 가운데)이 시계의 중심
-import { burst, popup, rr, outlinedText, FONT, rnd } from "../fx.js?v=55";
-import { sfx } from "../audio.js?v=55";
+import { burst, popup, rr, outlinedText, FONT, rnd } from "../fx.js?v=56";
+import { sfx } from "../audio.js?v=56";
 
 const HOLD = 0.8, TOL = 22;       // 자세 유지 시간(초) · 바늘 각도 허용 오차(도)
 // 화면 기준 각도: 12시 방향 0도, 시계 방향으로 증가 (화면에 보이는 그대로 읽음)

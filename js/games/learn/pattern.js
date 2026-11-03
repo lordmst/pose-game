@@ -1,9 +1,9 @@
 // 패턴 이어 가기: 규칙대로 늘어선 그림·숫자의 마지막 "?"에 올 것을 골라 풍선을 터뜨리기
 // 쉬움: AB 반복 · 보통: AAB·ABB·ABC·AABB 반복 · 어려움: 수 규칙(2씩·5씩·줄어들기)·ABCD·커지는 패턴
 // 2인: 같은 문제를 동시에 풀고, 둘 다 맞히거나 시간이 지나면 함께 다음 문제로
-import { burst, popup, rr, outlinedText, FONT, rnd, shuffle } from "../../fx.js?v=55";
-import { sfx } from "../../audio.js?v=55";
-import { drawBalloon } from "../math.js?v=55";
+import { burst, popup, rr, outlinedText, FONT, rnd, shuffle } from "../../fx.js?v=56";
+import { sfx } from "../../audio.js?v=56";
+import { drawBalloon } from "../math.js?v=56";
 
 const DWELL = 0.25;          // 손을 풍선에 이만큼 대고 있으면 터짐 (숫자 풍선과 같음)
 const ROUND_MAX = 14;        // 한 문제 최대 시간(초). 지나면 정답을 보여 주고 다음 문제
