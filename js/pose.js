@@ -1,4 +1,5 @@
 // 카메라 · 자세 인식 · 선수별 손 추적
+import { faceDist } from "./face.js?v=54";
 const MP_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const VIS = 0.5;                 // 이 값보다 신뢰도가 낮은 관절은 '안 보임'으로 처리
@@ -209,6 +210,9 @@ export function sigDist(a, b) {
 }
 const SIG_REJECT = 0.26;   // 가려졌다 나타난 사람의 옷 색 차이가 이보다 크면 다른 사람
 const SIG_SAME = 0.17;     // 이보다 작으면 같은 사람으로 보고 다시 이어 붙임
+const FACE_SAME = 0.48, FACE_DIFF = 0.66;   // 시험 사진: 같은 사람 0.33~0.56, 다른 사람 0.63 이상   // 얼굴 특징값 거리: 이보다 작으면 같은 사람, 크면 다른 사람 (사이는 모름 → 옷 색으로 판단)
+const FACE_SWAP = 0.75;   // 계속 따라가던 선수가 이보다 다른 얼굴로 세 번 연달아 보이면 바뀐 것
+const FACE_KEEP = 5;      // 선수 얼굴을 이만큼 모아 평균으로 기억
 // 카메라 화면에서 사람마다 몸통 색을 뽑음 (작게 줄인 화면에서 몸통 안쪽 점 30개의 평균)
 export class SigSampler {
   constructor() { this.cv = document.createElement("canvas"); this.ctx = this.cv.getContext("2d", { willReadFrequently: true }); this.data = null; }
@@ -275,6 +279,7 @@ export class Assigner {
     for (const { T, c, cost } of pairs) {
       if (T.cand || c.tid) continue;
       T.cand = c; c.tid = T.id;
+      if (T.miss > 0.25) { T.reattachAt = this.now; T.goneFor = T.miss; T.confirmed = false; }   // 가려졌다 다시 이어 붙임 → 얼굴로 한 번 더 확인
       const k = Math.min(1, dt / 0.15);
       T.vx += ((c.cx - T.x) / Math.max(dt, 0.016) - T.vx) * k; T.vy += ((c.cy - T.y) / Math.max(dt, 0.016) - T.vy) * k;
       // 옷 색 기억: 다른 사람과 겹치지 않고 계속 보일 때만 조금씩 갱신 (조명 변화는 따라가고, 겹친 사람 색은 안 섞임)
@@ -306,8 +311,8 @@ export class Assigner {
       if (!L) return;
       const T = L.lost ? null : this.tracks.find(t => t.id === L.tid);
       if (!T) {   // 오래 가려져 번호가 없어짐 → 해제하지 않고 '찾는 중'
-        if (!L.lost) { L.lost = true; L.tid = -1; L.lostAt = this.now; }
-        L.lostT = this.now - L.lostAt + LOST_SEC;
+        if (!L.lost) { L.lost = true; L.tid = -1; L.goneAt = this.now - LOST_SEC; }
+        L.lostT = this.now - L.goneAt;
         return;
       }
       if (T.sig && T.sigN >= 6) { L.sig = T.sig; L.sz = T.sz; }       // 다시 찾을 때 쓸 옷 색·크기
@@ -322,19 +327,28 @@ export class Assigner {
       let best = null, bs = Infinity;
       for (const c of cands) {
         if (c.used || taken.has(c.tid)) continue;
-        const T = this.tracks.find(t => t.id === c.tid); if (!T || T.born < L.lostAt - LOST_SEC) continue;   // 선수가 사라지기 전부터 있던 사람(구경꾼)은 아님
+        const T = this.tracks.find(t => t.id === c.tid); if (!T) continue;
+        const fd = L.faceN >= 2 && T.face ? faceDist(L.face, T.face) : -1;
+        // 선수가 사라지기 전부터 있던 사람(구경꾼)·얼굴이 다르다고 본 사람은 아님. 단 얼굴이 확실히 같으면 예외
+        if (!(fd >= 0 && fd < FACE_SAME) && (T.born < L.goneAt - 0.3 || (L.notTids && L.notTids.includes(T.id)))) continue;
         if (this.n === 2 && (c.cx < x0 - view.W * 0.06 || c.cx > x1 + view.W * 0.06)) continue;
         const near = Math.hypot(c.cx - L.x, c.cy - L.y) / (L.sz || L.sc || view.U * 0.1), ratio = c.sz / (L.sz || c.sz);
         if (ratio < 0.6 || ratio > 1.65) continue;
         const sd = sigDist(L.sig, T.sig && T.sigN >= 3 ? T.sig : c.mixed ? null : c.sig);
         let ok;
-        if (sd >= 0) ok = sd < SIG_SAME || (sd < SIG_REJECT && near < 1.5);
+        if (fd >= 0 && fd > FACE_DIFF) continue;                     // 얼굴이 다름
+        if (fd >= 0 && fd < FACE_SAME) ok = true;                    // 얼굴이 같음 → 옷 색·자리와 상관없이 (조명이 바뀌어도)
+        else if (sd >= 0) ok = sd < SIG_SAME || (sd < SIG_REJECT && near < 1.5);
         else ok = near < 1.5 && (T.miss === 0);                      // 옷 색을 못 볼 때: 사라진 자리 근처에 비슷한 크기로 나타나면
         if (!ok) continue;
-        const score = (sd >= 0 ? sd * 4 : 0) + near * 0.3;
+        const score = (fd >= 0 ? fd * 3 - 2 : 0) + (sd >= 0 ? sd * 4 : 0) + near * 0.3;
         if (score < bs) { bs = score; best = c; }
       }
-      if (best) { best.used = true; out[i] = best.r; taken.add(best.tid); Object.assign(L, { tid: best.tid, lost: false, x: best.cx, y: best.cy, sc: best.sc, lostT: 0 }); }
+      if (best) {
+        best.used = true; out[i] = best.r; taken.add(best.tid); Object.assign(L, { tid: best.tid, lost: false, x: best.cx, y: best.cy, sc: best.sc, lostT: 0 });
+        const T = this.tracks.find(t => t.id === best.tid);
+        if (T && !(L.faceN >= 2 && T.face && faceDist(L.face, T.face) < FACE_SAME)) { T.reattachAt = this.now; T.goneFor = this.now - L.goneAt; T.confirmed = false; }   // 옷 색으로 붙였으면 얼굴로 한 번 더 확인
+      }
     });
     // 2) 만세 하는 사람 찾기 (빈자리, 또는 게임 밖이면 선수 교체). 다른 자리 선수는 후보에서 뺌
     const lockedIds = new Set(this.locks.filter(L => L && !L.lost).map(L => L.tid));
@@ -354,11 +368,62 @@ export class Assigner {
       C.t += dt; C.x = best.cx; C.y = best.cy; C.sc = best.sc;
       if (C.t >= CLAIM_SEC) {
         best.used = true; out[i] = best.r; C.t = 0;
-        this.locks[i] = { tid: best.tid, x: best.cx, y: best.cy, sc: best.sc, lostT: 0, fresh: true };
+        const T = this.tracks.find(t => t.id === best.tid);
+        this.locks[i] = { tid: best.tid, x: best.cx, y: best.cy, sc: best.sc, lostT: 0, fresh: true, face: null, faceN: 0 };
+        if (T) { T.face = null; T.confirmed = true; T.reattachAt = 0; }   // 만세한 사람 얼굴을 새로 모음
       }
     });
     this.ignored = cands.filter(c => !c.used).map(c => ({ cx: c.cx, cy: c.cy, sc: c.sc, up: c.up }));
     return out;
+  }
+  /* ---------- 얼굴 확인 ----------
+     얼굴 계산은 무거워서(한 번에 수십 ms) 필요할 때만, 한 번에 한 사람씩 함:
+     ① 선수가 잡힌 뒤 얼굴을 아직 다 못 모았을 때  ② 가려졌다 다시 이어 붙인 직후 (진짜 그 선수인지)
+     ③ 선수를 찾는 중일 때 새로 나타난 사람 */
+  faceNeeds() {
+    const need = [], seen = new Set();
+    const add = (T, pri) => { if (!T || !T.cand || seen.has(T.id) || (pri < 3 && this.now - (T.faceAt || -9) < (pri < 2 ? 0.3 : 0.8))) return; seen.add(T.id); need.push({ tid: T.id, r: T.cand.r, pri }); };
+    for (const L of this.locks) {
+      if (!L || L.lost) continue;
+      const T = this.tracks.find(t => t.id === L.tid);
+      if (!T) continue;
+      if (T.reattachAt && !T.confirmed && this.now - T.reattachAt < 6 && L.faceN >= 2) add(T, 0);
+      else if (L.faceN < FACE_KEEP && T.confirmed !== false) add(T, 1);
+      else if (L.faceN >= 2 && this.now - (T.faceAt || -9) > (T.badFace ? 0.4 : 2.0)) add(T, 3);   // 가끔(2초마다) 선수 얼굴이 맞는지 확인 (눈치채지 못하게 바뀐 경우 대비)
+    }
+    for (const L of this.locks) {
+      if (!L || !L.lost || L.faceN < 2) continue;
+      const taken = new Set(this.locks.filter(K => K && !K.lost).map(K => K.tid));
+      for (const T of this.tracks) if (T.cand && !taken.has(T.id)) add(T, 2);   // 구경꾼·떼어 낸 사람도 얼굴이 같으면 다시 선수로
+    }
+    return need.sort((a, b) => a.pri - b.pri);
+  }
+  setFace(tid, d) {
+    const T = this.tracks.find(t => t.id === tid); if (!T) return;
+    T.face = d; T.faceAt = this.now;
+    const i = this.locks.findIndex(L => L && !L.lost && L.tid === tid); if (i < 0) return;
+    const L = this.locks[i];
+    if (T.reattachAt && !T.confirmed && L.faceN >= 2) {
+      const fd = faceDist(L.face, d);
+      if (fd > FACE_DIFF) {   // 다시 이어 붙인 사람이 선수가 아님 (선수가 가려진 사이 지나가던 사람) → 떼고 진짜 선수를 다시 찾음
+        L.lost = true; L.tid = -1; L.goneAt = T.reattachAt - (T.goneFor || 0); (L.notTids = L.notTids || []).push(T.id);
+        if (L.notTids.length > 8) L.notTids.shift();
+        return;
+      }
+      if (fd < FACE_SAME) T.confirmed = true; else return;
+    }
+    if (T.confirmed === false) return;
+    if (L.faceN >= 2) {
+      const fd = faceDist(L.face, d);
+      if (fd > FACE_SWAP) {   // 세 번 연달아 확실히 다른 얼굴이면 다른 사람으로 바뀐 것 → 떼고 다시 찾음
+        T.badFace = (T.badFace || 0) + 1; if (T.badFace >= 3) { T.badFace = 0; L.lost = true; L.tid = -1; L.goneAt = this.now - 2.5; (L.notTids = L.notTids || []).push(T.id); if (L.notTids.length > 8) L.notTids.shift(); }
+        return;
+      }
+      T.badFace = 0;
+      if (fd > FACE_SAME) return;                                    // 애매하면 기억에 섞지 않음
+    }
+    if (!L.face) { L.face = Float32Array.from(d); L.faceN = 1; }
+    else if (L.faceN < FACE_KEEP) { L.faceN++; for (let k = 0; k < d.length; k++) L.face[k] += (d[k] - L.face[k]) / L.faceN; }
   }
   // 이번 프레임에 새로 잡힌 선수 번호 목록 (효과음용)
   takeFresh() { const f = []; this.locks.forEach((L, i) => { if (L && L.fresh) { f.push(i); L.fresh = false; } }); return f; }
@@ -366,11 +431,16 @@ export class Assigner {
 
 /* ---------- 가상 선수 (점검용) ---------- */
 // 가상 선수 옷 색 (윗몸통·아랫몸통 Y, Cb, Cr)
+// 가상 선수 얼굴 특징값 (사람마다 다른 무작위 128개, 같은 사람은 조금씩만 흔들림)
+const fakeFace = seed => { let x = seed; return Float32Array.from({ length: 128 }, () => { x = (x * 16807) % 2147483647; return (x / 2147483647 - 0.5) * 0.18; }); };
+const FACE_A = fakeFace(11), FACE_B = fakeFace(23), FACE_X = fakeFace(37);
 const SIG_RED = Float32Array.from([0.45, -0.08, 0.25, 0.3, 0.02, 0.0]), SIG_GREEN = Float32Array.from([0.55, -0.1, -0.15, 0.3, 0.02, 0.0]), SIG_BLUE = Float32Array.from([0.4, 0.22, -0.08, 0.3, 0.02, 0.0]);
 class SimDetector {
   constructor(n) {
-    this.people = Array.from({ length: n }, (_, i) => new SimPerson(n === 1 ? 0.5 : (i === 0 ? 0.72 : 0.28)));
-    this.people.forEach((p, i) => { p.sig = i === 0 ? SIG_RED : SIG_GREEN; });
+    // &kid=1 : 키가 작은 아이(작게·낮게 보임), 2인이면 1P만 아이
+    const kid = /kid=1/.test(location.search);
+    this.people = Array.from({ length: n }, (_, i) => kid && i === 0 ? new SimPerson(n === 1 ? 0.5 : 0.72, 0.045, 0.55) : new SimPerson(n === 1 ? 0.5 : (i === 0 ? 0.72 : 0.28)));
+    this.people.forEach((p, i) => { p.sig = i === 0 ? SIG_RED : SIG_GREEN; p.face = i === 0 ? FACE_A : FACE_B; });
     // &op=1 : 카메라 바로 앞에서 태블릿을 조작하는 사람(크게 보이고 엉덩이는 화면 밖)을 맨 앞에 추가
     if (/op=1/.test(location.search)) { this.op = new SimPerson(0.45, 0.26, 0.7); this.op.op = true; }
   }
@@ -390,20 +460,22 @@ class SimDetector {
     }
     // &intruder=2 : 선수와 같은 거리(같은 크기)·다른 옷의 사람이 8초 뒤 천천히 선수 앞을 지나감 (가려지는 동안 선수 안 보임)
     // &intruder=3 : 같은 크기의 사람이 선수 앞에 와서 5초 동안 서 있다가 나감
-    const im = location.search.match(/intruder=([23])/);
+    // &intruder=4 : 3과 같지만 선수와 옷 색까지 같은 사람 (얼굴로만 구분됨)
+    const im = location.search.match(/intruder=([234])/);
     if (im) {
       if (this.t00 == null) this.t00 = t;
       const e = t - this.t00 - 8, dur = im[1] === "2" ? 8 : 11;
       if (e > 0 && e < dur) {
-        if (!this.intr) { this.intr = new SimPerson(0.95); this.intr.sig = SIG_BLUE; this.intr.t0 = -99; }
+        if (!this.intr) { this.intr = new SimPerson(0.95); this.intr.sig = im[1] === "4" ? this.people[0].sig : SIG_BLUE; this.intr.face = FACE_X; this.intr.t0 = -99; }
         const tx = this.people[0].cx;
         this.intr.cx = im[1] === "2" ? 0.95 - 0.9 * (e / dur) : e < 3 ? 0.95 + (tx - 0.95) * e / 3 : e < 8 ? tx : tx + (0.05 - tx) * (e - 8) / 3;
         const I = this.intr.landmarks(t);
         L = L.filter((P, i) => !(this.people[i] && Math.abs(this.people[i].cx - this.intr.cx) < 0.1));
-        L.unshift(I);
+        if (!(im[1] === "4" && e < 3)) L.unshift(I);    // 4: 선수 뒤에서 나오듯 선수가 가려지는 순간 그 자리에 나타남
       }
     }
     if (/nosig=1/.test(location.search)) L.forEach(P => { P.sig = null; });
+    if (/noface=1/.test(location.search)) L.forEach(P => { P.face = null; });
     return L;
   }
 }
@@ -434,6 +506,7 @@ class SimPerson {
       if (cheer) { L[15] = { ...L[15], y: -0.06, visibility: 0.08 }; L[16] = { ...L[16], y: -0.06, visibility: 0.08 }; L[13].y = sy - 0.1 * k; L[14].y = sy - 0.1 * k; }
     }
     if (this.sig) L.sig = this.sig.map(v => v + (Math.random() - 0.5) * 0.02);
+    if (this.face) L.face = this.face.map(v => v + (Math.random() - 0.5) * 0.03);
     return L;
   }
 }

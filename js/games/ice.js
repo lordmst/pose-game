@@ -1,6 +1,7 @@
 // 얼음 깨기: 손을 빠르게 휘둘러 얼음을 치면 맞은 자리에서 금이 가고, 다 깨면 안에 든 물건이 튀어나옴
-import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=52";
-import { sfx } from "../audio.js?v=52";
+import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=54";
+import { sfx } from "../audio.js?v=54";
+import { bodyRef } from "./bodyref.js?v=54";
 
 const PUNCH = 3.0;      // 타격으로 인정하는 손 속도 (어깨너비/초). 낮출수록 쉬움
 const STRONG = 7.5;     // 이 이상이면 강펀치(2타)
@@ -14,24 +15,25 @@ export default {
     const z = env.zone, v = env.view;
     const cols = Math.max(1, Math.min(3, Math.floor(z.w / (v.U * 0.36))));
     const S = () => Math.min(z.w / cols * 0.62, v.U * 0.25);
+    const ref = bodyRef(env), Y = b => ref.y(b.fy, S() * 1.2);   // fy: 높이를 몸통 길이 단위로 (0 어깨, 1 엉덩이) → 선수 키에 맞춤
     let broken = 0, chain = [];   // chain: 폭죽 얼음이 터진 뒤 차례로 맞을 얼음
     function fresh(slot) {
       const p = env.progress(), boom = p > 0.1 && Math.random() < 0.15, hp = Math.max(2, (boom ? 4 : p > 0.5 ? 4 : 3) + env.diff.hp);
       return { fx: slot.fx, fy: slot.fy, hp, max: hp, boom, item: boom ? "🧨" : ITEMS[rnd(0, ITEMS.length - 1)], cracks: [], cool: [0, 0], shake: 0, broken: false, respawn: 0, born: 0, hint: 0 };
     }
     const blocks = [];
-    // 무작위 위치: 서로 겹치지 않고, 손이 닿는 높이(화면 30~80%) 안에서
+    // 무작위 위치: 서로 겹치지 않고, 손이 닿는 높이(얼굴 높이 ~ 엉덩이 높이) 안에서
     function randomSpot(except) {
       const s = S(), others = blocks.filter(o => o !== except && !o.broken);
       let best = null, bestGap = -1;
       for (let i = 0; i < 40; i++) {
-        const fx = 0.1 + Math.random() * 0.8, fy = 0.32 + Math.random() * 0.46, x = z.x0 + fx * z.w, y = fy * v.H;
+        const fx = 0.1 + Math.random() * 0.8, fy = -0.4 + Math.random() * 1.45, x = z.x0 + fx * z.w, y = ref.y(fy, S() * 1.2);
         if (x - s / 2 < z.x0 + 4 || x + s / 2 > z.x1 - 4) continue;
-        const gap = others.length ? Math.min(...others.map(o => Math.hypot(z.x0 + o.fx * z.w - x, o.fy * v.H - y))) : 1e9;
+        const gap = others.length ? Math.min(...others.map(o => Math.hypot(z.x0 + o.fx * z.w - x, Y(o) - y))) : 1e9;
         if (gap > s * 1.25) return { fx, fy };
         if (gap > bestGap) { bestGap = gap; best = { fx, fy }; }
       }
-      return best || { fx: 0.5, fy: 0.5 };
+      return best || { fx: 0.5, fy: 0.4 };
     }
     for (let i = 0; i < cols * 2; i++) { const b = fresh({ fx: 0, fy: 0 }); blocks.push(b); Object.assign(b, randomSpot(b)); }
 
@@ -55,17 +57,18 @@ export default {
         sfx.bomb(); shake(v.U * 0.02, 0.35);
         burst(cx, cy, { n: 30, colors: ["#ff4d4d", "#ffd400", "#7ae0ff", "#9dff7a"], shape: "confetti", speed: v.U * 1.3, gravity: v.U * 0.8, size: v.U * 0.02, life: 1.0 });
         popup(cx, cy - s * 0.7, "펑! 연쇄!", { size: v.U * 0.06, color: "#fff", stroke: "#e0501b" });
-        blocks.filter(o => o !== b && !o.broken).map(o => ({ o, d: Math.hypot(z.x0 + o.fx * z.w - cx, o.fy * v.H - cy) }))
+        blocks.filter(o => o !== b && !o.broken).map(o => ({ o, d: Math.hypot(z.x0 + o.fx * z.w - cx, Y(o) - cy) }))
           .sort((a, c) => a.d - c.d).forEach(({ o }, i) => chain.push({ b: o, t: 0.15 + i * 0.12, x: cx, y: cy }));
       } else popup(cx, cy, b.item, { size: v.U * 0.12, emoji: true, vy: -v.U * 0.35, life: 1.0 });
     }
     return {
       update(dt) {
+        ref.update(dt);
         const s = S(), hands = env.tracker.hands;
         for (const c of chain) {
           c.t -= dt;
           if (c.t > 0 || c.b.broken) continue;
-          const b = c.b, cx = z.x0 + b.fx * z.w, cy = b.fy * v.H;
+          const b = c.b, cx = z.x0 + b.fx * z.w, cy = Y(b);
           b.hp--; b.shake = 0.2; addCracks(b, clamp((c.x - cx) / s, -0.42, 0.42), clamp((c.y - cy) / s, -0.42, 0.42)); sfx.hit(2);
           burst(cx, cy, { n: 8, colors: ["#ffd400", "#ffffff"], shape: "star", speed: v.U * 0.4, gravity: v.U, size: v.U * 0.013, life: 0.5 });
           if (b.hp <= 0) breakIt(b, cx, cy, s);
@@ -75,7 +78,7 @@ export default {
           b.born = Math.min(1, b.born + dt * 4); b.shake = Math.max(0, b.shake - dt); b.hint = Math.max(0, b.hint - dt);
           b.cool[0] = Math.max(0, b.cool[0] - dt); b.cool[1] = Math.max(0, b.cool[1] - dt);
           if (b.broken) { b.respawn -= dt; if (b.respawn <= 0) Object.assign(b, fresh(randomSpot(b))); continue; }   // 다른 자리에서 새 얼음
-          const cx = z.x0 + b.fx * z.w, cy = b.fy * v.H;
+          const cx = z.x0 + b.fx * z.w, cy = Y(b);
           hands.forEach((h, k) => {
             if (b.broken || !h.vis || b.cool[k] > 0) return;
             if (Math.abs(h.x - cx) > s * 0.6 || Math.abs(h.y - cy) > s * 0.6) return;
@@ -101,7 +104,7 @@ export default {
         const s = S(), half = s / 2, r = s * 0.12;
         for (const b of blocks) {
           if (b.broken) continue;
-          const cx = z.x0 + b.fx * z.w, cy = b.fy * v.H, k = 0.6 + 0.4 * easeOutBack(b.born);
+          const cx = z.x0 + b.fx * z.w, cy = Y(b), k = 0.6 + 0.4 * easeOutBack(b.born);
           const jx = b.shake > 0 ? (Math.random() - 0.5) * s * 0.08 : 0, dmg = 1 - b.hp / b.max;
           ctx.save(); ctx.translate(cx + jx, cy); ctx.scale(k, k);
           ctx.fillStyle = "rgba(0,0,0,.22)"; rr(ctx, -half + 6, -half + 8, s, s, r); ctx.fill();
@@ -134,7 +137,7 @@ export default {
       },
       result: () => `깬 얼음 ${broken}개`,
       // 설명 시연용: 아직 안 깨진 얼음과 화면 위치
-      get targets() { return blocks.filter(b => !b.broken && b.born > 0.9).map(b => ({ b, x: z.x0 + b.fx * z.w, y: b.fy * v.H, s: S() })); },
+      get targets() { return blocks.filter(b => !b.broken && b.born > 0.9).map(b => ({ b, x: z.x0 + b.fx * z.w, y: Y(b), s: S() })); },
     };
   },
 };

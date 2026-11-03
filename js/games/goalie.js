@@ -1,6 +1,7 @@
 // 골키퍼: 멀리서 날아오는 공을 손으로 막기. 공이 도착할 자리에 그림자가 미리 보임. 먼 공은 옆으로 움직여야 닿음
-import { burst, popup, shake, outlinedText, FONT, rnd } from "../fx.js?v=52";
-import { sfx } from "../audio.js?v=52";
+import { burst, popup, shake, outlinedText, FONT, rnd } from "../fx.js?v=54";
+import { sfx } from "../audio.js?v=54";
+import { bodyRef } from "./bodyref.js?v=54";
 
 const FLIGHT = 1.5;    // 공이 날아오는 시간(초, 보통)
 
@@ -11,10 +12,12 @@ export default {
     const z = env.zone, v = env.view;
     let shots = [], spawnT = 1.0, saves = 0, goals = 0, netShake = 0;
     const R = () => v.U * 0.075;
+    // 선수 키에 맞춘 골대: 가로대는 만세한 손끝보다 조금 위, 공은 머리 위 ~ 무릎 위 사이로
+    const ref = bodyRef(env), barY = () => Math.max(v.H * 0.12, Math.min(v.H * 0.34, ref.sh - ref.T * 1.45)), lowY = () => Math.min(v.H * 0.9, ref.y(1.5));
     function body() {
       const p = env.tracker.pts;
       if (p && p[11].v && p[12].v) { const sw = Math.hypot(p[11].x - p[12].x, p[11].y - p[12].y); return { x: (p[11].x + p[12].x) / 2, y: (p[11].y + p[12].y) / 2, sw: Math.max(sw, v.U * 0.08) }; }
-      return { x: z.cx, y: v.H * 0.45, sw: v.U * 0.13 };
+      return { x: z.cx, y: ref.sh, sw: Math.max(v.U * 0.08, ref.T / 1.3) };
     }
     function shoot(dest, farForce) {
       const b = body(), p = env.progress();
@@ -26,15 +29,15 @@ export default {
       if (far && room(side) < b.sw * 3.2) far = false;
       const d = dest || (far ? { x: b.x + side * b.sw * (3.0 + Math.random() * 0.9), y: b.y + b.sw * (-0.6 + Math.random() * 1.2) }
                              : { x: b.x + side * b.sw * (0.6 + Math.random() * 1.4), y: b.y + b.sw * (-1.4 + Math.random() * 2.4) });
-      d.x = Math.max(z.x0 + R(), Math.min(z.x1 - R(), d.x)); d.y = Math.max(v.H * 0.2, Math.min(v.H * 0.88, d.y));
+      d.x = Math.max(z.x0 + R(), Math.min(z.x1 - R(), d.x)); d.y = Math.max(barY() + R() * 1.3, Math.min(lowY(), d.y));
       const T = FLIGHT * (1 - 0.3 * p) / env.diff.speed * (far ? 1.35 : 1);   // 먼 공은 움직일 시간을 더 줌
-      shots.push({ sx: z.cx + (Math.random() - 0.5) * z.w * 0.2, sy: v.H * 0.22, dx: d.x, dy: d.y, t: 0, T, far, gold: !far && Math.random() < 0.12, done: null, rt: 0, spin: Math.random() * 6, vx: 0, vy: 0 });
+      shots.push({ sx: z.cx + (Math.random() - 0.5) * z.w * 0.2, sy: barY() + v.H * 0.06, dx: d.x, dy: d.y, t: 0, T, far, gold: !far && Math.random() < 0.12, done: null, rt: 0, spin: Math.random() * 6, vx: 0, vy: 0 });
       sfx.whoosh();
     }
     const at = s => { const k = Math.min(1, s.t / s.T), e = k * k; return { x: s.sx + (s.dx - s.sx) * e, y: s.sy + (s.dy - s.sy) * e - Math.sin(k * Math.PI) * v.H * 0.08, k, size: 0.25 + 0.75 * e }; };
     return {
       update(dt) {
-        spawnT -= dt; netShake = Math.max(0, netShake - dt);
+        ref.update(dt); spawnT -= dt; netShake = Math.max(0, netShake - dt);
         const p = env.progress();
         if (spawnT <= 0 && shots.filter(s => !s.done).length < (p > 0.5 ? 2 : 1)) { shoot(); spawnT = (1.6 - 0.6 * p) / env.diff.speed * (env.fever() ? 0.75 : 1); }
         const hands = env.tracker.hands.filter(h => h.vis), r = R();
@@ -57,7 +60,7 @@ export default {
       draw(ctx) {
         const r = R(), U = v.U;
         // 골대와 그물
-        const gx0 = z.x0 + z.w * 0.05, gx1 = z.x1 - z.w * 0.05, gy0 = v.H * 0.16, jx = netShake > 0 ? Math.sin(netShake * 70) * U * 0.006 : 0;
+        const gx0 = z.x0 + z.w * 0.05, gx1 = z.x1 - z.w * 0.05, gy0 = barY(), jx = netShake > 0 ? Math.sin(netShake * 70) * U * 0.006 : 0;
         ctx.save(); ctx.translate(jx, 0);
         ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = 1;
         for (let x = gx0; x <= gx1; x += U * 0.05) { ctx.beginPath(); ctx.moveTo(x, gy0); ctx.lineTo(x, v.H); ctx.stroke(); }

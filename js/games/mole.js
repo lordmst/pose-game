@@ -1,6 +1,7 @@
 // 두더지 잡기: 구멍에서 튀어나온 두더지를 주먹으로 콩! 헬멧 두더지는 두 번 쳐야 함(2점), 토끼는 치면 안 됨
-import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=52";
-import { sfx } from "../audio.js?v=52";
+import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=54";
+import { sfx } from "../audio.js?v=54";
+import { bodyRef } from "./bodyref.js?v=54";
 
 const PUNCH = 3.0;          // 타격 인정 속도 (얼음 깨기와 같음)
 const POP = 0.15;           // 올라오고 내려가는 시간
@@ -12,10 +13,12 @@ export default {
     const z = env.zone, v = env.view;
     const cols = clamp(Math.floor(z.w / (v.U * 0.3)), 2, 4);
     const holes = [];
-    for (const fy of [0.46, 0.76]) for (let c = 0; c < cols; c++) holes.push({ fx: (c + 0.5) / cols, fy, state: "empty", t: 0, up: 0, kind: "mole", cool: [0, 0], hint: 0 });
+    // 구멍 높이는 선수 키에 맞춤: 윗줄은 가슴 높이, 아랫줄은 배·엉덩이 높이 (몸통 길이 기준)
+    for (const fy of [0.25, 1.15]) for (let c = 0; c < cols; c++) holes.push({ fx: (c + 0.5) / cols, fy, state: "empty", t: 0, up: 0, kind: "mole", cool: [0, 0], hint: 0 });
+    const ref = bodyRef(env);
     let spawnT = 0.5, hits = 0, missed = 0, rabbits = 0, manual = false;   // manual: 설명 시연에서 직접 띄울 때 저절로 나오지 않게
     const HR = () => Math.min(z.w / cols * 0.32, v.U * 0.1);           // 구멍 반지름
-    const pos = h => ({ x: z.x0 + h.fx * z.w, y: h.fy * v.H });
+    const pos = h => ({ x: z.x0 + h.fx * z.w, y: ref.y(h.fy, HR() * 2.9) });   // 두 줄이 겹치지 않게 간격은 구멍 크기 이상
     function popUp(h, kind) {
       const p = env.progress();
       h.kind = kind || (p > 0.1 && Math.random() < 0.15 * env.diff.bomb ? "rabbit" : Math.random() < 0.18 ? "helmet" : "mole");
@@ -40,6 +43,7 @@ export default {
     }
     return {
       update(dt) {
+        ref.update(dt);
         const p = env.progress(), r = HR(), hands = env.tracker.hands;
         spawnT -= dt;
         const upNow = holes.filter(h => h.state !== "empty").length;

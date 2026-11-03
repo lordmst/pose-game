@@ -1,28 +1,29 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=52";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=52";
-import * as R from "./records.js?v=52";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=52";
-import copy from "./games/copy.js?v=52";
-import math from "./games/math.js?v=52";
-import ice from "./games/ice.js?v=52";
-import star from "./games/star.js?v=52";
-import fruit from "./games/fruit.js?v=52";
-import mole from "./games/mole.js?v=52";
-import wall from "./games/wall.js?v=52";
-import rhythm from "./games/rhythm.js?v=52";
-import goalie from "./games/goalie.js?v=52";
-import { hangul, english } from "./games/word.js?v=52";
-import clockGame from "./games/clock.js?v=52";
-import run from "./games/run.js?v=52";
-import simon from "./games/simon.js?v=52";
-import conductor from "./games/conductor.js?v=52";
-import SPORTS from "./games/sports.js?v=52";
-import LEARN from "./games/learn.js?v=52";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=52";
-import { DIFFS, diffOf } from "./difficulty.js?v=52";
-import { startDemo } from "./demo.js?v=52";
-import * as REAL from "./realmusic.js?v=52";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=54";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=54";
+import * as R from "./records.js?v=54";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=54";
+import copy from "./games/copy.js?v=54";
+import math from "./games/math.js?v=54";
+import ice from "./games/ice.js?v=54";
+import star from "./games/star.js?v=54";
+import fruit from "./games/fruit.js?v=54";
+import mole from "./games/mole.js?v=54";
+import wall from "./games/wall.js?v=54";
+import rhythm from "./games/rhythm.js?v=54";
+import goalie from "./games/goalie.js?v=54";
+import { hangul, english } from "./games/word.js?v=54";
+import clockGame from "./games/clock.js?v=54";
+import run from "./games/run.js?v=54";
+import simon from "./games/simon.js?v=54";
+import conductor from "./games/conductor.js?v=54";
+import SPORTS from "./games/sports.js?v=54";
+import LEARN from "./games/learn.js?v=54";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=54";
+import { DIFFS, diffOf } from "./difficulty.js?v=54";
+import { startDemo } from "./demo.js?v=54";
+import * as REAL from "./realmusic.js?v=54";
+import * as FACE from "./face.js?v=54";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -62,6 +63,15 @@ detectorP.catch(() => {});
 // 손 모양(편 손/주먹) 판정기: 몸 인식이 준비된 뒤 이어서 불러옴. 실패해도 게임은 '들어 올린 손' 방식으로 동작
 let handShape = null, shapeErr = 0, shapeSeenAt = -99, shapeRR = 0;
 detectorP.then(() => createHandShape()).then(h => { handShape = h; }).catch(e => console.warn("손 모양 인식 불러오기 실패", e));
+// 얼굴 확인(선수 인식 보조): 손 모양 다음에 불러옴. 실패해도 옷 색으로만 구분해서 동작
+detectorP.then(() => new Promise(r => setTimeout(r, 1500))).then(() => { if (!SIM) FACE.initFace(); });
+let faceT = 0;
+function faceTick(t) {
+  if (!assigner || !(SIM || FACE.faceReady()) || FACE.faceBusy() || t - faceT < 0.12) return;
+  const need = assigner.faceNeeds(); if (!need.length) return;
+  faceT = t; const n = need[0], a = assigner;
+  FACE.describe(SIM ? null : video, n.r).then(d => { if (d && a === assigner) a.setFace(n.tid, d); });
+}
 
 let state = "setup";
 let sel = [];
@@ -108,7 +118,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 52;
+const APP_V = 54;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -708,6 +718,7 @@ function frame(now) {
   const inGame = state === "play" || state === "countdown";
   if (raws.length) sampler.frame(cam.sim ? null : video);   // 몸통 옷 색을 보려고 카메라 화면을 작게 한 장 읽음
   const as = assigner ? assigner.assign(raws, cam, view, dt, visSupported, !inGame, sampler) : [];
+  faceTick(t);
   trackers.forEach((tr, i) => tr.update(as[i], cam, dt, t, visSupported));
   if (assigner) for (const i of assigner.takeFresh()) {
     const L = assigner.locks[i];
@@ -775,14 +786,31 @@ function draw(t) {
     ctx.lineWidth = U * 0.022; ctx.strokeStyle = `hsla(${(t * 140) % 360},90%,60%,0.9)`;
     ctx.strokeRect(U * 0.011, U * 0.011, W - U * 0.022, H - U * 0.022);
   }
-  if (slots.length === 2 && state !== "select" && state !== "ranking") {
-    ctx.save(); ctx.setLineDash([U * 0.025, U * 0.02]); ctx.lineWidth = U * 0.006; ctx.strokeStyle = "rgba(255,255,255,.6)";
-    ctx.beginPath(); ctx.moveTo(W / 2, U * 0.14); ctx.lineTo(W / 2, H); ctx.stroke(); ctx.restore();
-  }
   drawSkeletons();
   if (state === "ready") drawReady();
-  if (state === "countdown" || state === "play") { insts.forEach(g => g.draw(ctx)); drawLost(); }
+  if (state === "countdown" || state === "play") insts.forEach(g => g.draw(ctx));
+  if (slots.length === 2 && state !== "select" && state !== "ranking") drawDivider();   // 게임 그림 위에 그려서 항상 보이게
+  if (state === "countdown" || state === "play") drawLost();
   drawFx(ctx);
+  ctx.restore();
+}
+// 2인: 화면 가운데 경계선. 어두운 테두리 + 흰 선 + 양쪽에 선수 색 띠, 아래에 '◀ 1P | 2P ▶' 이름표
+function drawDivider() {
+  const { W, H, U } = view, x = W / 2, top = U * 0.13, c0 = slots[0].color, c1 = slots[1].color;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(x - U * 0.02, top, U * 0.04, H - top);
+  ctx.fillStyle = c0; ctx.fillRect(x - U * 0.014, top, U * 0.009, H - top);
+  ctx.fillStyle = c1; ctx.fillRect(x + U * 0.005, top, U * 0.009, H - top);
+  ctx.fillStyle = "#fff"; ctx.fillRect(x - U * 0.005, top, U * 0.01, H - top);
+  // 이름표
+  const fs = U * 0.032, y = H - U * 0.05, pad = U * 0.016;
+  ctx.font = `800 ${fs}px ${FONT}`; ctx.textBaseline = "middle";
+  [[0, "◀ 1P " + slots[0].name, c0], [1, "2P " + slots[1].name + " ▶", c1]].forEach(([i, t, c]) => {
+    const w = ctx.measureText(t).width + pad * 2, h = fs * 1.5, bx = i === 0 ? x - U * 0.03 - w : x + U * 0.03;
+    ctx.fillStyle = c; rr(ctx, bx, y - h / 2, w, h, h / 2); ctx.fill();
+    ctx.lineWidth = U * 0.005; ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.fillText(t, bx + pad, y + fs * 0.04);
+  });
   ctx.restore();
 }
 // 몸 위의 뼈대 선은 기본으로 숨김 (인식은 그대로 함). 주소 끝에 ?bones=1 을 붙이면 점검용으로 보임
@@ -923,7 +951,8 @@ function goFullscreen() {
 
 if (SIM) window.__dbg = { get demo() { return demo; }, get state() { return state; }, setTime: s => { timeLeft = s; }, players: () => players, scales: () => trackers.map(t => Math.round(t.scale)),
   bgmReal: () => REAL.bgmPlaying(),
-  audio: () => audioState(),   // 점검: 실제 음원 배경음악이 나오는지
+  audio: () => audioState(),
+  face: () => ({ state: FACE.faceState(), locks: assigner ? assigner.locks.map(L => L && { tid: L.tid, lost: !!L.lost, faceN: L.faceN }) : [] }),   // 점검: 실제 음원 배경음악이 나오는지
   bodyX: () => trackers.map(t => (t.pts && t.pts[11].v && t.pts[12].v ? Math.round((t.pts[11].x + t.pts[12].x) / 2) : null)) };   // 점검: 선수 몸 위치(화면 x)
 
 renderSetup();
