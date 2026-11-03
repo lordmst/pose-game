@@ -1,28 +1,28 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=50";
-import { sfx, bgm, speak, stopSpeak, unlock, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=50";
-import * as R from "./records.js?v=50";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=50";
-import copy from "./games/copy.js?v=50";
-import math from "./games/math.js?v=50";
-import ice from "./games/ice.js?v=50";
-import star from "./games/star.js?v=50";
-import fruit from "./games/fruit.js?v=50";
-import mole from "./games/mole.js?v=50";
-import wall from "./games/wall.js?v=50";
-import rhythm from "./games/rhythm.js?v=50";
-import goalie from "./games/goalie.js?v=50";
-import { hangul, english } from "./games/word.js?v=50";
-import clockGame from "./games/clock.js?v=50";
-import run from "./games/run.js?v=50";
-import simon from "./games/simon.js?v=50";
-import conductor from "./games/conductor.js?v=50";
-import SPORTS from "./games/sports.js?v=50";
-import LEARN from "./games/learn.js?v=50";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=50";
-import { DIFFS, diffOf } from "./difficulty.js?v=50";
-import { startDemo } from "./demo.js?v=50";
-import * as REAL from "./realmusic.js?v=50";
+import { Camera, Tracker, Assigner, createDetector, createHandShape, SIM } from "./pose.js?v=51";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=51";
+import * as R from "./records.js?v=51";
+import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, P1C, P2C } from "./fx.js?v=51";
+import copy from "./games/copy.js?v=51";
+import math from "./games/math.js?v=51";
+import ice from "./games/ice.js?v=51";
+import star from "./games/star.js?v=51";
+import fruit from "./games/fruit.js?v=51";
+import mole from "./games/mole.js?v=51";
+import wall from "./games/wall.js?v=51";
+import rhythm from "./games/rhythm.js?v=51";
+import goalie from "./games/goalie.js?v=51";
+import { hangul, english } from "./games/word.js?v=51";
+import clockGame from "./games/clock.js?v=51";
+import run from "./games/run.js?v=51";
+import simon from "./games/simon.js?v=51";
+import conductor from "./games/conductor.js?v=51";
+import SPORTS from "./games/sports.js?v=51";
+import LEARN from "./games/learn.js?v=51";
+import { ITEMS, itemOf, pickItem } from "./items.js?v=51";
+import { DIFFS, diffOf } from "./difficulty.js?v=51";
+import { startDemo } from "./demo.js?v=51";
+import * as REAL from "./realmusic.js?v=51";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -104,6 +104,26 @@ function layoutZones() {
 window.addEventListener("resize", resize);
 resize();
 
+/* ---------- 새 버전 자동 적용 ----------
+   아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
+   고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
+const APP_V = 51;
+{ const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
+let verAt = 0;
+async function checkVersion(force = false) {
+  const n = Date.now(); if (!force && n - verAt < 60000) return; verAt = n;
+  if (/[?&](sim|nover)=/.test(location.search)) return;
+  try {
+    const r = await fetch("version.json?t=" + n, { cache: "no-store" }); if (!r.ok) return;
+    const { v } = await r.json();
+    const u = new URL(location.href);
+    if (+v > APP_V && +(u.searchParams.get("_v") || 0) < +v && !["play", "countdown", "result"].includes(state)) {   // 같은 버전으로 두 번 새로 불러오지 않음
+      u.searchParams.set("_v", v); location.replace(u.toString());
+    }
+  } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkVersion(true); });
+
 /* ---------- 화면 전환 ---------- */
 const SCREENS = { setup: "scr-setup", select: "scr-select", song: "scr-song", demo: "scr-demo", ready: "scr-ready", result: "scr-result", ranking: "scr-ranking" };
 function setState(s) {
@@ -115,6 +135,7 @@ function setState(s) {
   if (s !== "countdown") $("#cd").hidden = true;
   $$("[data-hand]").forEach(el => { el._d = 0; el.style.setProperty("--p", 0); el.classList.remove("hover"); });
   uiCool = 0.7;
+  if (s === "select" || s === "setup") checkVersion();
 }
 function setMsg(t, err) { const el = $("#setupMsg"); el.textContent = t; el.classList.toggle("err", !!err); }
 let toastT = 0;
@@ -475,7 +496,7 @@ function beginCountdown(sec = 3, song = null) {
   setupHud();
   cdT = sec; setState("countdown"); showCd(String(sec)); sfx.tick();
 }
-function beginPlay() { setState("play"); showCd("시작!"); goT = 0.7; sfx.go(); if (GAMES[gameId].music !== false && !(nextBgm && REAL.bgmPlay(nextBgm))) bgm.start(); }
+function beginPlay() { unlock(); setState("play"); showCd("시작!"); goT = 0.7; sfx.go(); if (GAMES[gameId].music !== false && !(nextBgm && REAL.bgmPlay(nextBgm))) bgm.start(); }
 function showCd(txt) { const el = $("#cd"); el.hidden = false; el.textContent = txt; el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop"); }
 
 function makeEnv(i) {
@@ -587,7 +608,17 @@ function endGame() {
   renderResult(results);
   rankView = { game: gameId, level: recLevel(players[0]) };
   setState("result");
+  fitResult(); requestAnimationFrame(fitResult); setTimeout(fitResult, 300);   // 글꼴·그림이 늦게 그려져도 다시 맞춤
 }
+// 결과 화면이 기기 화면보다 크면 통째로 줄여서 한 화면에 다 보이게 (스크롤 없이)
+function fitResult() {
+  const panel = $("#scr-result .res"); if (!panel || state !== "result") return;
+  panel.style.transform = ""; panel.style.maxHeight = "none"; panel.style.overflow = "visible";
+  const h = panel.offsetHeight, w = panel.offsetWidth, H = window.innerHeight * 0.96, W = window.innerWidth * 0.98;
+  const k = Math.min(1, H / h, W / w);
+  if (k < 1) panel.style.transform = `scale(${k.toFixed(3)})`;
+}
+window.addEventListener("resize", () => { if (state === "result") fitResult(); });
 function renderResult(results) {
   const g = GAMES[gameId];
   let title = "끝!";
@@ -668,6 +699,7 @@ function frame(now) {
   if (!loopOn) return;
   requestAnimationFrame(frame);
   const t = now / 1000, dt = lastT ? Math.min(0.1, Math.max(0, t - lastT)) : 0.016; lastT = t;
+  wake();   // 소리 장치가 멈췄으면 다시 깨움 (아이패드)
   cam.layout(view.W, view.H);
   let raws = [];
   if (detector && cam.ready) { try { raws = detector.detect(video, now); } catch (e) { console.warn(e); } }
@@ -888,7 +920,8 @@ function goFullscreen() {
 }
 
 if (SIM) window.__dbg = { get demo() { return demo; }, get state() { return state; }, setTime: s => { timeLeft = s; }, players: () => players, scales: () => trackers.map(t => Math.round(t.scale)),
-  bgmReal: () => REAL.bgmPlaying(),   // 점검: 실제 음원 배경음악이 나오는지
+  bgmReal: () => REAL.bgmPlaying(),
+  audio: () => audioState(),   // 점검: 실제 음원 배경음악이 나오는지
   bodyX: () => trackers.map(t => (t.pts && t.pts[11].v && t.pts[12].v ? Math.round((t.pts[11].x + t.pts[12].x) / 2) : null)) };   // 점검: 선수 몸 위치(화면 x)
 
 renderSetup();

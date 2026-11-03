@@ -10,6 +10,19 @@ export function applyVolumes() {
 }
 let ac = null, master = null, noiseBuf = null, bgmGain = null;
 
+// 아이패드: 무음 모드(제어 센터 종 모양)에서도 게임 소리가 나도록 "재생" 종류로 지정 (iPadOS 17 이상)
+try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+// 소리 장치가 멈춤/중단(카메라를 켜거나 음성 안내 뒤 아이패드에서 생김) 상태면 다시 깨움
+let lastWake = 0;
+export function wake() {
+  if (!ac || ac.state === "running" || ac.state === "closed") return;
+  const n = performance.now(); if (n - lastWake < 400) return; lastWake = n;
+  try { const p = ac.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+}
+export const audioState = () => (ac ? ac.state : "none");
+// 화면을 만질 때마다 깨움 (아이패드는 사용자가 만진 순간에만 소리를 켤 수 있음)
+for (const ev of ["pointerdown", "touchend", "keydown"]) window.addEventListener(ev, () => { if (ac) wake(); else unlock(); }, { capture: true, passive: true });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) wake(); });
 export function unlock() {
   try {
     if (!ac) {
@@ -18,10 +31,11 @@ export function unlock() {
       sfxBus = ac.createGain(); sfxBus.connect(master);        // 효과음 크기
       musicBus = ac.createGain(); musicBus.connect(master);    // 배경음악·리듬 반주 크기
       applyVolumes();
+      ac.onstatechange = () => { if (ac.state !== "running") setTimeout(wake, 450); };
       const len = ac.sampleRate; noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
       const d = noiseBuf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     }
-    if (ac.state === "suspended") ac.resume();
+    wake();
   } catch (e) {}
   // iOS는 첫 터치 때 한 번 말해 둬야 이후 음성이 나옴
   try { if ("speechSynthesis" in window) { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } } catch (e) {}
@@ -45,7 +59,7 @@ function noise(t0, dur, { vol = 0.3, type = "bandpass", freq = 1000, q = 1, dest
 const midi = n => 440 * Math.pow(2, (n - 69) / 12);
 const PENTA = [0, 2, 4, 7, 9];
 const comboNote = i => { i = Math.min(i, 14); return 523.25 * Math.pow(2, (12 * Math.floor(i / 5) + PENTA[i % 5]) / 12); };
-const play = fn => { if (!settings.sfx || !ac) return; try { if (ac.state === "suspended") ac.resume(); fn(ac.currentTime); } catch (e) {} };
+const play = fn => { if (!settings.sfx || !ac) return; try { wake(); fn(ac.currentTime); } catch (e) {} };
 
 export const sfx = {
   pop: () => play(t => { noise(t, 0.12, { vol: 0.7, type: "highpass", freq: 1400 }); tone(190, t, 0.12, { vol: 0.5, slide: 0.4 }); }),
@@ -98,6 +112,8 @@ function synth(freq, t, dur, { type = "sawtooth", vol = 0.08, cutoff = 1800, det
 let timer = null, step = 0, nextT = 0, tempo = 1, song = 0;
 function schedule() {
   if (!ac || !bgmGain) return;
+  if (ac.state !== "running") { wake(); return; }               // 멈춘 동안은 쌓아 두지 않음
+  if (nextT < ac.currentTime - 0.2) nextT = ac.currentTime + 0.05;   // 다시 깨어나면 지금부터 이어서
   const S = BGM_SONGS[song], sx = 60 / (S.bpm * tempo) / 4;     // 16분음표 길이
   while (nextT < ac.currentTime + LOOKAHEAD) {
     const i = step % 16, bar = Math.floor(step / 16), ci = bar % 4, ch = S.chords[ci], root = S.roots[ci], sec = Math.floor(bar / 4) % 4, t = nextT, d = bgmGain;
@@ -119,7 +135,10 @@ function schedule() {
 }
 export const bgm = {
   start() {
-    if (!settings.bgm || !ac || timer) return;
+    if (!settings.bgm) return;
+    if (!ac) unlock();
+    if (!ac || timer) return;
+    wake();
     bgmGain = ac.createGain(); bgmGain.gain.value = 0.5; bgmGain.connect(musicBus);
     song = (song + 1 + Math.floor(Math.random() * (BGM_SONGS.length - 1))) % BGM_SONGS.length;   // 지난번과 다른 곡
     step = 0; nextT = ac.currentTime + 0.05; timer = setInterval(schedule, 25);

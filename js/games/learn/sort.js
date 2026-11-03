@@ -1,8 +1,8 @@
 // 분류 바구니: 위에서 천천히 떨어지는 그림(글자) 카드를 맞는 바구니에 넣기
 // 카드는 내 몸(어깨 가운데)을 따라 좌우로 움직임 → 왼쪽·오른쪽 바구니 중 맞는 쪽으로 몸을 옮기면 그 바구니에 쏙
 // 6장마다 분류 주제가 바뀜 (과일·채소, 바다·땅 동물, 짝수·홀수, 자음·모음, 하늘·땅 탈것, 먹는 것·못 먹는 것)
-import { burst, popup, outlinedText, rr, shuffle, clamp, FONT } from "../../fx.js?v=50";
-import { sfx } from "../../audio.js?v=50";
+import { burst, popup, outlinedText, rr, shuffle, clamp, FONT } from "../../fx.js?v=51";
+import { sfx } from "../../audio.js?v=51";
 
 const PER_PAIR = 6;     // 주제 하나에 카드 몇 장
 const FALL = 4.6;       // 카드가 떨어지는 시간(초, 보통·처음)

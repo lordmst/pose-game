@@ -267,7 +267,8 @@ body:not(.live) .overlay { background: var(--y); }
 #scr-ranking .rank.panel > * { flex-shrink: 0; }
 /* 결과: 2인은 두 선수 칸을 나란히, 글자를 조금 작게 → 버튼까지 한 화면에 */
 .res.panel { max-height: 97vh; overflow-y: auto; }
-#resCols.two { flex-wrap: nowrap; align-items: stretch; width: 100%; box-sizing: border-box; padding: 0 1.5vmin; }
+#resCols.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); flex-wrap: nowrap; align-items: stretch; width: 100%; box-sizing: border-box; padding: 0 1.5vmin; }
+#scr-result .res { transform-origin: center center; }
 #resCols.two .rmeta { overflow-wrap: anywhere; }
 #resCols.two .rcol { flex: 1 1 0; min-width: 0; padding: 1.4vmin 2vmin; gap: .6vmin; }
 #resCols.two .rscore { font-size: clamp(42px, 10vmin, 100px); }
@@ -276,3 +277,6 @@ body:not(.live) .overlay { background: var(--y); }
 #resCols.two .rbadge { font-size: clamp(13px, 2.3vmin, 22px); }
 #resCols.two .ritem .ico { font-size: clamp(24px, 4.6vmin, 44px); }
 #resCols.two .ritem span { font-size: clamp(12px, 1.9vmin, 17px); }
+
+/* 버전 표시 (새 버전이 들어왔는지 확인용) */
+#appVer { position: fixed; right: 1vmin; bottom: .6vmin; font-size: 11px; color: rgba(0,0,0,.35); z-index: 50; pointer-events: none; }
