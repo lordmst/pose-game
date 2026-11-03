@@ -1,6 +1,6 @@
 // 따라쟁이: 카드 속 자세를 0.6초 유지하면 성공, 2초 안에 해내면 2점
-import { burst, popup, rr, outlinedText } from "../fx.js?v=58";
-import { sfx } from "../audio.js?v=58";
+import { burst, popup, rr, outlinedText } from "../fx.js?v=59";
+import { sfx } from "../audio.js?v=59";
 
 const HOLD = 0.6;
 const ang = (a, b, c) => {
@@ -138,9 +138,10 @@ export default {
   create(env) {
     const z = env.zone, v = env.view;
     let cur = null, lastId = null, hold = 0, shown = 0, matched = false, flashT = 0, done = 0;
+    const rand = env.rand || Math.random;   // 협동: 두 선수가 같은 순서의 카드를 받음
     function next() {
       const pool = POSES.filter(p => (!p.lower || env.tracker.lowerSeen) && p.id !== lastId);
-      cur = pool[Math.floor(Math.random() * pool.length)]; lastId = cur.id; hold = 0; shown = 0;
+      cur = pool[Math.floor(rand() * pool.length)]; lastId = cur.id; hold = 0; shown = 0;
     }
     next();
     const card = () => {
@@ -161,7 +162,7 @@ export default {
           if (fast) popup(cx, c.y + c.h + v.U * 0.06, "빨라요!", { size: v.U * 0.045, color: "#fff", stroke: "#e0306a" });
           sfx.catch(env.player.combo);
           burst(cx, c.y + c.h / 2, { n: 30, colors: ["#ffd400", "#ff7aa2", "#7ae0ff", "#9dff7a"], shape: "confetti", speed: v.U * 0.9, gravity: v.U * 1.2, size: v.U * 0.016 });
-          flashT = 0.3; done++; next();
+          flashT = 0.3; done++; if (env.together) env.together("copy" + done, cx, c.y); next();
         } else if (shown > (7 - 3 * env.progress()) * env.diff.poseTime) {
           env.miss(cx, c.y - v.U * 0.03, "다음 자세!"); next();
         }

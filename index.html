@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=58">
+<link rel="stylesheet" href="css/style.css?v=59">
 </head>
 <body>
 <video id="video" playsinline muted autoplay></video>
@@ -22,7 +22,7 @@
     <h1 class="logo">몸으로 놀기</h1>
     <p class="sub">카메라 앞에서 몸을 움직여 노는 게임 · 혼자 또는 둘이 대결</p>
     <div class="panel">
-      <h3>누가 할까요? <small>1명 고르면 혼자, 2명 고르면 대결 · 누른 순서대로 1P · 2P</small></h3>
+      <h3>누가 할까요? <small>1명 고르면 혼자, 2명 고르면 대결 또는 협동 · 누른 순서대로 1P · 2P</small></h3>
       <div id="chips" class="chips"></div>
       <div id="slotRows" class="slotrows"></div>
     </div>
@@ -35,6 +35,7 @@
     <div class="actions">
       <button id="btnStart" class="big" type="button">선수를 골라 주세요</button>
       <button id="btnRankSetup" class="pill" type="button">순위 보기</button>
+      <button id="btnMissionSetup" class="pill" type="button">미션·리그</button>
     </div>
     <p id="setupMsg" class="msg"></p>
     <p class="hint">TV로 보기: 안드로이드는 Smart View, 아이패드·아이폰은 화면 미러링(AirPlay). 태블릿은 TV 아래에 세워 두고 2~3m 떨어져서 해요.</p>
@@ -50,10 +51,13 @@
   <div class="sel">
     <h2>어떤 게임을 할까요?</h2>
     <p class="sub">선수는 먼저 만세로 인식! 그다음 손바닥을 펴서 카드 위에 1초 대거나 화면을 눌러요</p>
+    <p id="selLeague" class="selleague" hidden></p>
     <div id="catTabs" class="tabs cat-tabs"></div>
     <div id="cards" class="cards"></div>
     <div id="selPlayers" class="selplayers"></div>
     <div class="row">
+      <button class="pill party" type="button" data-hand id="btnParty">🎉 파티 모드</button>
+      <button class="pill" type="button" data-hand id="btnMission">미션·리그</button>
       <button class="pill" type="button" data-hand id="btnRank">순위 보기</button>
       <button class="pill ghost" type="button" id="btnSetup">선수 바꾸기</button>
     </div>
@@ -112,6 +116,7 @@
   <div class="mid">
     <div class="timer"><i id="tfill"></i><span id="ttxt"></span></div>
     <div class="fever-tag">피버 타임 · 점수 2배</div>
+    <div id="teamTag" class="team-tag" hidden></div>
   </div>
   <div class="pbox" id="pb1"><span class="pn"></span><span class="ps">0</span><span class="pc"></span></div>
 </div>
@@ -123,10 +128,15 @@
 <section id="scr-result" class="screen overlay">
   <div class="res panel">
     <h2 id="resTitle"></h2>
+    <div id="resTeam" class="resteam" hidden></div>
     <div id="resCols"></div>
+    <div id="resShots" class="resshots" hidden></div>
+    <div id="resParty" class="resparty" hidden></div>
     <div class="row">
+      <button class="pill go" type="button" data-hand id="btnNext" hidden>다음 게임</button>
       <button class="pill" type="button" data-hand id="btnAgain">다시 하기</button>
       <button class="pill" type="button" data-hand id="btnOther">다른 게임</button>
+      <button class="pill ghost" type="button" id="btnPartyStop" hidden>파티 그만하기</button>
       <button class="pill" type="button" data-hand id="btnResRank">순위 보기</button>
     </div>
   </div>
@@ -142,10 +152,53 @@
       <ol id="rankList"></ol>
       <div id="rankBests"></div>
       <div id="rankItems" class="rankitems"></div>
+      <div id="rankTeam" class="rankteam" hidden></div>
     </div>
     <button class="pill" type="button" data-hand id="btnRankBack">돌아가기</button>
   </div>
 </section>
+
+<!-- 파티 모드: 룰렛으로 게임을 골라 이어서 하기 -->
+<section id="scr-party" class="screen overlay">
+  <div class="panel partyp">
+    <h2 id="partyHead">🎉 파티 모드</h2>
+    <p id="partySub" class="psub"></p>
+    <div id="partyReel" class="reel"></div>
+    <div id="partyTable" class="ptable"></div>
+    <div class="row" id="partyBtns"></div>
+  </div>
+</section>
+
+<!-- 오늘의 미션 · 주간 가족 리그 -->
+<section id="scr-mission" class="screen overlay">
+  <div class="panel misp">
+    <h2>오늘의 미션 · 주간 리그</h2>
+    <div class="misbody">
+      <div id="misList" class="mislist"></div>
+      <div id="leagueBox" class="league"></div>
+    </div>
+    <button class="pill" type="button" data-hand id="btnMisBack">돌아가기</button>
+  </div>
+</section>
+
+<!-- 꾸미기: 모은 아이템 착용 -->
+<div id="wearBox" class="modal" hidden>
+  <div class="panel wearp">
+    <h3 id="wearTitle"></h3>
+    <div id="wearSlots"></div>
+    <p class="wearnote">게임을 끝내면 받는 아이템을 모을수록 고를 것이 많아져요. 놀이 게임 중 카메라 화면에서 보여요</p>
+    <button class="pill" type="button" id="btnWearClose">다 했어요</button>
+  </div>
+</div>
+
+<!-- 사진 크게 보기 -->
+<div id="shotView" class="modal" hidden>
+  <div class="shotbox">
+    <img id="shotImg" alt="">
+    <p id="shotCap"></p>
+    <div class="row"><button class="pill" type="button" id="btnShotSave">사진 저장</button><button class="pill ghost" type="button" id="btnShotClose">닫기</button></div>
+  </div>
+</div>
 
 <div id="cursors"></div>
 <div id="toast" hidden></div>
@@ -157,6 +210,6 @@
     setTimeout(function () { if (!window.__appReady) show("게임을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요."); }, 8000);
   })();
 </script>
-<script type="module" src="js/main.js?v=58"></script>
+<script type="module" src="js/main.js?v=59"></script>
 </body>
 </html>

@@ -1,6 +1,8 @@
 // 과일 자르기: 아래에서 던져 올린 과일을 손을 빠르게 휘둘러 자르기. 폭탄은 피하기
-import { burst, popup, shake, FONT, rnd } from "../fx.js?v=58";
-import { sfx } from "../audio.js?v=58";
+import { burst, popup, shake, FONT, rnd } from "../fx.js?v=59";
+import { sfx } from "../audio.js?v=59";
+import { bodyRef } from "./bodyref.js?v=59";
+import { makeBoss } from "./boss.js?v=59";
 
 const SLICE = 3.0;   // 자르기로 인정하는 손 속도 (어깨너비/초)
 const FRUITS = [["🍉", "#ff4d6d"], ["🍎", "#e8323c"], ["🍊", "#ff9a1f"], ["🍌", "#ffd23d"], ["🍍", "#f5c400"], ["🍓", "#e8323c"], ["🥝", "#8bc34a"], ["🍑", "#ffa07a"], ["🍇", "#8e44ad"], ["🥥", "#f0f0f0"], ["🍒", "#d0102a"], ["🍐", "#b5d334"], ["🥭", "#ffb020"], ["🍋", "#ffe14d"], ["🫐", "#4a5bd6"], ["🍈", "#c6e27a"]];
@@ -14,12 +16,14 @@ function segDist(p, a, b) {
 
 export default {
   id: "fruit", title: "과일 자르기", icon: "🍉", sec: 45, cursor: "✋", cat: "move", bg: "#ffb3c1", desc: "휘둘러서 과일 자르기",
-  how: "손을 빠르게 휘둘러 날아오르는 과일을 잘라요. 한 번에 여러 개면 보너스! 폭탄은 피하기",
+  how: "손을 빠르게 휘둘러 날아오르는 과일을 잘라요. 한 번에 여러 개면 보너스! 폭탄은 피하기. 중간에 거대 수박 보스가 나와요",
+  rush: "과일 폭포",
   create(env) {
     const z = env.zone, v = env.view;
     let items = [], halves = [], spawnT = 0.6, t = 0, cut = 0, missed = 0, bombs = 0;
     const trails = [[], []], streak = [{ n: 0, t: -9 }, { n: 0, t: -9 }];
     const R = () => v.U * 0.07;
+    const ref = bodyRef(env), boss = makeBoss(env, { icon: "🍉", name: "거대 수박", mode: "hit", ref, color: "#ff4d6d" });
     function launch(kind, fxForce) {
       const sp = env.diff.speed, fx = fxForce != null ? fxForce : 0.18 + Math.random() * 0.64;
       const x = z.x0 + fx * z.w, y0 = v.H * 1.08, peak = v.H * (0.18 + Math.random() * 0.25);
@@ -44,6 +48,7 @@ export default {
       const s = streak[k];
       s.n = t - s.t < 0.35 ? s.n + 1 : 1; s.t = t;
       if (it.kind === "gold") {   // 황금 과일: 3점
+        if (env.stat) env.stat("gold");
         popup(it.x, it.y - R() * 2.2, "황금 과일!", { size: v.U * 0.05, color: "#fff", stroke: "#c99700" });
         burst(it.x, it.y, { n: 16, colors: ["#ffd400", "#fff3a0", "#ffffff"], shape: "star", speed: v.U * 0.8, gravity: v.U * 0.5, size: v.U * 0.02, life: 0.8 });
       }
@@ -52,12 +57,13 @@ export default {
     }
     return {
       update(dt) {
-        t += dt; spawnT -= dt;
-        const p = env.progress();
-        if (spawnT <= 0) {
-          const n = 1 + (Math.random() < 0.3 + p * 0.4 ? 1 : 0) + (p > 0.5 && Math.random() < 0.3 ? 1 : 0);
-          for (let i = 0; i < n; i++) { const q = Math.random(); launch(p > 0.1 && q < 0.12 * env.diff.bomb ? "bomb" : p > 0.15 && q > 0.93 ? "gold" : "fruit"); }
-          spawnT = (1.5 - 0.6 * p) * (env.fever() ? 0.7 : 1);
+        t += dt; spawnT -= dt; ref.update(dt); boss.update(dt);
+        const p = env.progress(), rush = env.rush && env.rush(), lucky = env.catchUp && env.catchUp() ? 0.8 : 0.93;
+        if (spawnT <= 0 && !boss.active) {
+          const n = rush ? 2 : 1 + (Math.random() < 0.3 + p * 0.4 ? 1 : 0) + (p > 0.5 && Math.random() < 0.3 ? 1 : 0);
+          // 과일 폭포: 폭탄 없이 과일만 쏟아짐
+          for (let i = 0; i < n; i++) { const q = Math.random(); launch(!rush && p > 0.1 && q < 0.12 * env.diff.bomb ? "bomb" : p > 0.15 && q > (rush ? 0.88 : lucky) ? "gold" : "fruit"); }
+          spawnT = rush ? 0.35 : (1.5 - 0.6 * p) * (env.fever() ? 0.7 : 1);
         }
         const hands = env.tracker.hands, need = SLICE * env.diff.punch, r = R();
         hands.forEach((h, k) => {
@@ -105,7 +111,9 @@ export default {
           ctx.font = `${Math.round(r * 1.9)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(hf.emoji, 0, 0);
           ctx.restore();
         }
+        boss.draw(ctx);
       },
+      get boss() { return boss; },
       result: () => `자른 과일 ${cut} · 놓침 ${missed} · 폭탄 ${bombs}`,
       // 설명 시연용
       get items() { return items; },

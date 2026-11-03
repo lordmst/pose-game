@@ -1,8 +1,8 @@
 // 벽 통과: 사람 모양 구멍이 뚫린 벽이 다가옴. 벽이 닿을 때 구멍 자리로 가서 구멍 모양대로 자세를 잡고 있으면 통과
 // 구멍은 왼쪽·오른쪽으로 옮겨 다니고, 앉기·무릎 들기·옆으로 기울이기 같은 전신 자세가 자주 나옴
-import { burst, popup, shake, outlinedText, rr } from "../fx.js?v=58";
-import { sfx } from "../audio.js?v=58";
-import { POSES, figData, poseMatches, drawPoseFig, limbHints } from "./copy.js?v=58";
+import { burst, popup, shake, outlinedText, rr } from "../fx.js?v=59";
+import { sfx } from "../audio.js?v=59";
+import { POSES, figData, poseMatches, drawPoseFig, limbHints } from "./copy.js?v=59";
 
 const TRAVEL = 4.2;    // 벽이 멀리서 닿기까지 걸리는 시간(초, 보통)
 const GAP = 0.9;       // 벽 사이 쉬는 시간
@@ -41,14 +41,15 @@ export default {
       return Math.abs((p[23].x + p[24].x) / 2 - holeX()) < Math.max(sw * 0.9, z.w * 0.08);
     }
     let place = true, pendingOff = null;
+    const rand = env.rand || Math.random;   // 협동: 두 선수가 같은 순서의 벽을 받음
     let wall = null, gapT = 0.6, passed = 0, crashed = 0, count = 0, lastId = null, matched = false, paintedKey = "";
     function nextWall() {
       const pool = WALL_POSES.filter(p => (!p.lower || env.tracker.lowerSeen) && p.id !== lastId);
       const body = pool.filter(p => BODY.includes(p.id)), arms = pool.filter(p => !BODY.includes(p.id));
-      const from = body.length && Math.random() < 0.5 ? body : arms;           // 절반은 전신 자세
-      const pose = from[Math.floor(Math.random() * from.length)]; lastId = pose.id;
+      const from = body.length && rand() < 0.5 ? body : arms;           // 절반은 전신 자세
+      const pose = from[Math.floor(rand() * from.length)]; lastId = pose.id;
       // 구멍 위치(구역 가운데 기준, 구역 너비 비율): 처음 두 벽은 가운데
-      let off = pendingOff != null ? pendingOff : count >= 2 && Math.random() < MOVE_RATE ? (Math.random() < 0.5 ? -1 : 1) * (0.14 + Math.random() * 0.16) : 0;
+      let off = pendingOff != null ? pendingOff : count >= 2 && rand() < MOVE_RATE ? (rand() < 0.5 ? -1 : 1) * (0.14 + rand() * 0.16) : 0;
       pendingOff = null;
       if (Math.abs(shiftOf(off)) < z.w * 0.06) off = 0;   // 거의 안 움직이면 가운데로
       wall = { pose, off, t: 0, T: TRAVEL * env.diff.poseTime * (1 - 0.25 * env.progress()) * (off ? 1.12 : 1), matchT: 0, result: null, rt: 0 };
@@ -95,7 +96,7 @@ export default {
           if (k >= 1) {
             const need = 0.3 * env.diff.hold;
             if (wall.matchT >= need || matched) {
-              wall.result = "pass"; passed++; sfx.catch(env.player.combo); env.award(1, z.cx, v.H * 0.3);
+              wall.result = "pass"; passed++; sfx.catch(env.player.combo); env.award(1, z.cx, v.H * 0.3); if (env.together) env.together("wall" + count, z.cx, v.H * 0.4);
               popup(z.cx, v.H * 0.4, "통과!", { size: v.U * 0.08, color: "#fff", stroke: "#2fb65a" });
               burst(z.cx, v.H * 0.55, { n: 24, colors: ["#ffd400", "#9dff7a", "#7ae0ff"], shape: "confetti", speed: v.U * 0.9, gravity: v.U, size: v.U * 0.016 });
             } else {

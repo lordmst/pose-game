@@ -9,7 +9,16 @@ export const ITEMS = [
   ["puzzle", "🧩", "퍼즐"], ["wand", "🪄", "요술봉"], ["gift", "🎁", "선물 상자"], ["candy", "🍭", "막대사탕"], ["shell", "🐚", "조개껍데기"],
   ["sunflower", "🌻", "해바라기"], ["butterfly", "🦋", "나비"], ["dolphin", "🐬", "돌고래"], ["parrot", "🦜", "앵무새"], ["ufo", "🛸", "비행접시"],
 ].map(([id, icon, name]) => ({ id, icon, name }));
-export const itemOf = id => ITEMS.find(x => x.id === id);
+// 오늘의 미션 도장 5개마다 받는 특별 아이템 (무작위 아이템에는 안 나옴)
+export const SPECIAL = [
+  ["grad", "🎓", "학사모"], ["owl", "🦉", "부엉이"], ["goggles", "🥽", "수영 고글"], ["dragon", "🐉", "아기 용"], ["helmet", "⛑️", "구조대 헬멧"],
+  ["fox", "🦊", "여우"], ["penguin", "🐧", "펭귄"], ["frog", "🐸", "개구리"],
+].map(([id, icon, name]) => ({ id, icon, name, special: true }));
+export const itemOf = id => ITEMS.find(x => x.id === id) || SPECIAL.find(x => x.id === id);
+export function pickSpecial(owned) {
+  const left = SPECIAL.filter(x => !owned.includes(x.id));
+  return left.length ? left[Math.floor(Math.random() * left.length)] : pickItem(owned);
+}
 // 아직 없는 것 중에서 무작위 (다 모았으면 아무거나)
 export function pickItem(owned) {
   const left = ITEMS.filter(x => !owned.includes(x.id));

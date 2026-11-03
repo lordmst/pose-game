@@ -1,29 +1,32 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=58";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=58";
-import * as R from "./records.js?v=58";
-import { popup, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=58";
-import copy from "./games/copy.js?v=58";
-import math from "./games/math.js?v=58";
-import ice from "./games/ice.js?v=58";
-import star from "./games/star.js?v=58";
-import fruit from "./games/fruit.js?v=58";
-import mole from "./games/mole.js?v=58";
-import wall from "./games/wall.js?v=58";
-import rhythm from "./games/rhythm.js?v=58";
-import goalie from "./games/goalie.js?v=58";
-import { hangul, english } from "./games/word.js?v=58";
-import clockGame from "./games/clock.js?v=58";
-import run from "./games/run.js?v=58";
-import simon from "./games/simon.js?v=58";
-import conductor from "./games/conductor.js?v=58";
-import SPORTS from "./games/sports.js?v=58";
-import LEARN from "./games/learn.js?v=58";
-import { ITEMS, itemOf, pickItem } from "./items.js?v=58";
-import { DIFFS, diffOf } from "./difficulty.js?v=58";
-import { startDemo } from "./demo.js?v=58";
-import * as REAL from "./realmusic.js?v=58";
-import * as FACE from "./face.js?v=58";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=59";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=59";
+import * as R from "./records.js?v=59";
+import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=59";
+import copy from "./games/copy.js?v=59";
+import math from "./games/math.js?v=59";
+import ice from "./games/ice.js?v=59";
+import star from "./games/star.js?v=59";
+import fruit from "./games/fruit.js?v=59";
+import mole from "./games/mole.js?v=59";
+import wall from "./games/wall.js?v=59";
+import rhythm from "./games/rhythm.js?v=59";
+import goalie from "./games/goalie.js?v=59";
+import { hangul, english } from "./games/word.js?v=59";
+import clockGame from "./games/clock.js?v=59";
+import run from "./games/run.js?v=59";
+import simon from "./games/simon.js?v=59";
+import conductor from "./games/conductor.js?v=59";
+import SPORTS from "./games/sports.js?v=59";
+import LEARN from "./games/learn.js?v=59";
+import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=59";
+import * as FUN from "./fun.js?v=59";
+import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=59";
+import { makeShots, saveShot } from "./photo.js?v=59";
+import { DIFFS, diffOf } from "./difficulty.js?v=59";
+import { startDemo } from "./demo.js?v=59";
+import * as REAL from "./realmusic.js?v=59";
+import * as FACE from "./face.js?v=59";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -44,6 +47,8 @@ const SLOT_COLORS = [P1C, P2C];
 const UI_DWELL = 1.0;                 // 손을 버튼 위에 이만큼 대고 있으면 선택
 const FEVER_SEC = 10;                 // 마지막 N초는 점수 2배
 const HAND_UI = !SIM || /handui=1/.test(location.search);
+const VS_ONLY = ["tennis", "pingpong", "volley", "boxing", "thumb"];   // 서로 맞붙는 종목: 협동으로는 못 함
+const PARTY_SKIP = ["rhythm", "conductor"];                         // 노래를 골라야 하는 게임은 파티에서 뺌
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -87,14 +92,21 @@ let gameId = "copy";
 let timeLeft = 0, gameSec = 60, fever = false, readyT = 0, cdT = 0, goT = 0;
 let visSupported = false, loopOn = false, lastT = 0, uiCool = 0, assigner = null;
 let rankView = { game: "copy", level: null }, rankBackTo = "setup", justSaved = new Set();
+let coop = false;            // 이번 판: 둘이 협동 (점수를 합쳐 팀 기록)
+let fun = null;              // 이번 판 재미 장치 상태: 돌발 이벤트 · 따라잡기 · 우정 별 · 함께 성공
+let party = null;            // 파티 모드: { list, i, res, n }
+let lastDt = 0.016;
+const shots = makeShots(canvas);
+const wearSt = [{}, {}], wearPipSt = [{}, {}];
 
 /* ---------- 설정 불러오기 ---------- */
 const saved = R.getSettings();
 for (const k of ["sfx", "bgm", "tts"]) if (typeof saved[k] === "boolean") settings[k] = saved[k];
 if (saved.vol) for (const k of ["sfx", "bgm", "voice"]) if (typeof saved.vol[k] === "number") settings.vol[k] = saved.vol[k];
 sel = (saved.lastSel || []).filter(id => !id.startsWith("guest") && R.players().some(p => p.id === id)).slice(0, 2);
-let songSel = saved.lastSong || "basic", curSong = "basic";   // 리듬 박자 노래 ("random" = 아무거나)
-function saveSettings() { R.setSettings({ ...R.getSettings(), sfx: settings.sfx, bgm: settings.bgm, tts: settings.tts, vol: { ...settings.vol }, lastSel: sel }); }
+let songSel = saved.lastSong || "basic", curSong = "basic";
+let coopSel = !!saved.coop, catchOn = saved.catchUp !== false;   // 둘이 할 때 협동/대결 · 대결 따라잡기 보너스   // 리듬 박자 노래 ("random" = 아무거나)
+function saveSettings() { R.setSettings({ ...R.getSettings(), sfx: settings.sfx, bgm: settings.bgm, tts: settings.tts, vol: { ...settings.vol }, lastSel: sel, coop: coopSel, catchUp: catchOn }); }
 
 /* ---------- 화면 크기 ---------- */
 function resize() {
@@ -118,7 +130,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 58;
+const APP_V = 59;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -136,7 +148,7 @@ async function checkVersion(force = false) {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkVersion(true); });
 
 /* ---------- 화면 전환 ---------- */
-const SCREENS = { setup: "scr-setup", select: "scr-select", song: "scr-song", demo: "scr-demo", ready: "scr-ready", result: "scr-result", ranking: "scr-ranking" };
+const SCREENS = { setup: "scr-setup", select: "scr-select", song: "scr-song", demo: "scr-demo", ready: "scr-ready", result: "scr-result", ranking: "scr-ranking", party: "scr-party", mission: "scr-mission" };
 function setState(s) {
   state = s;
   $$(".screen").forEach(el => el.classList.toggle("on", el.id === SCREENS[s]));
@@ -147,6 +159,7 @@ function setState(s) {
   $$("[data-hand]").forEach(el => { el._d = 0; el.style.setProperty("--p", 0); el.classList.remove("hover"); });
   uiCool = 0.7;
   if (s === "select" || s === "setup") checkVersion();
+  if (s === "select" && loopOn) updateLeagueLine();
 }
 function setMsg(t, err) { const el = $("#setupMsg"); el.textContent = t; el.classList.toggle("err", !!err); }
 let toastT = 0;
@@ -169,11 +182,12 @@ function profileOf(id) { const g = guestOf(id); if (!g) return id; return g.name
 function renderSetup() { renderChips(); renderSlots(); }
 function renderChips() {
   const chips = $("#chips"); chips.innerHTML = "";
+  const champ = FUN.lastWeekChampion();   // 지난주 리그 1위는 이름 앞에 왕관
   for (const c of allChoices()) {
     const i = sel.indexOf(c.id);
     const b = document.createElement("button");
     b.type = "button"; b.className = "chip" + (i >= 0 ? ` picked p${i + 1}` : "") + (c.kind === "guest" ? " guest" : "");
-    b.innerHTML = `${i >= 0 ? `<span class="badge">${i + 1}P</span>` : ""}<span class="nm">${esc(c.name)}</span>${c.kind === "saved" ? '<span class="del" aria-label="삭제">×</span>' : ""}`;
+    b.innerHTML = `${i >= 0 ? `<span class="badge">${i + 1}P</span>` : ""}<span class="nm">${champ && champ.id === c.id ? "👑 " : ""}${esc(c.name)}</span>${c.kind === "saved" ? '<span class="del" aria-label="삭제">×</span>' : ""}`;
     b.onclick = e => {
       if (e.target.classList.contains("del")) {
         if (confirm(`'${c.name}' 선수를 목록에서 지울까요? 이미 저장된 기록은 순위에 남습니다.`)) { R.removePlayer(c.id); sel = sel.filter(x => x !== c.id); saveSettings(); renderSetup(); }
@@ -228,11 +242,28 @@ function renderSlots() {
       b.onclick = () => { if (g) g.diff = d.id; else R.setDiff(id, d.id); renderSlots(); };
       dbox.appendChild(b);
     }
+    // 꾸미기: 모은 아이템 착용 (저장된 선수만)
+    if (!g) {
+      const wb = document.createElement("button"); wb.type = "button"; wb.className = "wearbtn";
+      const w = propOf(id, "wear", null) || {}, icons = WEAR_SLOTS.map(([k]) => w[k] && itemOf(w[k]) ? itemOf(w[k]).icon : "").join("");
+      wb.textContent = `꾸미기 ${icons || "+"}`; wb.onclick = () => openWear(id);
+      row.querySelector(".diffs").after(wb);
+    }
     rows.appendChild(row);
   });
+  // 둘이 할 때: 대결 / 협동
+  if (sel.length === 2) {
+    const m = document.createElement("div"); m.className = "moderow";
+    m.innerHTML = `<span>둘이 할 때</span><span class="seg"><button type="button" class="${coopSel ? "" : "on"}" data-m="vs">대결</button><button type="button" class="${coopSel ? "on" : ""}" data-m="co">협동</button></span>` +
+      (coopSel ? "" : `<label><input type="checkbox" id="optCatch" ${catchOn ? "checked" : ""}>뒤진 쪽 따라잡기 보너스</label>`) +
+      `<small>${coopSel ? "협동: 두 사람 점수를 합쳐 팀 기록에 도전해요. 둘이 함께 터치하는 우정 별, 함께 통과하면 보너스" : "대결: 점수가 크게 벌어지면 뒤진 쪽에 '역전 찬스'(점수 1.5배, 황금 목표물 더 자주)"}</small>`;
+    m.querySelectorAll(".seg button").forEach(b => { b.onclick = () => { coopSel = b.dataset.m === "co"; saveSettings(); renderSlots(); }; });
+    const cb = m.querySelector("#optCatch"); if (cb) cb.onchange = () => { catchOn = cb.checked; saveSettings(); };
+    rows.appendChild(m);
+  }
   const btn = $("#btnStart");
   btn.disabled = sel.length === 0;
-  btn.textContent = sel.length === 0 ? "선수를 골라 주세요" : sel.length === 1 ? "혼자 하기 시작" : "둘이 대결 시작";
+  btn.textContent = sel.length === 0 ? "선수를 골라 주세요" : sel.length === 1 ? "혼자 하기 시작" : coopSel ? "둘이 협동 시작" : "둘이 대결 시작";
 }
 /* ---------- 소리 크기 ---------- */
 const VOL_KEY = { tts: "voice", sfx: "sfx", bgm: "bgm" };
@@ -266,13 +297,39 @@ $("#btnVoice").onclick = () => {
 };
 syncSoundUI();
 $("#btnRankSetup").onclick = () => openRanking("setup");
+$("#btnMissionSetup").onclick = () => openMissions("setup");
+
+/* ---------- 꾸미기 (모은 아이템 착용) ---------- */
+let wearFor = null;
+const WEARABLE = [...ITEMS, ...SPECIAL].filter(x => WEAR[x.id]);
+function openWear(id) { wearFor = id; renderWear(); $("#wearBox").hidden = false; }
+function renderWear() {
+  const id = wearFor, own = R.items(id), w = { ...(propOf(id, "wear", null) || {}) };
+  $("#wearTitle").textContent = `${nameOf(id)} 꾸미기 · 모은 아이템 ${own.length}개`;
+  const box = $("#wearSlots"); box.innerHTML = "";
+  for (const [slot, label] of WEAR_SLOTS) {
+    const row = document.createElement("div"); row.className = "wslot"; row.innerHTML = `<b>${label}</b><span class="wits"></span>`;
+    const its = row.querySelector(".wits");
+    const mk = (it) => {
+      const b = document.createElement("button"); b.type = "button";
+      const has = !it || own.includes(it.id), on = it ? w[slot] === it.id : !w[slot];
+      b.className = "witem" + (it ? "" : " none") + (on ? " on" : "") + (has ? "" : " locked");
+      b.textContent = it ? (has ? it.icon : "?") : "없음"; b.title = it ? (has ? it.name : "아직 없는 아이템") : "안 쓰기";
+      b.onclick = () => { if (!has) { toast("게임을 끝내면 아이템을 받아요. 모으면 쓸 수 있어요"); return; } if (it) w[slot] = it.id; else delete w[slot]; R.setProp(id, "wear", w); renderWear(); renderSlots(); };
+      its.appendChild(b);
+    };
+    mk(null); WEARABLE.filter(x => WEAR[x.id].slot === slot).forEach(mk);
+    box.appendChild(row);
+  }
+}
+$("#btnWearClose").onclick = () => { $("#wearBox").hidden = true; };
 $("#btnReset").onclick = () => { if (confirm("모든 순위 기록을 지울까요? 되돌릴 수 없습니다.")) { R.clearRecords(); toast("기록을 모두 지웠어요"); } };
 
 $("#btnStart").onclick = async () => {
   if (!sel.length) return;
   unlock(); goFullscreen();
   slots = sel.map((id, i) => {
-    const s = { id, profileId: profileOf(id), name: nameOf(id), diff: diffIdOf(id), color: SLOT_COLORS[i] };
+    const s = { id, profileId: profileOf(id), name: nameOf(id), diff: diffIdOf(id), color: SLOT_COLORS[i], wear: guestOf(id) ? null : propOf(id, "wear", null) };
     for (const gid of LEVEL_GAMES) { const G = GAMES[gid]; s[G.levelField] = propOf(id, G.levelField, firstLevel(G)); }
     return s;
   });
@@ -283,6 +340,7 @@ $("#btnStart").onclick = async () => {
     setMsg("게임 엔진 불러오는 중... 잠시만 기다려 주세요");
     try { await detectorP; } catch (e) { cam.close(); return; }
   }
+  coop = slots.length === 2 && coopSel; party = null;
   trackers = slots.map((s, i) => new Tracker(i));
   assigner = new Assigner(slots.length);
   document.body.classList.add("live");
@@ -309,7 +367,12 @@ function backToSetup() {
 function renderSelect() {
   const el = $("#selPlayers"); el.innerHTML = ""; selCache = "";
   slots.forEach((s, i) => { const b = document.createElement("span"); b.className = "badge-lg"; b.style.setProperty("--c", s.color); el.appendChild(b); });
-  updateSelBadges();
+  updateSelBadges(); renderCards(); updateLeagueLine();
+}
+// 이번 주 리그 1위 (게임 고르기 화면 위쪽)
+function updateLeagueLine() {
+  const top = FUN.league()[0], le = $("#selLeague");
+  le.hidden = !top; if (top) le.textContent = `이번 주 가족 리그 1위: 👑 ${top.name} ${top.pts}점${coop ? " · 지금은 협동 모드" : ""}`;
 }
 let selCache = "";
 function updateSelBadges() {
@@ -349,18 +412,22 @@ function renderCards() {
   for (const id of ids) {
     const grp = GROUPS.find(g => g.id === id), G = grp || GAMES[id], b = document.createElement("button");
     b.type = "button"; b.className = "card"; b.setAttribute("data-hand", ""); b.dataset.game = id; b.style.setProperty("--bg", G.bg);
-    b.innerHTML = `<span class="ico">${G.icon}</span><span class="lbl">${esc(G.title)}</span><span class="desc">${esc(G.desc)}</span>`;
+    b.innerHTML = `<span class="ico">${G.icon}</span><span class="lbl">${esc(G.title)}</span><span class="desc">${esc(coop && VS_ONLY.includes(id) ? "대결로만 해요" : G.desc)}</span>`;
+    if (coop && VS_ONLY.includes(id)) { b.classList.add("off"); b.onclick = () => toast("서로 맞붙는 종목이라 협동으로는 못 해요. 선수 바꾸기에서 대결로 바꿔 주세요"); box.appendChild(b); continue; }
     b.onclick = () => { unlock(); chooseGame(grp ? (grp.members.includes(R.getSettings()["last_" + grp.id]) ? R.getSettings()["last_" + grp.id] : grp.members[0]) : id); };
     box.appendChild(b);
   }
 }
 renderCards();
 $("#btnRank").onclick = () => openRanking("select");
+$("#btnMission").onclick = () => openMissions("select");
+$("#btnParty").onclick = () => openParty();
 $("#btnSetup").onclick = backToSetup;
 
 /* ---------- 3. 자리 잡기 ---------- */
 let readyCache = "";
 function chooseGame(id) {
+  if (party && (party.done || party.list[party.i] !== id)) party = null;   // 파티 중에 다른 게임을 고르면 파티는 끝
   gameId = id;
   const grp = groupOf(id); if (grp) R.setSettings({ ...R.getSettings(), ["last_" + grp.id]: id });
   if (needDemo(id)) openDemo(); else goReady();
@@ -371,7 +438,7 @@ function stopBgm() { bgm.stop(); REAL.bgmStop(); }
 function goReady() {
   const g = GAMES[gameId];
   if (g.music !== false) nextBgm = REAL.pickBgm();
-  $("#readyTitle").textContent = `${g.icon} ${g.title}`;
+  $("#readyTitle").textContent = `${g.icon} ${g.title}` + (party ? ` · 파티 ${party.i + 1}/${party.n}` : "") + (coop ? " · 협동" : "");
   $("#readyHow").textContent = "";   // 자리 잡기 화면의 분홍 설명 글은 뺌 (설명은 게임 설명 시연에서)
   $("#readyHint").textContent = slots.length === 2
     ? "1P는 화면 왼쪽, 2P는 오른쪽에 서서 두 손을 머리 위로 올려(만세) 주세요"
@@ -508,7 +575,8 @@ function beginCountdown(sec = 3, song = null) {
   if (g.songs) curSong = song || pickSong(g, songSel);
   clearFx(); fever = false;
   $("#hud").classList.remove("fever"); bgm.setTempo(1);
-  players = slots.map(s => ({ ...s, score: 0, combo: 0, maxCombo: 0, misses: 0 }));
+  players = slots.map(s => ({ ...s, score: 0, combo: 0, maxCombo: 0, misses: 0, stats: {} }));
+  fun = newFun(g); shots.reset();
   // 게임 시간: 게임이 정하면 그대로 (리듬·지휘자 = 곡이 끝날 때까지, OX 퀴즈 = 10문제)
   gameSec = g.secFor ? g.secFor(curSong, players.map(p => diffOf(p.diff))) : g.sec; timeLeft = gameSec;
   trackers.forEach(tr => { tr.meters = 0; });
@@ -531,7 +599,125 @@ function makeEnv(i) {
     penalty: (n, x, y, label) => penalty(i, n, x, y, label),
     speak: (text, lang) => speak(slots.length === 2 && !lang ? `${p.name}, ${text}` : text, slots.length === 2, lang),
     pip: (c, x, y, w, h, mark) => drawPip(c, i, x, y, w, h, mark),
+    // 재미 장치
+    rush: () => (fun && fun.rush ? fun.rush : null),            // 돌발 이벤트 중이면 { name, t }
+    catchUp: () => !!(fun && fun.catch[i]),                       // 대결에서 뒤진 쪽 '역전 찬스'
+    stat: (k, n = 1) => { p.stats[k] = (p.stats[k] || 0) + n; if (k === "gold") shots.want(slots.length === 2 ? `${p.name} 대박!` : "대박!", 3); },   // 미션용 집계
+    moment: (label, pri, delay) => shots.want(label, pri, delay),   // 웃긴 순간 사진
+    rand: coop ? FUN.seeded(fun.seed) : null,                     // 협동: 두 선수가 같은 순서
+    together: coop ? (key, x, y) => together(i, key, x, y) : null,
   };
+}
+/* ---------- 재미 장치: 돌발 이벤트 · 따라잡기 · 우정 별 · 함께 성공 ---------- */
+const RUSH_SEC = 5;
+function newFun(g) {
+  const fr = coop && g.cat === "move" && g.music !== false && !g.scene3d;   // 우정 별: 카메라 화면에서 하는 놀이 게임
+  return {
+    seed: (Math.random() * 1e9) | 0,
+    rushAt: g.rush ? 0.26 + Math.random() * 0.12 : 9, rush: null, rushDone: false,
+    catch: [false, false],
+    friendOn: fr, friend: null, friendT: 7 + Math.random() * 4,
+    tog: new Map(), snaps: 0,
+    teamBest: coop ? teamBest() : 0, beatBest: false,
+  };
+}
+const teamKeyOf = () => R.gameKey(GAMES[gameId].recId || gameId, recLevel(players[0])) + "#coop";
+const teamIdOf = () => "team:" + slots.map(s => s.profileId || s.id).sort().join("+");
+function teamBest() { const r = R.allRecords().filter(x => x.key === teamKeyOf() && x.playerId === teamIdOf()); return r.length ? Math.max(...r.map(x => x.score)) : 0; }
+const teamScore = () => players.reduce((a, p) => a + p.score, 0);
+function funTick(dt) {
+  if (!fun) return;
+  const g = GAMES[gameId], prog = 1 - Math.max(0, timeLeft) / gameSec, { W, H, U } = view;
+  // 돌발 이벤트: 한 판에 한 번, 5초 동안 목표물이 쏟아짐 (두 선수 동시에)
+  if (!fun.rushDone && prog >= fun.rushAt && !fever) {
+    fun.rushDone = true; fun.rush = { name: g.rush, t: RUSH_SEC };
+    sfx.fever(); popup(W / 2, H * 0.4, `돌발! ${g.rush}`, { size: U * 0.09, color: "#fff", stroke: "#ff6a00", life: 1.6, vy: -30 });
+    shots.want(`돌발! ${g.rush}`, 2, 1.6);
+  }
+  if (fun.rush) { fun.rush.t -= dt; if (fun.rush.t <= 0) fun.rush = null; }
+  // 사진: 특별한 일이 없어도 두 장은 찍어 둠
+  if (fun.snaps === 0 && prog > 0.3) { fun.snaps = 1; shots.want("열심히!", 0); }
+  if (fun.snaps === 1 && prog > 0.72) { fun.snaps = 2; shots.want("집중!", 0); }
+  // 따라잡기: 대결에서 점수 차가 크면 뒤진 쪽 점수 1.5배 + 황금 목표물 더 자주 (차이가 절반으로 줄면 끝)
+  if (players.length === 2 && !coop && catchOn && prog > 0.15) {
+    const a = players[0].score, b = players[1].score, gap = Math.abs(a - b), th = Math.max(10, Math.max(a, b) * 0.3), lo = a < b ? 0 : 1;
+    [0, 1].forEach(k => {
+      const was = fun.catch[k], on = gap > 0 && k === lo && (was ? gap >= th * 0.5 : gap >= th);
+      fun.catch[k] = on;
+      if (on && !was) { sfx.select(); popup(zones[k].cx, H * 0.32, "역전 찬스! 점수 1.5배", { size: U * 0.055, color: "#fff", stroke: "#7a1fd6", life: 1.4 }); }
+    });
+  } else fun.catch = [false, false];
+  // 협동: 팀 최고 기록을 넘으면 알림
+  if (coop && fun.teamBest > 0 && !fun.beatBest && teamScore() > fun.teamBest) {
+    fun.beatBest = true; sfx.fever(); popup(W / 2, H * 0.36, "팀 최고 기록 넘었다!", { size: U * 0.07, color: "#fff", stroke: "#1d8f47", life: 1.6 }); shots.want("팀 기록!", 3);
+  }
+  if (fun.friendOn) friendTick(dt, prog);
+}
+// 우정 별: 가운데 선 위에 나타남. 두 선수가 0.6초 안에 함께 손을 대면 둘 다 3점
+function friendY() {
+  const ys = trackers.map(tr => tr.pts && tr.pts[11].v && tr.pts[12].v ? (tr.pts[11].y + tr.pts[12].y) / 2 : null).filter(y => y != null);
+  const y = ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length - view.U * 0.05 : view.H * 0.45;
+  return Math.max(view.H * 0.3, Math.min(view.H * 0.7, y + (Math.random() - 0.5) * view.U * 0.12));
+}
+function friendTick(dt, prog) {
+  const F = fun.friend, U = view.U;
+  if (!F) {
+    fun.friendT -= dt;
+    if (fun.friendT <= 0 && prog < 0.95) { fun.friend = { x: view.W / 2, y: friendY(), t: 0, life: 7, touch: [-9, -9], done: false, rt: 0 }; sfx.select(); }
+    return;
+  }
+  F.t += dt;
+  if (F.done) { F.rt += dt; if (F.rt > 0.8) { fun.friend = null; fun.friendT = 10 + Math.random() * 5; } return; }
+  const r = U * 0.085;
+  trackers.forEach((tr, k) => { if (tr.hands.some(h => h.vis && Math.hypot(h.x - F.x, h.y - F.y) < r * 1.5)) F.touch[k] = F.t; });
+  if (F.t - F.touch[0] < 0.6 && F.t - F.touch[1] < 0.6) {
+    F.done = true; award(0, 3, F.x - r * 1.5, F.y - r); award(1, 3, F.x + r * 1.5, F.y - r);
+    popup(F.x, F.y - r * 2, "우정 별!", { size: U * 0.07, color: "#fff", stroke: "#e0306a", life: 1.3 });
+    burst(F.x, F.y, { n: 36, colors: ["#ff4d4d", "#ffd400", "#7ae0ff", "#9dff7a", "#ff8ad8"], shape: "star", speed: U * 1.0, gravity: U * 0.5, size: U * 0.022, life: 1.0 });
+    sfx.fever(); shots.want("우정 별!", 4); players.forEach(p => { p.stats.friend = (p.stats.friend || 0) + 1; });
+  } else if (F.t > F.life) { fun.friend = null; fun.friendT = 8 + Math.random() * 4; }
+}
+// 협동: 같은 벽·같은 카드를 둘 다 성공하면 보너스
+function together(i, key, x, y) {
+  const e = fun.tog.get(key) || {}; e[i] = true; fun.tog.set(key, e);
+  if (e[0] && e[1] && !e.done) {
+    e.done = true; award(0, 2, zones[0].cx, view.H * 0.25); award(1, 2, zones[1].cx, view.H * 0.25);
+    popup(view.W / 2, view.H * 0.36, "함께 성공! 협동 보너스", { size: view.U * 0.06, color: "#fff", stroke: "#1d8f47", life: 1.3 });
+    sfx.fever(); shots.want("함께 성공!", 4); players.forEach(p => { p.stats.friend = (p.stats.friend || 0) + 1; });
+  }
+}
+function drawFun(t) {
+  if (!fun || state !== "play") return;
+  const { W, H, U } = view;
+  if (fun.rush) {   // 돌발 이벤트 띠
+    const txt = `돌발! ${fun.rush.name} ${Math.ceil(fun.rush.t)}초`, fs = U * 0.05;
+    ctx.save(); ctx.font = `${fs}px ${FONT}`; const w = ctx.measureText(txt).width + U * 0.08, y = U * 0.19;
+    ctx.fillStyle = `hsl(${(t * 200) % 360},90%,55%)`; rr(ctx, W / 2 - w / 2, y - fs * 0.85, w, fs * 1.7, fs * 0.85); ctx.fill();
+    ctx.lineWidth = U * 0.006; ctx.strokeStyle = "#fff"; ctx.stroke(); ctx.restore();
+    outlinedText(ctx, txt, W / 2, y, fs, "#fff", "#333");
+  }
+  players.forEach((p, k) => {   // 역전 찬스 표시
+    if (!fun.catch[k]) return;
+    const z = zones[k], a = 0.75 + 0.25 * Math.sin(t * 8);
+    ctx.save(); ctx.globalAlpha = a; ctx.lineWidth = U * 0.012; ctx.strokeStyle = "#b46bff"; ctx.strokeRect(z.x0 + U * 0.02, U * 0.13, z.w - U * 0.04, H - U * 0.15); ctx.restore();
+    outlinedText(ctx, "역전 찬스 · 점수 1.5배", z.cx, U * (fun.rush ? 0.27 : 0.19), U * 0.04, "#fff", "#7a1fd6");
+  });
+  const F = fun.friend;
+  if (F) {
+    const r = U * 0.085, k = F.done ? 1 + F.rt * 1.5 : 1, al = F.done ? Math.max(0, 1 - F.rt / 0.8) : Math.min(1, F.t * 3);
+    ctx.save(); ctx.globalAlpha = al;
+    ctx.shadowColor = "#fff"; ctx.shadowBlur = r * (0.6 + 0.4 * Math.sin(t * 7));
+    starPath(ctx, F.x, F.y, r * k, 0.5, Math.sin(t * 2) * 0.2);
+    const g = ctx.createLinearGradient(F.x - r, F.y - r, F.x + r, F.y + r);
+    ["#ff4d4d", "#ffd400", "#37d67a", "#3d8bff", "#b46bff"].forEach((c, i) => g.addColorStop(i / 4, c));
+    ctx.fillStyle = g; ctx.fill(); ctx.shadowBlur = 0; ctx.lineWidth = r * 0.08; ctx.strokeStyle = "#fff"; ctx.stroke();
+    if (!F.done) {
+      [0, 1].forEach(i => { if (F.t - F.touch[i] < 0.6) { ctx.strokeStyle = slots[i].color; ctx.lineWidth = r * 0.16; ctx.beginPath(); ctx.arc(F.x, F.y, r * 1.35, i ? -Math.PI / 2 : Math.PI / 2, i ? Math.PI / 2 : Math.PI * 1.5); ctx.stroke(); } });
+      ctx.lineWidth = U * 0.008; ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.arc(F.x, F.y, r * 1.35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, 1 - F.t / F.life)); ctx.stroke();
+    }
+    ctx.restore();
+    if (!F.done) outlinedText(ctx, "둘이 함께 터치!", F.x, F.y + r * 1.9, U * 0.042, "#fff", "#e0306a");
+  }
 }
 // 3D 스포츠용 카메라 작은 화면: 그 선수 몸 주변만 잘라 구석에 보여 줌 (카메라 모습만)
 function drawPip(c, i, x, y, w, h, mark) {
@@ -543,6 +729,7 @@ function drawPip(c, i, x, y, w, h, mark) {
   c.beginPath(); c.roundRect(x, y, w, h, U * 0.02); c.clip();
   c.translate(x + w / 2, y); c.scale(s, s); c.translate(-cx, 0);
   cam.draw(c, view.W, view.H);
+  if (P && tr.present && slots[i] && slots[i].wear) drawWear(c, P, slots[i].wear, itemOf, wearPipSt[i], lastT, lastDt);   // 작은 창 속 내 모습에도 꾸미기
   // 뼈대 선(다각형 모양)은 그리지 않음: 작은 창에는 카메라에 비친 모습만 (점검용 ?bones=1 일 때만 표시)
   if (P && SHOW_BONES) {
     c.strokeStyle = slots[i].color; c.lineWidth = U * 0.02; c.lineCap = "round"; c.beginPath();
@@ -557,13 +744,15 @@ function drawPip(c, i, x, y, w, h, mark) {
   c.lineWidth = U * 0.006; c.strokeStyle = "#fff"; c.beginPath(); c.roundRect(x, y, w, h, U * 0.02); c.stroke();
 }
 function award(i, base, x, y) {
-  const p = players[i], k = diffOf(p.diff).points, pts = base * k * (fever ? 2 : 1);   // 난이도 배점 × 피버 2배
+  const p = players[i], k = diffOf(p.diff).points, boost = fun && fun.catch[i] ? 1.5 : 1;
+  const pts = Math.ceil(base * k * (fever ? 2 : 1) * boost);   // 난이도 배점 × 피버 2배 × 역전 찬스 1.5배
   p.combo++; p.maxCombo = Math.max(p.maxCombo, p.combo);
   let bonus = 0;
   if (p.combo >= 5 && p.combo % 5 === 0) {
     bonus = k;
     popup(x, y - view.U * 0.08, `${p.combo} 콤보! +${bonus}`, { size: view.U * 0.05, color: "#ffe14d", stroke: "#7a4a00" });
   }
+  if (p.combo >= 10 && p.combo % 10 === 0) shots.want(`${p.combo} 콤보!`, 3);
   p.score += pts + bonus;
   popup(x, y, `+${pts}`, { size: view.U * (fever ? 0.085 : 0.065), color: "#fff", stroke: p.color });
   bump(i);
@@ -576,12 +765,14 @@ function miss(i, x, y, label) {
 function penalty(i, n, x, y, label) {
   const p = players[i], amt = n * diffOf(p.diff).points; p.combo = 0; p.score = Math.max(0, p.score - amt);
   popup(x, y, `${label} -${amt}`, { size: view.U * 0.06, color: "#fff", stroke: "#d02020" });
+  shots.want(label || "앗!", 4, 0.15);
   bump(i);
 }
 function enterFever() {
   fever = true; sfx.fever(); bgm.setTempo(1.35); REAL.bgmRate(1.08);
   $("#hud").classList.add("fever");
   popup(view.W / 2, view.H * 0.45, "피버 타임! 점수 2배", { size: view.U * 0.09, color: "#fff", stroke: "#e0306a", life: 1.6, vy: -20 });
+  shots.want("피버 타임!", 1, 0.6);
 }
 
 /* ---------- HUD ---------- */
@@ -594,42 +785,73 @@ function setupHud() {
 }
 function renderHud() {
   players.forEach((p, i) => {
-    const key = p.score + "|" + p.combo;
+    const key = p.score + "|" + p.combo + "|" + (fun && fun.catch[i] ? 1 : 0);
     if (hudCache[i] === key) return; hudCache[i] = key;
     const b = $("#pb" + i);
     b.querySelector(".ps").textContent = p.score;
-    b.querySelector(".pc").textContent = p.combo >= 2 ? `${p.combo} 콤보` : "";
+    b.querySelector(".pc").textContent = fun && fun.catch[i] ? "역전 찬스 ×1.5" : p.combo >= 2 ? `${p.combo} 콤보` : "";
   });
+  const tt = $("#teamTag");
+  if (coop) { const txt = `팀 ${teamScore()}점` + (fun && fun.teamBest ? ` · 최고 ${fun.teamBest}` : ""); if (tt.textContent !== txt) tt.textContent = txt; }
+  tt.hidden = !coop;
   const sec = gameSec;
   $("#tfill").style.width = Math.max(0, timeLeft / sec * 100) + "%";
   $("#ttxt").textContent = Math.max(0, Math.ceil(timeLeft));
 }
 function bump(i) { const el = $(`#pb${i} .ps`); el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
-$("#btnQuit").onclick = () => { stopInsts(); stopBgm(); stopSpeak(); setState("select"); };
+$("#btnQuit").onclick = () => { stopInsts(); stopBgm(); stopSpeak(); shots.stop(); fun = null; if (party) { party = null; toast("파티를 멈췄어요"); } setState("select"); };
 
 /* ---------- 5. 결과 ---------- */
 function endGame() {
   stopInsts(); stopBgm(); stopSpeak(); sfx.fanfare();
   $("#hud").classList.remove("fever");
   justSaved = new Set();
+  const g = GAMES[gameId], photos = shots.pick(3); shots.stop();
+  // 파티: 이번 게임 점수 기록
+  let partyEnd = false;
+  if (party) { party.res[party.i] = players.map(p => p.score); party.i++; partyEnd = party.i >= party.n; }
+  // 협동: 팀 기록 (두 선수 모두 이름이 있을 때)
+  let team = null;
+  if (coop) {
+    team = { score: teamScore(), best: fun ? fun.teamBest : 0, rec: null };
+    if (slots.every(s => s.profileId)) {
+      team.rec = R.addRecord({ key: teamKeyOf(), game: gameId, level: recLevel(players[0]), playerId: teamIdOf(), name: slots.map(s => s.name).join("·"), score: team.score, mode: 2, meters: 0, diff: "normal" });
+      justSaved.add(team.rec.record.id);
+    }
+  }
   const results = players.map((p, i) => {
     const meters = Math.round(trackers[i].meters * 10) / 10;
     let rec = null;
     if (p.profileId) {
       const lvl = recLevel(p);
-      rec = R.addRecord({ key: R.gameKey(GAMES[gameId].recId || gameId, lvl), game: gameId, level: lvl, playerId: p.profileId, name: p.name, score: p.score, mode: players.length, meters, diff: p.diff });
-      justSaved.add(rec.record.id);
+      rec = R.addRecord({ key: R.gameKey(GAMES[gameId].recId || gameId, lvl), game: gameId, level: lvl, playerId: p.profileId, name: p.name, score: p.score, mode: players.length, meters, diff: p.diff, ...(coop ? { coopPart: true } : {}) });
+      if (coop) rec = null; else justSaved.add(rec.record.id);
     }
-    // 아이템 획득: 점수를 낸 선수(이름 있는 선수)는 아이템 하나를 받음
+    // 아이템 획득: 점수를 낸 선수(이름 있는 선수)는 아이템 하나를 받음. 쓸 수 있는 아이템이고 그 자리가 비어 있으면 바로 착용
     let item = null;
-    if (p.profileId && p.score > 0) { const it = pickItem(R.items(p.profileId)); item = { ...it, isNew: R.addItem(p.profileId, it.id), count: R.items(p.profileId).length }; }
-    return { p, meters, rec, item, extra: (insts[i].result && insts[i].result()) || "" };
+    if (p.profileId && p.score > 0) { const it = pickItem(R.items(p.profileId)); item = { ...it, isNew: R.addItem(p.profileId, it.id), count: R.items(p.profileId).length }; item.worn = autoWear(i, it); }
+    // 오늘의 미션
+    let mis = null;
+    if (p.profileId) {
+      mis = FUN.updateMissions(p.profileId, { id: gameId, cat: g.cat, maxCombo: p.maxCombo, meters, gold: p.stats.gold || 0, boss: p.stats.boss || 0, partyDone: partyEnd }, missionGames());
+      if (mis.reward) mis.reward.worn = autoWear(i, mis.reward);
+    }
+    return { p, meters, rec, item, mis, extra: (insts[i].result && insts[i].result()) || "" };
   });
-  renderResult(results);
+  fun = null;
+  renderResult(results, photos, team, partyEnd);
   rankView = { game: gameId, level: recLevel(players[0]) };
   setState("result");
   fitResult(); requestAnimationFrame(fitResult); setTimeout(fitResult, 300);   // 글꼴·그림이 늦게 그려져도 다시 맞춤
 }
+// 새로 받은 아이템이 쓸 수 있는 것이고 그 자리가 비었으면 바로 착용 (저장된 선수만)
+function autoWear(i, it) {
+  const s = slots[i]; if (!it || !WEAR[it.id] || guestOf(s.id) || !R.players().some(x => x.id === s.id)) return false;
+  const w = { ...(propOf(s.id, "wear", null) || {}) }, slot = WEAR[it.id].slot;
+  if (w[slot]) return false;
+  w[slot] = it.id; R.setProp(s.id, "wear", w); s.wear = w; return true;
+}
+const missionGames = () => GAME_ORDER.filter(id => !PARTY_SKIP.includes(id) && !VS_ONLY.includes(id)).map(id => ({ id, icon: GAMES[id].icon, title: GAMES[id].title }));
 // 결과 화면이 기기 화면보다 크면 통째로 줄여서 한 화면에 다 보이게 (스크롤 없이)
 function fitResult() {
   const panel = $("#scr-result .res"); if (!panel || state !== "result") return;
@@ -639,33 +861,173 @@ function fitResult() {
   if (k < 1) panel.style.transform = `scale(${k.toFixed(3)})`;
 }
 window.addEventListener("resize", () => { if (state === "result") fitResult(); });
-function renderResult(results) {
+function renderResult(results, photos = [], team = null, partyEnd = false) {
   const g = GAMES[gameId];
   let title = "끝!";
-  if (results.length === 2) {
+  if (team) title = `협동 팀 ${team.score}점`;
+  else if (results.length === 2) {
     const [a, b] = results;
     title = a.p.score === b.p.score ? "무승부!" : `${(a.p.score > b.p.score ? a : b).p.name} 승리!`;
   }
   $("#resTitle").textContent = `${g.icon} ${g.title} · ${title}`;
+  // 협동: 팀 점수
+  const tb = $("#resTeam"); tb.hidden = !team;
+  if (team) {
+    const badge = team.best > 0 && team.score > team.best ? "팀 최고 기록!" : team.rec && team.rec.first ? "첫 팀 기록!" : "";
+    tb.innerHTML = `<span>팀 점수</span><b>${team.score}</b><span>점</span>` + (team.best ? `<small>지난 최고 ${team.best}점</small>` : "") + (badge ? `<span class="rbadge">${badge}</span>` : "") + (!team.rec ? `<small>두 사람 모두 이름이 있으면 팀 기록이 저장돼요</small>` : "");
+  }
   const box = $("#resCols"); box.innerHTML = ""; box.classList.toggle("two", results.length === 2);   // 2인은 두 칸 나란히 (한 화면에 다 보이게)
-  const decided = results.length === 2 && results[0].p.score !== results[1].p.score;
+  const decided = !team && results.length === 2 && results[0].p.score !== results[1].p.score;
   const top = Math.max(...results.map(r => r.p.score));
-  results.forEach(({ p, meters, rec, extra, item }, i) => {
+  results.forEach(({ p, meters, rec, extra, item, mis }, i) => {
     let badge = "";
     if (rec) badge = rec.rank === 1 && rec.total > 1 ? "전체 1위!" : rec.best ? "개인 최고 기록!" : rec.first ? "첫 기록!" : "";
     const col = document.createElement("div");
     col.className = "rcol"; col.style.setProperty("--c", p.color);
+    const misHtml = mis ? mis.newly.map(t => `<div class="rmis">미션 완료! ${esc(t)}</div>`).join("") + (mis.stamp ? `<div class="rstamp">오늘의 미션 다 했어요! 도장 ${mis.stamps}개</div>` : "") : "";
+    const itemHtml = it => `<div class="ritem"><span class="ico">${it.icon}</span><span>${it.special ? "특별 아이템!" : "아이템 획득!"} <b>${esc(it.name)}</b>${it.isNew ? "" : " (또 받았어요)"}${it.worn ? " · 바로 착용!" : ""}${it.count ? `<small>모은 아이템 ${it.count}/${ITEMS.length}</small>` : ""}</span></div>`;
     col.innerHTML =
       `<div class="rname">${decided && p.score === top ? "👑 " : ""}${i + 1}P ${esc(p.name)}</div>` +
       `<div class="rscore">${p.score}<small>점</small></div>` +
       (badge ? `<div class="rbadge">${badge}</div>` : "") +
-      `<div class="rmeta">${rec ? `전체 ${rec.rank}위 (기록 ${rec.total}개 중)` : "손님 이름을 적으면 다음부터 기록이 저장돼요"}</div>` +
+      `<div class="rmeta">${team ? "팀에 보탠 점수" : rec ? `전체 ${rec.rank}위 (기록 ${rec.total}개 중)` : "손님 이름을 적으면 다음부터 기록이 저장돼요"}</div>` +
       `<div class="rmeta">난이도 ${diffOf(p.diff).label} · ${esc(extra)}${extra ? " · " : ""}최대 콤보 ${p.maxCombo}</div>` +
       `<div class="rmeta">손이 움직인 거리 약 ${meters}m</div>` +
-      (item ? `<div class="ritem"><span class="ico">${item.icon}</span><span>아이템 획득! <b>${esc(item.name)}</b>${item.isNew ? "" : " (또 받았어요)"}<small>모은 아이템 ${item.count}/${ITEMS.length}</small></span></div>` : "");
+      (item ? itemHtml(item) : "") + misHtml + (mis && mis.reward ? itemHtml(mis.reward) : "");
     box.appendChild(col);
   });
+  // 웃긴 순간 사진
+  const sb = $("#resShots"); sb.innerHTML = ""; sb.hidden = !photos.length;
+  photos.forEach((ph, k) => {
+    const f = document.createElement("button"); f.type = "button"; f.className = "shot"; f.style.setProperty("--r", `${(k - (photos.length - 1) / 2) * 3}deg`);
+    f.innerHTML = `<img src="${ph.url}" alt=""><span>${esc(ph.label)}</span>`;
+    f.onclick = () => openShot(ph);
+    sb.appendChild(f);
+  });
+  // 파티
+  const pr = $("#resParty"), inParty = !!party;
+  pr.hidden = !inParty;
+  $("#btnNext").hidden = !inParty; $("#btnPartyStop").hidden = !inParty || partyEnd;
+  $("#btnAgain").hidden = inParty; $("#btnOther").hidden = inParty;
+  if (inParty) {
+    pr.textContent = `파티 ${party.i}/${party.n} · ` + partyStand().map(x => `${x.name} ${x.label}`).join(" · ");
+    $("#btnNext").textContent = partyEnd ? "파티 결과 보기" : `다음 게임 (${party.i + 1}/${party.n}) ${GAMES[party.list[party.i]].icon}`;
+  }
 }
+/* ---------- 사진 크게 보기 · 저장 ---------- */
+let shotCur = null;
+function openShot(ph) { shotCur = ph; $("#shotImg").src = ph.url; $("#shotCap").textContent = ph.label; $("#shotView").hidden = false; }
+$("#btnShotClose").onclick = () => { $("#shotView").hidden = true; };
+$("#shotView").onclick = e => { if (e.target.id === "shotView") $("#shotView").hidden = true; };
+$("#btnShotSave").onclick = async () => {
+  if (!shotCur) return;
+  const d = new Date(), name = `몸으로놀기_${GAMES[gameId].title}_${FUN.dayKey(d)}_${d.getHours()}${String(d.getMinutes()).padStart(2, "0")}`;
+  const ok = await saveShot(shotCur.canvas, name.replace(/\s+/g, ""));
+  if (ok) toast("사진을 저장했어요");
+};
+
+/* ---------- 파티 모드 ---------- */
+function partyPool() {
+  const ok = id => !PARTY_SKIP.includes(id) && !GAMES[id].songs && !(coop && VS_ONLY.includes(id));
+  return { move: GAME_ORDER.filter(id => GAMES[id].cat === "move" && ok(id)), sport: GAME_ORDER.filter(id => GAMES[id].cat === "sport" && ok(id)) };
+}
+const shuffle = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+// 지금까지 순위: 혼자는 점수 합, 대결은 이긴 게임 3점·비기면 1점(같으면 점수 합), 협동은 팀 점수 합
+function partyStand() {
+  if (!party) return [];
+  const sum = k => party.res.reduce((a, r) => a + (r[k] || 0), 0);
+  if (coop) return [{ name: "팀", pts: sum(0) + sum(1), label: `${sum(0) + sum(1)}점` }];
+  if (slots.length === 1) return [{ name: slots[0].name, pts: sum(0), label: `${sum(0)}점` }];
+  return [0, 1].map(k => {
+    const w = party.res.reduce((a, r) => a + (r[k] > r[1 - k] ? 3 : r[k] === r[1 - k] ? 1 : 0), 0);
+    return { name: slots[k].name, pts: w, total: sum(k), label: `승점 ${w}` };
+  });
+}
+function partyBtn(txt, fn, cls = "pill") {
+  const b = document.createElement("button"); b.type = "button"; b.className = cls; b.setAttribute("data-hand", ""); b.textContent = txt; b.onclick = fn;
+  $("#partyBtns").appendChild(b); return b;
+}
+function openParty() { party = null; partyPick(); setState("party"); }
+function partyPick() {
+  $("#partyHead").textContent = "🎉 파티 모드";
+  $("#partySub").textContent = slots.length === 2
+    ? (coop ? "룰렛이 고른 게임을 이어서 해요. 둘이 합친 팀 점수로 파티 기록에 도전!" : "룰렛이 고른 게임을 이어서 해요. 이긴 게임마다 승점 3점, 비기면 1점!")
+    : "룰렛이 고른 게임을 이어서 해요. 점수를 모두 더해요!";
+  $("#partyReel").innerHTML = ""; $("#partyTable").innerHTML = ""; $("#partyBtns").innerHTML = "";
+  partyBtn("3게임 파티", () => partySpin(3)); partyBtn("5게임 파티", () => partySpin(5)); partyBtn("뒤로", () => { party = null; setState("select"); }, "pill ghost");
+}
+function partySpin(n) {
+  const P = partyPool(), all = [...P.move, ...P.sport];
+  const list = shuffle([...shuffle(P.move).slice(0, n === 3 ? 2 : 3), ...shuffle(P.sport).slice(0, n === 3 ? 1 : 2)]);
+  const me = party = { list, i: 0, n, res: [] };
+  $("#partySub").textContent = "룰렛을 돌려요!"; $("#partyBtns").innerHTML = ""; $("#partyTable").innerHTML = "";
+  const reel = $("#partyReel"); reel.innerHTML = "";
+  const els = list.map((id, k) => {
+    const d = document.createElement("div"); d.className = "slot spin";
+    d.innerHTML = `<span class="no">${k + 1}번째</span><span class="ico">❔</span><span class="lbl"></span>`;
+    reel.appendChild(d); return d;
+  });
+  const spin = setInterval(() => { els.forEach(d => { if (d.classList.contains("spin")) d.querySelector(".ico").textContent = GAMES[all[Math.floor(Math.random() * all.length)]].icon; }); sfx.tick(); }, 110);
+  list.forEach((id, k) => setTimeout(() => {
+    if (party !== me || state !== "party") { clearInterval(spin); return; }
+    const d = els[k]; d.classList.remove("spin"); d.classList.add("stop");
+    d.querySelector(".ico").textContent = GAMES[id].icon; d.querySelector(".lbl").textContent = GAMES[id].title; sfx.select();
+    if (k < n - 1) return;
+    clearInterval(spin);
+    $("#partySub").textContent = `첫 번째 게임은 ${GAMES[list[0]].title}!`; speak(`첫 번째 게임은 ${GAMES[list[0]].title}!`);
+    partyBtn("시작!", partyGo, "pill go"); partyBtn("다시 돌리기", () => partySpin(n), "pill ghost"); partyBtn("뒤로", () => { party = null; setState("select"); }, "pill ghost");
+    setTimeout(() => { if (party === me && state === "party" && !me.started) partyGo(); }, 5000);   // 손을 안 대도 5초 뒤 시작
+  }, 1000 + k * 650));
+}
+function partyGo() { if (!party) return; party.started = true; chooseGame(party.list[party.i]); }
+function partyFinal() {
+  const st = partyStand(), best = Math.max(...st.map(x => x.pts));
+  const win = coop || slots.length === 1 ? null : st.filter(x => x.pts === best);
+  const tie = win && win.length === 2 && win[0].total === win[1].total;
+  const champ = win ? (win.length === 1 ? win[0] : tie ? null : win.reduce((a, b) => (b.total > a.total ? b : a))) : null;
+  $("#partyHead").textContent = "🎉 파티 결과";
+  const msg = coop ? `팀 점수 ${st[0].pts}점! 둘이 함께 해냈어요` : slots.length === 1 ? `${slots[0].name} 모두 ${st[0].pts}점!` : champ ? `파티 우승은 ${champ.name}!` : "파티 무승부!";
+  $("#partySub").textContent = msg; speak(msg); sfx.fanfare();
+  const reel = $("#partyReel"); reel.innerHTML = "";
+  party.list.forEach((id, k) => { const d = document.createElement("div"); d.className = "slot past"; d.innerHTML = `<span class="no">${k + 1}번째</span><span class="ico">${GAMES[id].icon}</span><span class="lbl">${esc(GAMES[id].title)}</span>`; reel.appendChild(d); });
+  const head = `<tr><th>게임</th>${slots.map((s, k) => `<th style="color:${s.color}">${k + 1}P ${esc(s.name)}</th>`).join("")}</tr>`;
+  const rows = party.list.map((id, k) => { const r = party.res[k] || []; return `<tr><td>${GAMES[id].icon} ${esc(GAMES[id].title)}</td>${slots.map((s, j) => `<td class="${!coop && slots.length === 2 && r[j] > r[1 - j] ? "win" : ""}">${r[j] ?? "-"}</td>`).join("")}</tr>`; }).join("");
+  const tot = coop ? `<tr class="tot"><td>팀 합계</td><td colspan="2">${st[0].pts}점</td></tr>`
+    : slots.length === 1 ? `<tr class="tot"><td>합계</td><td>${st[0].pts}점</td></tr>`
+    : `<tr class="tot"><td>승점 (점수 합)</td>${st.map(x => `<td>${champ && champ.name === x.name ? "👑 " : ""}${x.pts} (${x.total})</td>`).join("")}</tr>`;
+  $("#partyTable").innerHTML = `<table>${head}${rows}${tot}</table>`;
+  $("#partyBtns").innerHTML = "";
+  partyBtn("다시 파티", () => { party = null; partyPick(); }, "pill go"); partyBtn("다른 게임", () => { party = null; setState("select"); });
+  burst(view.W / 2, view.H * 0.3, { n: 60, colors: ["#ff4d4d", "#ffd400", "#7ae0ff", "#9dff7a", "#ff8ad8"], shape: "confetti", speed: view.U * 1.4, gravity: view.U * 0.7, size: view.U * 0.02, life: 1.6 });
+  party.done = true;
+  setState("party");
+}
+$("#btnNext").onclick = () => { if (!party) { setState("select"); return; } if (party.i >= party.n) partyFinal(); else partyGo(); };
+$("#btnPartyStop").onclick = () => { party = null; toast("파티를 멈췄어요"); setState("select"); };
+
+/* ---------- 오늘의 미션 · 주간 리그 ---------- */
+let misBackTo = "setup";
+function openMissions(from) { misBackTo = from; renderMissions(); setState("mission"); }
+function renderMissions() {
+  const list = $("#misList"); list.innerHTML = "";
+  const games = missionGames();
+  const who = loopOn && slots.length ? slots.filter(s => s.profileId).map(s => ({ id: s.profileId, name: s.name })) : R.players().map(p => ({ id: p.id, name: p.name }));
+  if (!who.length) list.innerHTML = '<div class="mcard">이름이 있는 선수만 미션을 받아요. 손님은 이름을 적어 주세요</div>';
+  for (const w of who) {
+    const day = FUN.missionsOf(w.id, games), st = FUN.stampsOf(w.id).length, cyc = st % FUN.STAMP_EVERY;
+    const card = document.createElement("div"); card.className = "mcard";
+    card.innerHTML = `<h4><span>${esc(w.name)}</span><small>${day.stamped ? "오늘 도장 받음 · " : ""}도장 ${st}개</small></h4>` +
+      day.list.map(m => { const d = FUN.missionDone(m), h = FUN.missionHint(m); return `<div class="mrow${d ? " done" : ""}"><span class="ck">${d ? "✔" : ""}</span><span class="tx">${esc(FUN.missionText(m))}</span><span class="pr">${m.prog}/${m.goal}</span>${h ? `<span class="hn">${esc(h)}</span>` : ""}</div>`; }).join("") +
+      `<div class="stamps">${"🟠".repeat(cyc)}${"⚪".repeat(FUN.STAMP_EVERY - cyc)} <small>도장 ${FUN.STAMP_EVERY}개마다 특별 아이템</small></div>`;
+    list.appendChild(card);
+  }
+  const lg = FUN.league(), champ = FUN.lastWeekChampion(), P = FUN.LEAGUE_PTS;
+  $("#leagueBox").innerHTML = `<h4>이번 주 가족 리그</h4>` +
+    (lg.length ? lg.map((x, i) => `<div class="lrow"><b class="rk">${i === 0 ? "👑" : i + 1}</b><span>${esc(x.name)}</span><b>${x.pts}점</b><small>${x.play}판 · 1등 ${x.win} · 최고 기록 ${x.best} · 도장 ${x.stamp}</small></div>`).join("") : '<p class="rule">이번 주 기록이 아직 없어요</p>') +
+    (champ ? `<p class="champ">지난주 챔피언: 👑 ${esc(champ.name)} (${champ.pts}점)</p>` : "") +
+    `<p class="rule">한 판 ${P.play}점 · 이번 주 게임별 1등 ${P.win}점 · 개인 최고 기록 경신 ${P.best}점 · 미션 도장 ${P.stamp}점. 월요일마다 새로 시작해요</p>`;
+}
+$("#btnMisBack").onclick = () => { if (!loopOn) { setState("setup"); renderSetup(); return; } setState(misBackTo === "result" ? "result" : "select"); };
 $("#btnAgain").onclick = () => chooseGame(gameId);
 $("#btnOther").onclick = () => setState("select");
 $("#btnResRank").onclick = () => openRanking("result");
@@ -702,6 +1064,9 @@ function renderRanking() {
   const owners = R.players().filter(pl => R.items(pl.id).length);
   if (!owners.length) ib.insertAdjacentHTML("beforeend", '<p class="empty">게임을 끝내면 아이템을 받아요</p>');
   owners.forEach(pl => ib.insertAdjacentHTML("beforeend", `<p><span>${esc(pl.name)} ${R.items(pl.id).length}/${ITEMS.length}</span><b class="its">${R.items(pl.id).map(id => (itemOf(id) || {}).icon || "").join("")}</b></p>`));
+  // 협동 팀 기록
+  const tl = R.ranking(key + "#coop", 5), tb = $("#rankTeam");
+  tb.hidden = !tl.length; tb.innerHTML = tl.length ? "<h4>협동 팀 기록</h4>" + tl.map(r => `<p><span>${esc(r.name)}</span><b>${r.score}점</b></p>`).join("") : "";
   const bx = $("#rankBests"); bx.innerHTML = "<h4>선수별 최고 기록</h4>";
   const bs = R.bests(key);
   if (!bs.length) bx.insertAdjacentHTML("beforeend", '<p class="empty">-</p>');
@@ -718,7 +1083,7 @@ function stopLoop() { loopOn = false; }
 function frame(now) {
   if (!loopOn) return;
   requestAnimationFrame(frame);
-  const t = now / 1000, dt = lastT ? Math.min(0.1, Math.max(0, t - lastT)) : 0.016; lastT = t;
+  const t = now / 1000, dt = lastT ? Math.min(0.1, Math.max(0, t - lastT)) : 0.016; lastT = t; lastDt = dt;
   wake();   // 소리 장치가 멈췄으면 다시 깨움 (아이패드)
   cam.layout(view.W, view.H);
   let raws = [];
@@ -738,6 +1103,7 @@ function frame(now) {
   tick(dt);
   updateFx(dt);
   draw(t);
+  shots.afterDraw();   // 웃긴 순간: 다 그린 화면을 찍음
   if (HAND_UI) handUI(dt);
   drawCursors();
 }
@@ -775,6 +1141,7 @@ function tick(dt) {
     if (goT > 0) { goT -= dt; if (goT <= 0) $("#cd").hidden = true; }
     timeLeft -= dt;
     if (!fever && timeLeft <= FEVER_SEC) enterFever();
+    shots.tick(dt); funTick(dt);
     insts.forEach(g => g.update(dt));
     renderHud();
     if (timeLeft <= 0 || (insts.length && insts.every(g => g.done))) endGame();   // 시간이 끝나거나 게임이 다 끝났다고 알리면
@@ -795,13 +1162,19 @@ function draw(t) {
     ctx.lineWidth = U * 0.022; ctx.strokeStyle = `hsla(${(t * 140) % 360},90%,60%,0.9)`;
     ctx.strokeRect(U * 0.011, U * 0.011, W - U * 0.022, H - U * 0.022);
   }
+  drawWears(t);
   drawSkeletons();
   if (state === "ready") drawReady();
   if (state === "countdown" || state === "play") insts.forEach(g => g.draw(ctx));
   if (slots.length === 2 && state !== "select" && state !== "ranking") drawDivider();   // 게임 그림 위에 그려서 항상 보이게
+  drawFun(t);
   if (state === "countdown" || state === "play") drawLost();
   drawFx(ctx);
   ctx.restore();
+}
+// 꾸미기: 카메라 화면 속 선수에게 모은 아이템을 씌움
+function drawWears(t) {
+  trackers.forEach((tr, i) => { if (tr.pts && tr.present && slots[i] && slots[i].wear) drawWear(ctx, tr.pts, slots[i].wear, itemOf, wearSt[i], t, lastDt); });
 }
 // 2인: 화면 가운데 경계선. 어두운 테두리 + 흰 선 + 양쪽에 선수 색 띠, 아래에 '◀ 1P | 2P ▶' 이름표
 function drawDivider() {
@@ -964,6 +1337,9 @@ function goFullscreen() {
 
 if (SIM) window.__dbg = { get demo() { return demo; }, get state() { return state; }, setTime: s => { timeLeft = s; }, players: () => players, scales: () => trackers.map(t => Math.round(t.scale)),
   bgmReal: () => REAL.bgmPlaying(),
+  fun: () => fun && { rush: fun.rush, catch: fun.catch.slice(), friend: fun.friend, teamBest: fun.teamBest, rushAt: fun.rushAt },
+  party: () => party, shots: () => shots.count, coop: () => coop, insts: () => insts,
+  setScore: (i, v) => { players[i].score = v; },
   audio: () => audioState(),
   face: () => ({ state: FACE.faceState(), locks: assigner ? assigner.locks.map(L => L && { tid: L.tid, lost: !!L.lost, faceN: L.faceN }) : [] }),   // 점검: 실제 음원 배경음악이 나오는지
   bodyX: () => trackers.map(t => (t.pts && t.pts[11].v && t.pts[12].v ? Math.round((t.pts[11].x + t.pts[12].x) / 2) : null)) };   // 점검: 선수 몸 위치(화면 x)

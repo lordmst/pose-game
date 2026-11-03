@@ -1,19 +1,21 @@
 // 골키퍼: 멀리서 날아오는 공을 손으로 막기. 공이 도착할 자리에 그림자가 미리 보임. 먼 공은 옆으로 움직여야 닿음
-import { burst, popup, shake, outlinedText, FONT, rnd } from "../fx.js?v=58";
-import { sfx } from "../audio.js?v=58";
-import { bodyRef } from "./bodyref.js?v=58";
+import { burst, popup, shake, outlinedText, FONT, rnd } from "../fx.js?v=59";
+import { sfx } from "../audio.js?v=59";
+import { bodyRef } from "./bodyref.js?v=59";
+import { makeBoss } from "./boss.js?v=59";
 
 const FLIGHT = 1.5;    // 공이 날아오는 시간(초, 보통)
 
 export default {
   id: "goalie", title: "골키퍼", icon: "🧤", sec: 45, cursor: "🧤", cat: "move", bg: "#8fd694", desc: "날아오는 공 막기",
-  how: "날아오는 공을 손으로 막아요. 동그라미가 공이 올 자리! 화살표가 나오면 그쪽으로 옆걸음해서 막아요(2점). 금색 공은 3점",
+  how: "날아오는 공을 손으로 막아요. 동그라미가 공이 올 자리! 화살표가 나오면 그쪽으로 옆걸음해서 막아요(2점). 금색 공은 3점. 중간에 거대 공 보스가 나와요",
+  rush: "슈팅 러시",
   create(env) {
     const z = env.zone, v = env.view;
     let shots = [], spawnT = 1.0, saves = 0, goals = 0, netShake = 0;
     const R = () => v.U * 0.075;
     // 선수 키에 맞춘 골대: 가로대는 만세한 손끝보다 조금 위, 공은 머리 위 ~ 무릎 위 사이로
-    const ref = bodyRef(env), barY = () => Math.max(v.H * 0.12, Math.min(v.H * 0.34, ref.sh - ref.T * 1.45)), lowY = () => Math.min(v.H * 0.9, ref.y(1.5));
+    const ref = bodyRef(env), boss = makeBoss(env, { icon: "⚽", name: "거대 공", mode: "touch", ref, color: "#ffffff", crown: true }), barY = () => Math.max(v.H * 0.12, Math.min(v.H * 0.34, ref.sh - ref.T * 1.45)), lowY = () => Math.min(v.H * 0.9, ref.y(1.5));
     function body() {
       const p = env.tracker.pts;
       if (p && p[11].v && p[12].v) { const sw = Math.hypot(p[11].x - p[12].x, p[11].y - p[12].y); return { x: (p[11].x + p[12].x) / 2, y: (p[11].y + p[12].y) / 2, sw: Math.max(sw, v.U * 0.08) }; }
@@ -24,30 +26,31 @@ export default {
       let side = Math.random() < 0.5 ? -1 : 1;
       // 먼 공: 팔을 뻗어도 안 닿는 곳(어깨너비 3배 이상)으로. 공간이 있는 쪽으로 보냄
       const room = s => s < 0 ? b.x - z.x0 : z.x1 - b.x;
-      let far = farForce != null ? farForce : p > 0.12 && Math.random() < 0.3;
+      const rush = env.rush && env.rush();
+      let far = farForce != null ? farForce : !rush && p > 0.12 && Math.random() < 0.3;
       if (far && room(side) < b.sw * 3.2) side = -side;
       if (far && room(side) < b.sw * 3.2) far = false;
       const d = dest || (far ? { x: b.x + side * b.sw * (3.0 + Math.random() * 0.9), y: b.y + b.sw * (-0.6 + Math.random() * 1.2) }
                              : { x: b.x + side * b.sw * (0.6 + Math.random() * 1.4), y: b.y + b.sw * (-1.4 + Math.random() * 2.4) });
       d.x = Math.max(z.x0 + R(), Math.min(z.x1 - R(), d.x)); d.y = Math.max(barY() + R() * 1.3, Math.min(lowY(), d.y));
       const T = FLIGHT * (1 - 0.3 * p) / env.diff.speed * (far ? 1.35 : 1);   // 먼 공은 움직일 시간을 더 줌
-      shots.push({ sx: z.cx + (Math.random() - 0.5) * z.w * 0.2, sy: barY() + v.H * 0.06, dx: d.x, dy: d.y, t: 0, T, far, gold: !far && Math.random() < 0.12, curve: !far && p > 0.15 && Math.random() < 0.3 ? (Math.random() < 0.5 ? -1 : 1) * z.w * 0.2 : 0, done: null, rt: 0, spin: Math.random() * 6, vx: 0, vy: 0 });
+      shots.push({ sx: z.cx + (Math.random() - 0.5) * z.w * 0.2, sy: barY() + v.H * 0.06, dx: d.x, dy: d.y, t: 0, T, far, gold: !far && Math.random() < (env.catchUp && env.catchUp() ? 0.3 : 0.12), curve: !far && p > 0.15 && Math.random() < 0.3 ? (Math.random() < 0.5 ? -1 : 1) * z.w * 0.2 : 0, done: null, rt: 0, spin: Math.random() * 6, vx: 0, vy: 0 });
       sfx.whoosh();
     }
     // 휘어 차기(바나나킥): 날아오는 길이 옆으로 휘었다가 동그라미 자리로 들어옴
     const at = s => { const k = Math.min(1, s.t / s.T), e = k * k; return { x: s.sx + (s.dx - s.sx) * e + Math.sin(k * Math.PI) * (s.curve || 0), y: s.sy + (s.dy - s.sy) * e - Math.sin(k * Math.PI) * v.H * 0.08, k, size: 0.25 + 0.75 * e }; };
     return {
       update(dt) {
-        ref.update(dt); spawnT -= dt; netShake = Math.max(0, netShake - dt);
-        const p = env.progress();
-        if (spawnT <= 0 && shots.filter(s => !s.done).length < (p > 0.5 ? 2 : 1)) { shoot(); spawnT = (1.6 - 0.6 * p) / env.diff.speed * (env.fever() ? 0.75 : 1); }
+        ref.update(dt); boss.update(dt); spawnT -= dt; netShake = Math.max(0, netShake - dt);
+        const p = env.progress(), rush = env.rush && env.rush();
+        if (spawnT <= 0 && !boss.active && shots.filter(s => !s.done).length < (rush ? 3 : p > 0.5 ? 2 : 1)) { shoot(); spawnT = (1.6 - 0.6 * p) / env.diff.speed * (env.fever() ? 0.75 : 1) * (rush ? 0.35 : 1); }
         const hands = env.tracker.hands.filter(h => h.vis), r = R();
         for (const s of shots) {
           if (s.done) { s.rt += dt; s.x += s.vx * dt; s.y += s.vy * dt; s.vy += v.H * 2 * dt; continue; }
           s.t += dt; s.spin += dt * 10;
           const c = at(s);
           if (c.k > 0.8 && hands.some(h => Math.hypot(h.x - c.x, h.y - c.y) < r * 1.25 * env.diff.reach)) {
-            s.done = "save"; saves++; s.x = c.x; s.y = c.y; s.vx = (c.x - z.cx) * 1.5; s.vy = -v.H * 0.9;
+            s.done = "save"; saves++; if (s.gold && env.stat) env.stat("gold"); s.x = c.x; s.y = c.y; s.vx = (c.x - z.cx) * 1.5; s.vy = -v.H * 0.9;
             sfx.bonk(); shake(v.U * 0.008, 0.15); env.award(s.gold ? 3 : s.far || s.curve ? 2 : 1, c.x, c.y - r * 1.4);
             popup(c.x, c.y + r * 1.6, s.far ? "슈퍼 세이브!" : s.curve ? "휘는 공 막았다!" : "막았다!", { size: v.U * 0.045, color: "#fff", stroke: "#2fb65a" });
             burst(c.x, c.y, { n: 16, colors: ["#ffffff", "#ffd400", "#9dff7a"], shape: "star", speed: v.U * 0.6, gravity: v.U * 0.5, size: v.U * 0.018, life: 0.6 });
@@ -92,7 +95,9 @@ export default {
             ctx.globalAlpha = Math.max(0, 1 - s.rt / 0.7); drawBall(ctx, s.x, s.y, r * (s.done === "goal" ? 0.9 : 1), s.spin, s.gold); ctx.globalAlpha = 1;
           }
         }
+        boss.draw(ctx);
       },
+      get boss() { return boss; },
       result: () => `막은 공 ${saves} · 골 먹음 ${goals}`,
       // 설명 시연용
       get shots() { return shots.filter(s => !s.done).map(s => ({ ...at(s), dx: s.dx, dy: s.dy, gold: s.gold, far: s.far })); },

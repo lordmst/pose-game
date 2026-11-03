@@ -1,7 +1,8 @@
 // 얼음 깨기: 손을 빠르게 휘둘러 얼음을 치면 맞은 자리에서 금이 가고, 다 깨면 안에 든 물건이 튀어나옴
-import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=58";
-import { sfx } from "../audio.js?v=58";
-import { bodyRef } from "./bodyref.js?v=58";
+import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=59";
+import { sfx } from "../audio.js?v=59";
+import { bodyRef } from "./bodyref.js?v=59";
+import { makeBoss } from "./boss.js?v=59";
 
 const PUNCH = 3.0;      // 타격으로 인정하는 손 속도 (어깨너비/초). 낮출수록 쉬움
 const STRONG = 7.5;     // 이 이상이면 강펀치(2타)
@@ -10,16 +11,19 @@ const easeOutBack = t => { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3
 
 export default {
   id: "ice", title: "얼음 깨기", icon: "🧊", sec: 45, cursor: "🥊", cat: "move", bg: "#74b9ff", desc: "빠르게 쳐서 깨기",
-  how: "얼음을 빠르게 쳐서 깨요. 세게 치면 강펀치로 2번! 폭죽 얼음을 깨면 다른 얼음도 한꺼번에 금이 가요. 황금 얼음은 3점!",
+  how: "얼음을 빠르게 쳐서 깨요. 세게 치면 강펀치로 2번! 폭죽 얼음을 깨면 다른 얼음도 한꺼번에 금이 가요. 황금 얼음은 3점! 중간에 거대 얼음 보스가 나와요",
+  rush: "얼음 와르르",
   create(env) {
     const z = env.zone, v = env.view;
     const cols = Math.max(1, Math.min(3, Math.floor(z.w / (v.U * 0.36))));
     const S = () => Math.min(z.w / cols * 0.62, v.U * 0.25);
     const ref = bodyRef(env), Y = b => ref.y(b.fy, S() * 1.2);   // fy: 높이를 몸통 길이 단위로 (0 어깨, 1 엉덩이) → 선수 키에 맞춤
-    let broken = 0, chain = [];   // chain: 폭죽 얼음이 터진 뒤 차례로 맞을 얼음
+    let broken = 0, chain = [], wasRush = false;
+    const boss = makeBoss(env, { icon: "🧊", name: "거대 얼음", mode: "hit", ref, color: "#7fd3ff" });   // chain: 폭죽 얼음이 터진 뒤 차례로 맞을 얼음
     function fresh(slot) {
-      const p = env.progress(), q = Math.random(), boom = p > 0.1 && q < 0.15, gold = !boom && p > 0.15 && q > 0.9;   // 황금 얼음: 한 번 더 쳐야 하고 3점
-      const hp = Math.max(2, (boom ? 4 : p > 0.5 ? 4 : 3) + env.diff.hp + (gold ? 1 : 0));
+      const p = env.progress(), q = Math.random(), rush = env.rush && env.rush(), lucky = env.catchUp && env.catchUp() ? 0.75 : 0.9;
+      const boom = !rush && p > 0.1 && q < 0.15, gold = !boom && p > 0.15 && q > lucky;   // 황금 얼음: 한 번 더 쳐야 하고 3점
+      const hp = rush ? 1 : Math.max(2, (boom ? 4 : p > 0.5 ? 4 : 3) + env.diff.hp + (gold ? 1 : 0));   // 와르르: 한 방에 깨지는 얼음
       return { fx: slot.fx, fy: slot.fy, hp, max: hp, boom, gold, item: boom ? "🧨" : gold ? "👑" : ITEMS[rnd(0, ITEMS.length - 1)], cracks: [], cool: [0, 0], shake: 0, broken: false, respawn: 0, born: 0, hint: 0 };
     }
     const blocks = [];
@@ -50,7 +54,8 @@ export default {
       }
     }
     function breakIt(b, cx, cy, s) {
-      b.broken = true; b.respawn = 1.0 + Math.random() * 0.8; broken++;
+      b.broken = true; b.respawn = env.rush && env.rush() ? 0.25 : 1.0 + Math.random() * 0.8; broken++;
+      if (b.gold && env.stat) env.stat("gold");
       sfx.shatter(); shake(v.U * 0.015, 0.25);
       burst(cx, cy, { n: 28, colors: b.boom ? ["#ffd04d", "#ff7a2f", "#ffffff"] : ["#ffffff", "#d6f2ff", "#9fdcff"], shape: "shard", speed: v.U * 1.1, gravity: v.U * 2.4, size: v.U * 0.022, life: 0.9 });
       env.award(b.gold ? 3 : 1, cx, cy - s * 0.45);
@@ -65,8 +70,10 @@ export default {
     }
     return {
       update(dt) {
-        ref.update(dt);
-        const s = S(), hands = env.tracker.hands;
+        ref.update(dt); boss.update(dt);
+        const s = S(), hands = env.tracker.hands, rush = env.rush && env.rush();
+        if (rush && !wasRush) blocks.forEach(b => { if (!b.broken) { b.hp = 1; b.boom = false; } });   // 와르르 시작: 남은 얼음도 한 방에
+        wasRush = !!rush;
         for (const c of chain) {
           c.t -= dt;
           if (c.t > 0 || c.b.broken) continue;
@@ -79,7 +86,8 @@ export default {
         for (const b of blocks) {
           b.born = Math.min(1, b.born + dt * 4); b.shake = Math.max(0, b.shake - dt); b.hint = Math.max(0, b.hint - dt);
           b.cool[0] = Math.max(0, b.cool[0] - dt); b.cool[1] = Math.max(0, b.cool[1] - dt);
-          if (b.broken) { b.respawn -= dt; if (b.respawn <= 0) Object.assign(b, fresh(randomSpot(b))); continue; }   // 다른 자리에서 새 얼음
+          if (b.broken) { b.respawn -= dt; if (b.respawn <= 0 && !boss.active) Object.assign(b, fresh(randomSpot(b))); continue; }
+          if (boss.active) continue;   // 보스와 싸우는 동안 얼음은 잠시 멈춤   // 다른 자리에서 새 얼음
           const cx = z.x0 + b.fx * z.w, cy = Y(b);
           hands.forEach((h, k) => {
             if (b.broken || !h.vis || b.cool[k] > 0) return;
@@ -104,6 +112,7 @@ export default {
       },
       draw(ctx) {
         const s = S(), half = s / 2, r = s * 0.12;
+        const A = boss.active ? 0.3 : 1; ctx.save(); ctx.globalAlpha = A;
         for (const b of blocks) {
           if (b.broken) continue;
           const cx = z.x0 + b.fx * z.w, cy = Y(b), k = 0.6 + 0.4 * easeOutBack(b.born);
@@ -111,7 +120,7 @@ export default {
           ctx.save(); ctx.translate(cx + jx, cy); ctx.scale(k, k);
           ctx.fillStyle = "rgba(0,0,0,.22)"; rr(ctx, -half + 6, -half + 8, s, s, r); ctx.fill();
           // 얼음 속 물건: 금이 갈수록 또렷해짐 (폭죽은 처음부터 보임)
-          ctx.globalAlpha = b.boom ? 0.85 : 0.3 + 0.7 * dmg; ctx.font = `${Math.round(s * 0.5)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(b.item, 0, 0); ctx.globalAlpha = 1;
+          ctx.globalAlpha = A * (b.boom ? 0.85 : 0.3 + 0.7 * dmg); ctx.font = `${Math.round(s * 0.5)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(b.item, 0, 0); ctx.globalAlpha = A;
           const a = (0.78 - 0.38 * dmg).toFixed(2);
           const g = ctx.createLinearGradient(-half, -half, half, half);
           if (b.boom) { g.addColorStop(0, `rgba(255,236,220,${a})`); g.addColorStop(0.5, `rgba(255,160,120,${a})`); g.addColorStop(1, `rgba(230,90,60,${a})`); }
@@ -137,7 +146,10 @@ export default {
           }
           ctx.restore();
         }
+        ctx.restore();
+        boss.draw(ctx);
       },
+      get boss() { return boss; },
       result: () => `깬 얼음 ${broken}개`,
       // 설명 시연용: 아직 안 깨진 얼음과 화면 위치
       get targets() { return blocks.filter(b => !b.broken && b.born > 0.9).map(b => ({ b, x: z.x0 + b.fx * z.w, y: Y(b), s: S() })); },

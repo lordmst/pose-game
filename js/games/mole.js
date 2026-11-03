@@ -1,28 +1,31 @@
 // 두더지 잡기: 구멍에서 튀어나온 두더지를 주먹으로 콩! 헬멧 두더지는 두 번 쳐야 함(2점), 토끼는 치면 안 됨
-import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=58";
-import { sfx } from "../audio.js?v=58";
-import { bodyRef } from "./bodyref.js?v=58";
+import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=59";
+import { sfx } from "../audio.js?v=59";
+import { bodyRef } from "./bodyref.js?v=59";
+import { makeBoss } from "./boss.js?v=59";
 
 const PUNCH = 3.0;          // 타격 인정 속도 (얼음 깨기와 같음)
 const POP = 0.15;           // 올라오고 내려가는 시간
 
 export default {
   id: "mole", title: "두더지 잡기", icon: "🐹", sec: 45, cursor: "👊", cat: "move", bg: "#d4a373", desc: "헬멧은 두 번 콩!",
-  how: "구멍에서 튀어나온 두더지를 주먹으로 빠르게 콩! 헬멧 쓴 두더지는 두 번 쳐야 해요(2점). 황금 두더지는 3점! 토끼는 치면 안 돼요",
+  how: "구멍에서 튀어나온 두더지를 주먹으로 빠르게 콩! 헬멧 쓴 두더지는 두 번 쳐야 해요(2점). 황금 두더지는 3점! 토끼는 치면 안 돼요. 중간에 거대 두더지 보스가 나와요",
+  rush: "두더지 대소동",
   create(env) {
     const z = env.zone, v = env.view;
     const cols = clamp(Math.floor(z.w / (v.U * 0.3)), 2, 4);
     const holes = [];
     // 구멍 높이는 선수 키에 맞춤: 윗줄은 가슴 높이, 아랫줄은 배·엉덩이 높이 (몸통 길이 기준)
     for (const fy of [0.25, 1.15]) for (let c = 0; c < cols; c++) holes.push({ fx: (c + 0.5) / cols, fy, state: "empty", t: 0, up: 0, kind: "mole", cool: [0, 0], hint: 0 });
-    const ref = bodyRef(env);
+    const ref = bodyRef(env), boss = makeBoss(env, { icon: "🐹", name: "거대 두더지", mode: "hit", ref, color: "#c49a6c" });
     let spawnT = 0.5, hits = 0, missed = 0, rabbits = 0, manual = false;   // manual: 설명 시연에서 직접 띄울 때 저절로 나오지 않게
     const HR = () => Math.min(z.w / cols * 0.32, v.U * 0.1);           // 구멍 반지름
     const pos = h => ({ x: z.x0 + h.fx * z.w, y: ref.y(h.fy, HR() * 2.9) });   // 두 줄이 겹치지 않게 간격은 구멍 크기 이상
     function popUp(h, kind) {
       const p = env.progress();
       const q = Math.random();
-      h.kind = kind || (p > 0.1 && q < 0.15 * env.diff.bomb ? "rabbit" : p > 0.15 && q > 0.9 ? "gold" : Math.random() < 0.18 ? "helmet" : "mole");
+      const rush = env.rush && env.rush(), lucky = env.catchUp && env.catchUp() ? 0.75 : 0.9;   // 따라잡기 중이면 황금이 더 자주
+      h.kind = kind || (rush ? (q > 0.85 ? "gold" : "mole") : p > 0.1 && q < 0.15 * env.diff.bomb ? "rabbit" : p > 0.15 && q > lucky ? "gold" : Math.random() < 0.18 ? "helmet" : "mole");
       // 황금 두더지: 3점, 아주 잠깐만 나옴
       h.state = "up"; h.t = 0; h.up = (1.7 - 0.6 * p) / env.diff.speed * (h.kind === "helmet" ? 1.5 : h.kind === "gold" ? 0.55 : 1); h.armor = h.kind === "helmet" ? 1 : 0;
       if (h.kind === "gold") sfx.select();
@@ -42,19 +45,19 @@ export default {
       }
       hits++; sfx.bonk(); shake(v.U * 0.008, 0.15);
       burst(x, y - r * 0.8, { n: 12, colors: ["#ffe14d", "#ffffff", "#ffb000"], shape: "star", speed: v.U * 0.5, gravity: v.U * 0.6, size: v.U * 0.018, life: 0.6 });
-      if (h.kind === "gold") { popup(x, y - r * 2.6, "황금 두더지!", { size: v.U * 0.045, color: "#fff", stroke: "#c99700" }); burst(x, y - r, { n: 18, colors: ["#ffd400", "#fff3a0", "#ffffff"], shape: "star", speed: v.U * 0.7, gravity: v.U * 0.4, size: v.U * 0.02, life: 0.8 }); }
+      if (h.kind === "gold") { if (env.stat) env.stat("gold"); popup(x, y - r * 2.6, "황금 두더지!", { size: v.U * 0.045, color: "#fff", stroke: "#c99700" }); burst(x, y - r, { n: 18, colors: ["#ffd400", "#fff3a0", "#ffffff"], shape: "star", speed: v.U * 0.7, gravity: v.U * 0.4, size: v.U * 0.02, life: 0.8 }); }
       env.award(h.kind === "helmet" ? 2 : h.kind === "gold" ? 3 : 1, x, y - r * 2);
     }
     return {
       update(dt) {
-        ref.update(dt);
-        const p = env.progress(), r = HR(), hands = env.tracker.hands;
+        ref.update(dt); boss.update(dt);
+        const p = env.progress(), r = HR(), hands = env.tracker.hands, rush = env.rush && env.rush();
         spawnT -= dt;
         const upNow = holes.filter(h => h.state !== "empty").length;
-        if (!manual && spawnT <= 0 && upNow < Math.ceil(holes.length / 2)) {
+        if (!manual && !boss.active && spawnT <= 0 && upNow < (rush ? holes.length : Math.ceil(holes.length / 2))) {
           const free = holes.filter(h => h.state === "empty");
           if (free.length) popUp(free[rnd(0, free.length - 1)]);
-          spawnT = (1.0 - 0.45 * p) / env.diff.speed * (env.fever() ? 0.7 : 1);
+          spawnT = (1.0 - 0.45 * p) / env.diff.speed * (env.fever() ? 0.7 : 1) * (rush ? 0.3 : 1);
         }
         for (const h of holes) {
           h.t += dt; h.knock = Math.max(0, (h.knock || 0) - dt); h.cool[0] = Math.max(0, h.cool[0] - dt); h.cool[1] = Math.max(0, h.cool[1] - dt); h.hint = Math.max(0, h.hint - dt);
@@ -118,7 +121,9 @@ export default {
           // 구멍 앞쪽 흙 둔덕
           ctx.fillStyle = "#7a4e2a"; ctx.beginPath(); ctx.ellipse(x, y + r * 0.12, r * 1.25, r * 0.3, 0, 0, Math.PI); ctx.fill();
         }
+        boss.draw(ctx);
       },
+      get boss() { return boss; },
       result: () => `잡은 두더지 ${hits} · 놓침 ${missed} · 토끼 ${rabbits}`,
       // 설명 시연용
       get targets() { return holes.filter(h => h.state === "up").map(h => ({ h, kind: h.kind, x: pos(h).x, y: pos(h).y - HR() * 0.6, r: HR() })); },

@@ -1,7 +1,7 @@
 // 한글·영어 풍선: 그림 낱말의 글자를 앞에서부터 순서대로 풍선에서 골라 터뜨리기 (한 손으로 고름)
-import { burst, rr, outlinedText, FONT, rnd, shuffle } from "../fx.js?v=58";
-import { sfx } from "../audio.js?v=58";
-import { drawBalloon } from "./math.js?v=58";
+import { burst, rr, outlinedText, FONT, rnd, shuffle } from "../fx.js?v=59";
+import { sfx } from "../audio.js?v=59";
+import { drawBalloon } from "./math.js?v=59";
 
 export const WORD_LEVELS = { ko2: "한글 2글자", ko3: "한글 3글자", en3: "영어 3글자", en45: "영어 4~5글자" };
 const WORDS = {

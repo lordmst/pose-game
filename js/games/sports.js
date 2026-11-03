@@ -1,17 +1,17 @@
 // 스포츠 탭: 닌텐도 스위치 스포츠 리조트 종목을 카메라 몸동작으로 (게임 파일은 games/sport/ 아래)
-import tennis from "./sport/tennis.js?v=58";
-import bowling from "./sport/bowling.js?v=58";
-import archery from "./sport/archery.js?v=58";
-import boxing from "./sport/boxing.js?v=58";
-import volley from "./sport/volley.js?v=58";
-import pingpong from "./sport/pingpong.js?v=58";
-import cans from "./sport/cans.js?v=58";
-import basket from "./sport/basket.js?v=58";
-import golf from "./sport/golf.js?v=58";
-import thumb from "./sport/thumb.js?v=58";
-import plane from "./sport/plane.js?v=58";
-import skate from "./sport/skate.js?v=58";
-import jetski from "./sport/jetski.js?v=58";
-import jumprope from "./sport/jumprope.js?v=58";
+import tennis from "./sport/tennis.js?v=59";
+import bowling from "./sport/bowling.js?v=59";
+import archery from "./sport/archery.js?v=59";
+import boxing from "./sport/boxing.js?v=59";
+import volley from "./sport/volley.js?v=59";
+import pingpong from "./sport/pingpong.js?v=59";
+import cans from "./sport/cans.js?v=59";
+import basket from "./sport/basket.js?v=59";
+import golf from "./sport/golf.js?v=59";
+import thumb from "./sport/thumb.js?v=59";
+import plane from "./sport/plane.js?v=59";
+import skate from "./sport/skate.js?v=59";
+import jetski from "./sport/jetski.js?v=59";
+import jumprope from "./sport/jumprope.js?v=59";
 
 export default [jumprope, tennis, bowling, archery, boxing, volley, pingpong, cans, basket, golf, thumb, plane, skate, jetski];

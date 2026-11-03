@@ -1,18 +1,23 @@
 // 별 따기: 떨어지는 별을 손으로 잡기. 큰 별은 두 손으로 함께 잡아야 함(3점)
-import { burst, popup, outlinedText, starPath } from "../fx.js?v=58";
-import { sfx } from "../audio.js?v=58";
+import { burst, popup, outlinedText, starPath } from "../fx.js?v=59";
+import { sfx } from "../audio.js?v=59";
+import { bodyRef } from "./bodyref.js?v=59";
+import { makeBoss } from "./boss.js?v=59";
 
 export default {
   id: "star", title: "별 따기", icon: "⭐", sec: 45, cursor: "✋", cat: "move", bg: "#55efc4", desc: "큰 별은 두 손으로",
-  how: "떨어지는 별을 손으로 잡아요. 반짝이는 큰 별은 두 손으로 함께 잡으면 3점! 비스듬히 날아가는 파란 별똥별은 2점",
+  how: "떨어지는 별을 손으로 잡아요. 반짝이는 큰 별은 두 손으로 함께 잡으면 3점! 비스듬히 날아가는 파란 별똥별은 2점. 중간에 별 대왕 보스가 나와요",
+  rush: "별 비",
   create(env) {
     const z = env.zone, v = env.view, widthK = Math.max(0.6, z.w / v.U);
     let stars = [], spawnT = 0.4, t = 0, caught = 0, missed = 0, bigN = 0;
-    const BOTH = 0.35;   // 큰 별: 두 손이 이 시간 안에 모두 닿으면 잡힘
+    const BOTH = 0.35;
+    const ref = bodyRef(env), boss = makeBoss(env, { icon: "🌟", name: "별 대왕", mode: "touch", ref, color: "#ffd400" });   // 큰 별: 두 손이 이 시간 안에 모두 닿으면 잡힘
     function spawn(force) {
       const p = env.progress(), r = Math.random();
       // 별똥별(comet): 비스듬히 빠르게 지나감, 2점
-      const kind = force ? force.kind : r < 0.22 ? "big" : p > 0.12 && r > 0.88 ? "comet" : "star";
+      const rush = env.rush && env.rush(), lucky = env.catchUp && env.catchUp() ? 0.72 : 0.88;   // 별 비: 작은 별이 쏟아짐 · 따라잡기 중이면 별똥별이 더 자주
+      const kind = force ? force.kind : rush ? (r > 0.9 ? "comet" : "star") : r < 0.22 ? "big" : p > 0.12 && r > lucky ? "comet" : "star";
       const fx0 = force ? force.fx : kind === "comet" ? (Math.random() < 0.5 ? 0.1 : 0.9) : 0.12 + Math.random() * 0.76;
       stars.push({
         kind, fx: fx0, fy: kind === "big" ? 0.3 : 0.13, hold: kind === "big" ? 1.8 : 0, touch: [-9, -9],
@@ -24,9 +29,9 @@ export default {
     const R = () => v.U * 0.055;
     return {
       update(dt) {
-        t += dt; spawnT -= dt;
-        const p = env.progress(), interval = (1.0 - 0.45 * p) / widthK * (env.fever() ? 0.75 : 1);
-        if (spawnT <= 0 && stars.length < Math.ceil(3.5 * widthK)) { spawn(); spawnT = interval; }
+        t += dt; spawnT -= dt; ref.update(dt); boss.update(dt);
+        const rush = env.rush && env.rush(), p = env.progress(), interval = (1.0 - 0.45 * p) / widthK * (env.fever() ? 0.75 : 1) * (rush ? 0.3 : 1);
+        if (spawnT <= 0 && !boss.active && stars.length < Math.ceil(3.5 * widthK * (rush ? 2.5 : 1))) { spawn(); spawnT = interval; }
         const R0 = R();
         for (const s of stars) {
           s.born = Math.min(1, s.born + dt * 3);
@@ -45,6 +50,7 @@ export default {
           if (got) {
             s.dead = true; caught++; if (big) bigN++;
             env.award(big ? 3 : s.kind === "comet" ? 2 : 1, s.x, s.y - r); sfx.catch(env.player.combo); if (big) sfx.fever();
+            if (s.kind === "comet" && env.stat) env.stat("gold");
             if (s.kind === "comet") popup(s.x, s.y - r * 1.8, "별똥별!", { size: v.U * 0.045, color: "#fff", stroke: "#1f7ad6" });
             burst(s.x, s.y, { n: big ? 34 : 14, colors: big ? ["#ffffff", "#ffd400", "#ff8ad8", "#8ad8ff"] : ["#fff6a0", "#ffd400", "#ffffff"], shape: "star", speed: v.U * (big ? 0.9 : 0.6), gravity: v.U * 0.6, size: v.U * 0.02, life: 0.8 });
           } else if (s.fy > 0.97) {
@@ -80,7 +86,9 @@ export default {
             [0, 1].forEach(k => { if (t - s.touch[k] < BOTH) { ctx.strokeStyle = "#ffffff"; ctx.lineWidth = r * 0.14; ctx.beginPath(); ctx.arc(s.x, s.y, r * 1.25, k ? -Math.PI / 2 : Math.PI / 2, k ? Math.PI / 2 : Math.PI * 1.5); ctx.stroke(); } });
           }
         }
+        boss.draw(ctx);
       },
+      get boss() { return boss; },
       result: () => `잡은 별 ${caught} · 큰 별 ${bigN} · 놓침 ${missed}`,
       // 설명 시연용
       get stars() { return stars; },
