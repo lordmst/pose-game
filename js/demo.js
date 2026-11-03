@@ -1,14 +1,15 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=56";
-import { DIFFS } from "./difficulty.js?v=56";
-import { speak } from "./audio.js?v=56";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=58";
+import { DIFFS } from "./difficulty.js?v=58";
+import { speak } from "./audio.js?v=58";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
    다리: 엉덩이 기준 무릎·발목 위치, drop = 몸이 내려가는 정도 */
 const ARM = { up: [0.25, -2.0], wide: [2.0, 0], down: [0.35, 1.9], hips: [0.15, 1.6], heart: [-0.5, -1.7], guard: [0.45, 0.85], cheer: [0.9, -1.7],
-  head: [-0.35, -0.9], shoulders: [0.15, 0.25], cross: [-1.1, 0.2], clap: [-0.62, 0.8], diag: [0.95, -1.7] };
+  head: [-0.35, -0.9], shoulders: [0.15, 0.25], cross: [-1.1, 0.2], clap: [-0.62, 0.8], diag: [0.95, -1.7],
+  vup: [1.35, -1.4], penguin: [1.25, 1.45], strong: [1.0, -1.0], tophead: [-0.15, -1.55] };
 const LEG = { stand: { drop: 0, k: [0.05, 1.3], a: [0.1, 2.6] }, squat: { drop: 0.9, k: [0.5, 0.4], a: [0.4, 1.7] }, raise: { drop: 0, k: [0.25, 0.15], a: [0.25, 1.1] }, out: { drop: 0.1, k: [0.45, 1.2], a: [0.95, 2.4] } };
 const POSE = {
   rest: ["down", "down"], up: ["up", "up"], wide: ["wide", "wide"], left: ["up", "down"], right: ["down", "up"],
@@ -17,6 +18,10 @@ const POSE = {
   head: ["head", "head"], shoulders: ["shoulders", "shoulders"], crossL: ["down", "cross"], crossR: ["cross", "down"], clap: ["clap", "clap"],
   runL: ["guard", "hips", "raise", "stand"], runR: ["hips", "guard", "stand", "raise"],
   leanL: ["up", "up", "stand", "stand", -1.0], leanR: ["up", "up", "stand", "stand", 1.0],   // 다섯째 값: 윗몸 기울기
+  vup: ["vup", "vup"], penguin: ["penguin", "penguin"], strong: ["strong", "strong"], handhead: ["tophead", "tophead"],
+  upwideL: ["up", "wide"], upwideR: ["wide", "up"], uphipL: ["up", "hips"], uphipR: ["hips", "up"],
+  star: ["vup", "vup", "out", "out"], widehips: ["hips", "hips", "out", "out"], squatup: ["up", "up", "squat", "squat"],
+  craneL: ["up", "up", "raise", "stand"], craneR: ["up", "up", "stand", "raise"],
 };
 
 class Puppet {

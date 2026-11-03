@@ -1,7 +1,7 @@
 // 가라사대: "가라사대"가 붙은 지시만 따라 하기. 없으면 움직이면 안 됨. 왼쪽·오른쪽 구분과 잘 듣기 연습
-import { burst, popup, rr, outlinedText, FONT } from "../fx.js?v=56";
-import { sfx } from "../audio.js?v=56";
-import { POSES, poseMatches } from "./copy.js?v=56";
+import { burst, popup, rr, outlinedText, FONT } from "../fx.js?v=58";
+import { sfx } from "../audio.js?v=58";
+import { POSES, poseMatches } from "./copy.js?v=58";
 
 const ROUND = 4.4;      // 한 판(초): 지시를 듣고 따라 하는 시간 + 결과 보여 주는 시간
 const ANSWER = 3.2;     // 따라 하는 시간(초, 보통)
@@ -32,6 +32,15 @@ export const COMMANDS = [
   { id: "lknee", text: "왼발 들기", lower: true, check: fromCopy("lknee") },
   { id: "rknee", text: "오른발 들기", lower: true, check: fromCopy("rknee") },
   { id: "jump", text: "제자리 뛰기", lower: true, jump: true, check: () => false },
+  { id: "vup", text: "브이 자세", check: fromCopy("vup") },
+  { id: "penguin", text: "펭귄 자세", check: fromCopy("penguin") },
+  { id: "strong", text: "알통 자세", check: fromCopy("strong") },
+  { id: "upwideL", text: "왼손은 위로, 오른손은 옆으로", check: fromCopy("upwideL") },
+  { id: "upwideR", text: "오른손은 위로, 왼손은 옆으로", check: fromCopy("upwideR") },
+  { id: "star", text: "별 자세", lower: true, check: fromCopy("star") },
+  { id: "squatup", text: "앉아서 만세", lower: true, check: fromCopy("squatup") },
+  { id: "craneL", text: "왼발 들고 만세", lower: true, check: fromCopy("craneL") },
+  { id: "craneR", text: "오른발 들고 만세", lower: true, check: fromCopy("craneR") },
   { id: "clap", text: "가슴 앞에서 손 모으기", check: p => vis(p, [0, 15, 16, 23, 24]) && apart(p) < 0.5 && p[15].y > p[0].y && p[15].y < (p[23].y + p[24].y) / 2 },
 ];
 const hash = (a, b) => { let x = (a * 374761393 + b * 668265263) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); x ^= x >>> 16; return (x >>> 0) / 4294967296; };

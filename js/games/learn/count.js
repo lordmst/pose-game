@@ -1,8 +1,8 @@
 // 수 세기 점프: 화면의 물건 개수만큼 제자리 뛰기 (발이 안 보이면 박수)
 // 뛸 때마다 큰 숫자가 올라가고 물건이 하나씩 빛남. 개수와 같아진 뒤 1초 쉬면 정답. 어려움은 덧셈(🍎 3 + 🍎 2)
 // 2인은 같은 문제를 같은 때에 받고 각자 셈
-import { burst, popup, outlinedText, rr, FONT } from "../../fx.js?v=56";
-import { sfx } from "../../audio.js?v=56";
+import { burst, popup, outlinedText, rr, FONT } from "../../fx.js?v=58";
+import { sfx } from "../../audio.js?v=58";
 
 const STILL = 1.0;     // 개수를 맞춘 뒤 이만큼(초) 멈추면 정답
 const SHOW = 1.6;      // 결과를 보여 주는 시간(초)

@@ -1,8 +1,8 @@
 // 벽 통과: 사람 모양 구멍이 뚫린 벽이 다가옴. 벽이 닿을 때 구멍 자리로 가서 구멍 모양대로 자세를 잡고 있으면 통과
 // 구멍은 왼쪽·오른쪽으로 옮겨 다니고, 앉기·무릎 들기·옆으로 기울이기 같은 전신 자세가 자주 나옴
-import { burst, popup, shake, outlinedText } from "../fx.js?v=56";
-import { sfx } from "../audio.js?v=56";
-import { POSES, figData, poseMatches } from "./copy.js?v=56";
+import { burst, popup, shake, outlinedText, rr } from "../fx.js?v=58";
+import { sfx } from "../audio.js?v=58";
+import { POSES, figData, poseMatches, drawPoseFig, limbHints } from "./copy.js?v=58";
 
 const TRAVEL = 4.2;    // 벽이 멀리서 닿기까지 걸리는 시간(초, 보통)
 const GAP = 0.9;       // 벽 사이 쉬는 시간
@@ -21,12 +21,12 @@ export const WALL_POSES = [
   { id: "leanL", name: "왼쪽으로 기울이기", tilt: -22, need: [11, 12, 15, 16, 23, 24], f: { la: UP_L, ra: UP_R }, match: leanOk(-1) },
   { id: "leanR", name: "오른쪽으로 기울이기", tilt: 22, need: [11, 12, 15, 16, 23, 24], f: { la: UP_L, ra: UP_R }, match: leanOk(1) },
 ];
-const BODY = ["squat", "lknee", "rknee", "leanL", "leanR"];   // 전신 자세
+const BODY = ["squat", "lknee", "rknee", "leanL", "leanR", "star", "widehips", "squatup", "craneL", "craneR"];   // 전신 자세
 const matches = (pose, pts) => !!pts && (pose.match ? pose.match(pts) : poseMatches(pose, pts));
 
 export default {
   id: "wall", title: "벽 통과", icon: "🧱", sec: 50, cursor: "", cat: "move", bg: "#f6c76b", desc: "구멍 자리로 가서 통과",
-  how: "다가오는 벽의 구멍 자리로 가서, 구멍 모양대로 자세를 잡아요. 앉기·무릎 들기·옆으로 기울이기도 나와요!",
+  how: "다가오는 벽의 구멍 자리로 가서, 구멍 모양대로 자세를 잡아요. 카드 그림에서 노란 팔다리를 고치면 돼요!",
   create(env) {
     const z = env.zone, v = env.view;
     const off = document.createElement("canvas"), oc = off.getContext("2d");
@@ -53,6 +53,7 @@ export default {
       if (Math.abs(shiftOf(off)) < z.w * 0.06) off = 0;   // 거의 안 움직이면 가운데로
       wall = { pose, off, t: 0, T: TRAVEL * env.diff.poseTime * (1 - 0.25 * env.progress()) * (off ? 1.12 : 1), matchT: 0, result: null, rt: 0 };
       count++; sfx.whoosh();
+      if (env.mode === 1) env.speak(pose.name.replace(/[!·()]/g, " "));   // 혼자 할 때는 자세 이름을 읽어 줌 (둘이면 소리가 겹쳐서 생략)
     }
     // 벽(구멍 뚫린)을 별도 캔버스에 그림: 벽돌 → 사람 모양을 지움
     function paintWall(w, h, pose, glow, hoff) {
@@ -72,12 +73,12 @@ export default {
       const a = (pose.tilt || 0) * Math.PI / 180, [hx0, hy0] = f.hip;
       const rot = ([x, y]) => [hx0 + (x - hx0) * Math.cos(a) - (y - hy0) * Math.sin(a), hy0 + (x - hx0) * Math.sin(a) + (y - hy0) * Math.cos(a)];
       const P = ([x, y], upper) => { const [rx, ry] = upper ? rot([x, y]) : [x, y]; return [ox + rx * k, oy + ry * k]; };
-      const shape = (ctx2) => {
-        ctx2.lineCap = "round"; ctx2.lineJoin = "round"; ctx2.lineWidth = 34 * k;
+      const shape = (ctx2, lw = 34, hr = 30) => {
+        ctx2.lineCap = "round"; ctx2.lineJoin = "round"; ctx2.lineWidth = lw * k;
         f.lines.forEach((line, li) => { ctx2.beginPath(); line.forEach((p, i) => { const [x, y] = P(p, li < 3); i ? ctx2.lineTo(x, y) : ctx2.moveTo(x, y); }); ctx2.stroke(); });
-        const [hx, hy] = P(f.head, true); ctx2.beginPath(); ctx2.arc(hx, hy, 30 * k, 0, Math.PI * 2); ctx2.fill();
+        const [hx, hy] = P(f.head, true); ctx2.beginPath(); ctx2.arc(hx, hy, hr * k, 0, Math.PI * 2); ctx2.fill();
       };
-      if (glow) { oc.save(); oc.strokeStyle = oc.fillStyle = glow; oc.globalAlpha = 0.9; oc.lineWidth = 46 * k; shape(oc); oc.restore(); }
+      if (glow) { oc.save(); oc.strokeStyle = oc.fillStyle = glow; oc.globalAlpha = 0.95; shape(oc, 50, 38); oc.restore(); }   // 구멍 둘레 굵은 빛 테두리
       oc.save(); oc.globalCompositeOperation = "destination-out"; oc.strokeStyle = oc.fillStyle = "#000"; shape(oc); oc.restore();
     }
     return {
@@ -116,12 +117,21 @@ export default {
         const W = z.w * 0.96, H = v.H * 0.86, w = W * s, h = H * s;
         const cx = z.cx, by = v.H * 0.98 - (1 - e) * v.H * 0.33;          // 멀리 있을 땐 화면 가운데쯤, 가까워지면 바닥
         const key = `${wall.pose.id}|${wall.off}|${matched}|${Math.round(W)}x${Math.round(H)}`;
-        if (key !== paintedKey) { paintWall(W, H, wall.pose, matched ? "#2fd36b" : null, wall.off); paintedKey = key; }   // 실제 크기로 한 번 그려 두고 확대·축소만
+        if (key !== paintedKey) { paintWall(W, H, wall.pose, matched ? "#2fd36b" : "#ffe066", wall.off); paintedKey = key; }   // 구멍 테두리: 평소 노랑, 맞으면 초록   // 실제 크기로 한 번 그려 두고 확대·축소만
         ctx.save(); ctx.globalAlpha = alpha;
         ctx.drawImage(off, cx - w / 2, by - h, w, h);
         ctx.restore();
         if (!wall.result) {
-          outlinedText(ctx, wall.pose.name, cx, Math.max(v.U * 0.2, by - h - v.U * 0.04), v.U * 0.05, "#fff", "#8a3f22");
+          // 자세 카드: 벽이 멀리 있을 때부터 크게 보여 줌. 팔다리마다 맞으면 초록, 고칠 곳은 노랗게 깜빡임
+          const cw = Math.min(z.w * 0.34, v.U * 0.3), ch = cw * 1.25, cxx = env.slot === 1 ? z.x1 - cw - v.U * 0.025 : z.x0 + v.U * 0.025, cy = v.H * 0.17;
+          ctx.save(); ctx.globalAlpha = 0.96;
+          ctx.fillStyle = "rgba(0,0,0,.25)"; rr(ctx, cxx + 5, cy + 7, cw, ch, v.U * 0.025); ctx.fill();
+          ctx.fillStyle = matched ? "#eafff0" : "#fffdf5"; rr(ctx, cxx, cy, cw, ch, v.U * 0.025); ctx.fill();
+          ctx.lineWidth = v.U * 0.01; ctx.strokeStyle = matched ? "#2fd36b" : "#c0603a"; ctx.stroke();
+          drawPoseFig(ctx, wall.pose, cxx + cw * 0.08, cy + ch * 0.04, cw * 0.84, ch * 0.74, { hints: limbHints(wall.pose, env.tracker.pts), all: matched, t: wall.t });
+          outlinedText(ctx, wall.pose.name, cxx + cw / 2, cy + ch * 0.86, Math.min(cw * 0.12, cw * 1.6 / Math.max(5, wall.pose.name.length)), "#333", "#fff");
+          ctx.restore();
+          if (env.mode === 1) outlinedText(ctx, wall.pose.name, cx, Math.max(v.U * 0.2, by - h - v.U * 0.04), v.U * 0.05, "#fff", "#8a3f22");   // 둘이면 카드에만 (좁아서 겹침)
           // 구멍이 옆에 있으면 바닥에 설 자리 표시
           if (wall.off && k > 0.2) {
             const hx = holeX(), fy = v.H * 0.95, pulse = 0.55 + 0.45 * Math.sin(wall.t * 8);

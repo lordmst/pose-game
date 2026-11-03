@@ -1,16 +1,16 @@
 // 얼음 깨기: 손을 빠르게 휘둘러 얼음을 치면 맞은 자리에서 금이 가고, 다 깨면 안에 든 물건이 튀어나옴
-import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=56";
-import { sfx } from "../audio.js?v=56";
-import { bodyRef } from "./bodyref.js?v=56";
+import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=58";
+import { sfx } from "../audio.js?v=58";
+import { bodyRef } from "./bodyref.js?v=58";
 
 const PUNCH = 3.0;      // 타격으로 인정하는 손 속도 (어깨너비/초). 낮출수록 쉬움
 const STRONG = 7.5;     // 이 이상이면 강펀치(2타)
-const ITEMS = ["🐟", "💎", "🍓", "🐧", "🍬", "🦀", "🎁", "🍩", "🐳", "🍦", "🦖", "🚀"];
+const ITEMS = ["🐟", "💎", "🍓", "🐧", "🍬", "🦀", "🎁", "🍩", "🐳", "🍦", "🦖", "🚀", "🦄", "🐙", "🧸", "🍭", "🐢", "🦭", "🍰", "⚽", "🦋", "🐻‍❄️"];
 const easeOutBack = t => { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
 
 export default {
   id: "ice", title: "얼음 깨기", icon: "🧊", sec: 45, cursor: "🥊", cat: "move", bg: "#74b9ff", desc: "빠르게 쳐서 깨기",
-  how: "얼음을 빠르게 쳐서 깨요. 세게 치면 강펀치로 2번! 폭죽 얼음을 깨면 다른 얼음도 한꺼번에 금이 가요",
+  how: "얼음을 빠르게 쳐서 깨요. 세게 치면 강펀치로 2번! 폭죽 얼음을 깨면 다른 얼음도 한꺼번에 금이 가요. 황금 얼음은 3점!",
   create(env) {
     const z = env.zone, v = env.view;
     const cols = Math.max(1, Math.min(3, Math.floor(z.w / (v.U * 0.36))));
@@ -18,8 +18,9 @@ export default {
     const ref = bodyRef(env), Y = b => ref.y(b.fy, S() * 1.2);   // fy: 높이를 몸통 길이 단위로 (0 어깨, 1 엉덩이) → 선수 키에 맞춤
     let broken = 0, chain = [];   // chain: 폭죽 얼음이 터진 뒤 차례로 맞을 얼음
     function fresh(slot) {
-      const p = env.progress(), boom = p > 0.1 && Math.random() < 0.15, hp = Math.max(2, (boom ? 4 : p > 0.5 ? 4 : 3) + env.diff.hp);
-      return { fx: slot.fx, fy: slot.fy, hp, max: hp, boom, item: boom ? "🧨" : ITEMS[rnd(0, ITEMS.length - 1)], cracks: [], cool: [0, 0], shake: 0, broken: false, respawn: 0, born: 0, hint: 0 };
+      const p = env.progress(), q = Math.random(), boom = p > 0.1 && q < 0.15, gold = !boom && p > 0.15 && q > 0.9;   // 황금 얼음: 한 번 더 쳐야 하고 3점
+      const hp = Math.max(2, (boom ? 4 : p > 0.5 ? 4 : 3) + env.diff.hp + (gold ? 1 : 0));
+      return { fx: slot.fx, fy: slot.fy, hp, max: hp, boom, gold, item: boom ? "🧨" : gold ? "👑" : ITEMS[rnd(0, ITEMS.length - 1)], cracks: [], cool: [0, 0], shake: 0, broken: false, respawn: 0, born: 0, hint: 0 };
     }
     const blocks = [];
     // 무작위 위치: 서로 겹치지 않고, 손이 닿는 높이(얼굴 높이 ~ 엉덩이 높이) 안에서
@@ -52,7 +53,8 @@ export default {
       b.broken = true; b.respawn = 1.0 + Math.random() * 0.8; broken++;
       sfx.shatter(); shake(v.U * 0.015, 0.25);
       burst(cx, cy, { n: 28, colors: b.boom ? ["#ffd04d", "#ff7a2f", "#ffffff"] : ["#ffffff", "#d6f2ff", "#9fdcff"], shape: "shard", speed: v.U * 1.1, gravity: v.U * 2.4, size: v.U * 0.022, life: 0.9 });
-      env.award(1, cx, cy - s * 0.45);
+      env.award(b.gold ? 3 : 1, cx, cy - s * 0.45);
+      if (b.gold) popup(cx, cy - s * 0.75, "황금 얼음!", { size: v.U * 0.05, color: "#fff", stroke: "#c99700" });
       if (b.boom) {   // 펑! 남은 얼음 모두에 한 번씩 금이 감 (가까운 것부터 차례로)
         sfx.bomb(); shake(v.U * 0.02, 0.35);
         burst(cx, cy, { n: 30, colors: ["#ff4d4d", "#ffd400", "#7ae0ff", "#9dff7a"], shape: "confetti", speed: v.U * 1.3, gravity: v.U * 0.8, size: v.U * 0.02, life: 1.0 });
@@ -113,9 +115,10 @@ export default {
           const a = (0.78 - 0.38 * dmg).toFixed(2);
           const g = ctx.createLinearGradient(-half, -half, half, half);
           if (b.boom) { g.addColorStop(0, `rgba(255,236,220,${a})`); g.addColorStop(0.5, `rgba(255,160,120,${a})`); g.addColorStop(1, `rgba(230,90,60,${a})`); }
+          else if (b.gold) { g.addColorStop(0, `rgba(255,252,220,${a})`); g.addColorStop(0.5, `rgba(255,222,90,${a})`); g.addColorStop(1, `rgba(230,170,20,${a})`); }
           else { g.addColorStop(0, `rgba(236,250,255,${a})`); g.addColorStop(0.5, `rgba(170,225,255,${a})`); g.addColorStop(1, `rgba(110,190,240,${a})`); }
           rr(ctx, -half, -half, s, s, r); ctx.fillStyle = g; ctx.fill();
-          ctx.lineWidth = s * 0.035; ctx.strokeStyle = b.boom ? "#c0401b" : "#3a8fc7"; ctx.stroke();
+          ctx.lineWidth = s * 0.035; ctx.strokeStyle = b.boom ? "#c0401b" : b.gold ? "#b88a00" : "#3a8fc7"; ctx.stroke();
           ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = s * 0.045; ctx.lineCap = "round";
           ctx.beginPath(); ctx.moveTo(-half * 0.68, -half * 0.3); ctx.lineTo(-half * 0.3, -half * 0.68); ctx.moveTo(-half * 0.68, 0.05 * half); ctx.lineTo(-half * 0.5, -half * 0.12); ctx.stroke();
           // 금

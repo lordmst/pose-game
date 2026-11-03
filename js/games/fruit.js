@@ -1,9 +1,9 @@
 // 과일 자르기: 아래에서 던져 올린 과일을 손을 빠르게 휘둘러 자르기. 폭탄은 피하기
-import { burst, popup, shake, FONT, rnd } from "../fx.js?v=56";
-import { sfx } from "../audio.js?v=56";
+import { burst, popup, shake, FONT, rnd } from "../fx.js?v=58";
+import { sfx } from "../audio.js?v=58";
 
 const SLICE = 3.0;   // 자르기로 인정하는 손 속도 (어깨너비/초)
-const FRUITS = [["🍉", "#ff4d6d"], ["🍎", "#e8323c"], ["🍊", "#ff9a1f"], ["🍌", "#ffd23d"], ["🍍", "#f5c400"], ["🍓", "#e8323c"], ["🥝", "#8bc34a"], ["🍑", "#ffa07a"], ["🍇", "#8e44ad"], ["🥥", "#f0f0f0"]];
+const FRUITS = [["🍉", "#ff4d6d"], ["🍎", "#e8323c"], ["🍊", "#ff9a1f"], ["🍌", "#ffd23d"], ["🍍", "#f5c400"], ["🍓", "#e8323c"], ["🥝", "#8bc34a"], ["🍑", "#ffa07a"], ["🍇", "#8e44ad"], ["🥥", "#f0f0f0"], ["🍒", "#d0102a"], ["🍐", "#b5d334"], ["🥭", "#ffb020"], ["🍋", "#ffe14d"], ["🫐", "#4a5bd6"], ["🍈", "#c6e27a"]];
 
 // 점 p와 선분 ab 사이 거리 (빠른 손이 한 프레임 사이에 과일을 '지나간' 경우도 잡기 위함)
 function segDist(p, a, b) {
@@ -27,7 +27,7 @@ export default {
       const vy = -Math.sqrt(2 * g * (y0 - peak)), flight = -2 * vy / g;
       const land = z.x0 + z.w * (0.2 + Math.random() * 0.6);
       const f = FRUITS[rnd(0, FRUITS.length - 1)];
-      items.push({ kind, emoji: kind === "bomb" ? "💣" : f[0], color: f[1], x, y: y0, vx: (land - x) / flight, vy, g, rot: 0, vr: (Math.random() - 0.5) * 5, dead: false });
+      items.push({ kind, emoji: kind === "bomb" ? "💣" : f[0], color: kind === "gold" ? "#ffd400" : f[1], x, y: y0, vx: (land - x) / flight, vy, g, rot: 0, vr: (Math.random() - 0.5) * 5, dead: false });
     }
     function slice(it, h, k) {
       it.dead = true;
@@ -43,7 +43,11 @@ export default {
       burst(it.x, it.y, { n: 18, colors: [it.color, it.color, "#ffffff"], speed: v.U * 0.7, gravity: v.U * 1.6, size: v.U * 0.016, life: 0.6 });
       const s = streak[k];
       s.n = t - s.t < 0.35 ? s.n + 1 : 1; s.t = t;
-      env.award(1, it.x, it.y - R());
+      if (it.kind === "gold") {   // 황금 과일: 3점
+        popup(it.x, it.y - R() * 2.2, "황금 과일!", { size: v.U * 0.05, color: "#fff", stroke: "#c99700" });
+        burst(it.x, it.y, { n: 16, colors: ["#ffd400", "#fff3a0", "#ffffff"], shape: "star", speed: v.U * 0.8, gravity: v.U * 0.5, size: v.U * 0.02, life: 0.8 });
+      }
+      env.award(it.kind === "gold" ? 3 : 1, it.x, it.y - R());
       if (s.n >= 2) { popup(it.x, it.y - R() * 2.2, `${s.n}개 연속!`, { size: v.U * 0.05, color: "#ffe14d", stroke: "#b34700" }); env.award(1, it.x, it.y - R() * 3.2); }
     }
     return {
@@ -52,7 +56,7 @@ export default {
         const p = env.progress();
         if (spawnT <= 0) {
           const n = 1 + (Math.random() < 0.3 + p * 0.4 ? 1 : 0) + (p > 0.5 && Math.random() < 0.3 ? 1 : 0);
-          for (let i = 0; i < n; i++) launch(p > 0.1 && Math.random() < 0.12 * env.diff.bomb ? "bomb" : "fruit");
+          for (let i = 0; i < n; i++) { const q = Math.random(); launch(p > 0.1 && q < 0.12 * env.diff.bomb ? "bomb" : p > 0.15 && q > 0.93 ? "gold" : "fruit"); }
           spawnT = (1.5 - 0.6 * p) * (env.fever() ? 0.7 : 1);
         }
         const hands = env.tracker.hands, need = SLICE * env.diff.punch, r = R();
@@ -70,7 +74,7 @@ export default {
             const tr = trails[k], a = tr.length > 1 ? tr[tr.length - 2] : h;
             if (segDist(it, a, h) < r * env.diff.reach) { slice(it, h, k); break; }
           }
-          if (!it.dead && it.vy > 0 && it.y > v.H * 1.12) { it.dead = true; if (it.kind === "fruit") { missed++; env.miss(it.x, v.H, null); } }
+          if (!it.dead && it.vy > 0 && it.y > v.H * 1.12) { it.dead = true; if (it.kind !== "bomb") { missed++; env.miss(it.x, v.H, null); } }
         }
         items = items.filter(i => !i.dead);
         for (const hf of halves) { hf.vy += hf.g * dt; hf.x += hf.vx * dt; hf.y += hf.vy * dt; hf.rot += hf.vr * dt; hf.life -= dt; }
@@ -92,6 +96,7 @@ export default {
         for (const it of items) {
           ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(it.rot);
           if (it.kind === "bomb") { ctx.shadowColor = "#ff3030"; ctx.shadowBlur = r * (0.5 + 0.4 * Math.sin(t * 12)); }
+          if (it.kind === "gold") { ctx.shadowColor = "#ffd400"; ctx.shadowBlur = r * (0.8 + 0.4 * Math.sin(t * 10)); ctx.fillStyle = "rgba(255,212,0,.35)"; ctx.beginPath(); ctx.arc(0, 0, r * 1.25, 0, Math.PI * 2); ctx.fill(); }
           ctx.fillText(it.emoji, 0, 0); ctx.restore();
         }
         for (const hf of halves) {
