@@ -309,6 +309,8 @@ export const OUTFITS = {
   plane:    c => ({ top: "jacket", suit: "#7a4a2a", scarf: c.shirt, bottom: "pants", pants: "#5a4632", head: "pilot", headC: "#6b4423" }),
 };
 let curOutfit = null;
+// 가족 등번호 (이름이 같으면 이 번호, 그 밖의 이름은 이름으로 정한 번호)
+const FAMILY_NO = { "아빠": 10, "엄마": 7, "우영": 1, "연제": 2 };
 const lum = hex => { const c = new THREE.Color(hex); return 0.3 * c.r + 0.59 * c.g + 0.11 * c.b; };
 const hashN = s => { let h = 7; for (const ch of String(s)) h = (h * 31 + ch.codePointAt(0)) >>> 0; return h; };
 // 등번호(이름 + 번호) 그림
@@ -317,7 +319,7 @@ function numberTex(shirt, name, num) {
   const g = c.getContext("2d"), dark = lum(shirt) > 0.6, fg = dark ? "#1d2433" : "#ffffff", bd = dark ? "#ffffff" : "rgba(0,0,0,.45)";
   g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round";
   const F = '"Jua", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
-  if (name) { g.font = `bold 44px ${F}`; g.lineWidth = 6; g.strokeStyle = bd; g.strokeText(name, 128, 42); g.fillStyle = fg; g.fillText(name, 128, 42); }
+  if (name) { g.font = `bold 58px ${F}`; g.lineWidth = 7; g.strokeStyle = bd; g.strokeText(name, 128, 44); g.fillStyle = fg; g.fillText(name, 128, 44); }
   g.font = `bold ${name ? 150 : 170}px ${F}`; g.lineWidth = 10; g.strokeStyle = bd; g.strokeText(String(num), 128, name ? 160 : 135); g.fillStyle = fg; g.fillText(String(num), 128, name ? 160 : 135);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
@@ -437,7 +439,7 @@ export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], 
     if (O.scarf) { ring(0.11, 0.04, O.scarf, 1.4, 1, 0.85); const tl = box(0.07, 0.24, 0.02, O.scarf, { cast: false }); tl.position.set(0.06, 1.27, -0.16); tl.rotation.set(-0.3, 0, 0.25); U_(tl); }
     // 등번호(이름 + 번호): 등에 둥글게 감은 판, 앞가슴엔 작은 번호
     if (O.number) {
-      const num = number ?? (name ? hashN(name) % 98 + 1 : 2 + (hashN(shirt + skin) % 30));
+      const num = number ?? FAMILY_NO[name] ?? (name ? hashN(name) % 98 + 1 : 2 + (hashN(shirt + skin) % 30));
       const tex = numberTex(shirt, name, num), mtl = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.85, depthWrite: false });
       mtl.userData.look = true;
       const back = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.205, 0.32, 20, 1, true, Math.PI - 0.75, 1.5), mtl); back.position.y = 1.1; back.scale.set(1, 1, 0.77); U_(back);

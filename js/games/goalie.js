@@ -1,8 +1,8 @@
 // 골키퍼: 멀리서 날아오는 공을 손으로 막기. 공이 도착할 자리에 그림자가 미리 보임. 먼 공은 옆으로 움직여야 닿음
-import { burst, popup, shake, outlinedText, FONT, rnd } from "../fx.js?v=63";
-import { sfx } from "../audio.js?v=63";
-import { bodyRef } from "./bodyref.js?v=63";
-import { makeBoss } from "./boss.js?v=63";
+import { burst, popup, shake, outlinedText, FONT, rnd } from "../fx.js?v=64";
+import { sfx } from "../audio.js?v=64";
+import { bodyRef } from "./bodyref.js?v=64";
+import { makeBoss } from "./boss.js?v=64";
 
 const FLIGHT = 1.5;    // 공이 날아오는 시간(초, 보통)
 

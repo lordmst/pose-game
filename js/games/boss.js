@@ -1,8 +1,8 @@
 // 보스전: 게임 중간(진행 56%쯤, 피버 전)에 한 번, 여러 번 쳐야 물리치는 커다란 보스가 나옴
 // mode "hit": 빠르게 쳐야 함(두더지·얼음·과일) · "touch": 손을 댔다 떼며 여러 번 톡톡(별·골키퍼)
 // 보스가 나와 있는 동안 게임은 새 목표물을 덜 내보냄(게임이 boss.active를 보고 정함)
-import { burst, popup, shake, outlinedText, FONT } from "../fx.js?v=63";
-import { sfx } from "../audio.js?v=63";
+import { burst, popup, shake, outlinedText, FONT } from "../fx.js?v=64";
+import { sfx } from "../audio.js?v=64";
 
 const TIME = 9;          // 보스가 머무는 시간(초)
 const easeOutBack = k => { const c = 1.7; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
