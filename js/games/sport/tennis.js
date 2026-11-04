@@ -3,9 +3,9 @@
 // 캐릭터의 라켓 팔은 내 손을 그대로 따라 하고, 휘두르면 휘두른 방향·세기대로 포핸드·백핸드·스매시. 공은 라켓에 맞는 자리에서 날아감
 // 1인: 컴퓨터 상대 · 2인: 네트를 사이에 두고 둘이 대결(각자 화면은 자기 편 뒤에서 봄, 편마다 네트 앞에 컴퓨터 짝꿍)
 // 점수는 테니스식(15·30·40, 듀스·어드밴티지, 게임). 2인은 게임마다 서브가 바뀜
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=60";
-import { sfx } from "../../audio.js?v=60";
-import { stage, THREE, ground, box, ball as sphere, mesh, tree, cloud, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=60";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=61";
+import { sfx } from "../../audio.js?v=61";
+import { stage, THREE, ground, box, ball as sphere, mesh, tree, cloud, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText, fan as makeFan } from "./kit3d.js?v=61";
 
 const FLIGHT = 1.7;    // 공이 상대에게서 나에게 오는 시간(초, 보통)
 const SWING = 2.4;     // 스윙으로 인정하는 손 속도(어깨너비/초)
@@ -45,7 +45,7 @@ function court(W) {
   W.userData.fans = [];
   for (let r = 0; r < 4; r++) {
     const step = box(HW * 2 + 9, 0.5, 1.2, "#cfd8e3"); step.position.set(0, 1.4 + r * 0.6, -L - 5.6 - r * 1.1); W.add(step);
-    for (let i = 0; i < 16; i++) { const fan = sphere(0.28, colors[(i + r * 3) % colors.length]); fan.position.set(-HW - 3.5 + i * ((HW * 2 + 7) / 15), 1.95 + r * 0.6, -L - 5.6 - r * 1.1); fan.userData.bob = Math.random() * 6; W.add(fan); W.userData.fans.push(fan); }
+    for (let i = 0; i < 16; i++) { const fan = makeFan(colors[(i + r * 3) % colors.length], 0.28, i + r * 5); fan.position.set(-HW - 3.5 + i * ((HW * 2 + 7) / 15), 1.95 + r * 0.6, -L - 5.6 - r * 1.1); fan.userData.bob = Math.random() * 6; W.add(fan); W.userData.fans.push(fan); }
   }
   for (let i = 0; i < 14; i++) { const s = i % 2 ? 1 : -1; W.add(tree(s * (HW + 7 + (i % 3) * 2.5), -L - 2 + i * 2.4, 1.3 + (i % 3) * 0.3, i % 3 ? "#3f9b3f" : "#2f8a4f")); }
   for (let i = 0; i < 6; i++) W.add(cloud(-40 + i * 16, 18 + (i % 3) * 3, -70 - (i % 2) * 20, 3 + (i % 2)));

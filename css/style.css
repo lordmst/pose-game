@@ -383,3 +383,30 @@ body:not(.live) .overlay { background: var(--y); }
 /* v60: 꾸미기 켜기·끄기 */
 .opts .vol.wearopt small { font-size: 13px; opacity: .7; }
 #btnWear { position: absolute; left: calc(max(12px, 1.6vmin) + 116px); bottom: max(12px, 1.6vmin); z-index: 16; padding: 8px 16px; border-radius: 20px; background: rgba(255, 255, 255, .88); border: 3px solid var(--b); font-size: 16px; }
+
+/* v61: 겉모습 다듬기 — 게임 카드 입체감·반짝임 */
+.card { background: linear-gradient(180deg, #ffffff 55%, #fff4dc); box-shadow: 0 1vmin 0 rgba(0, 0, 0, .3), 0 1.6vmin 3vmin rgba(0, 0, 0, .25); }
+.card .ico {
+  position: relative;
+  background-color: var(--bg);
+  background-image: radial-gradient(circle at 28% 22%, rgba(255, 255, 255, .6), rgba(255, 255, 255, 0) 48%), linear-gradient(180deg, rgba(255, 255, 255, .25), rgba(0, 0, 0, .12));
+  text-shadow: 0 .8vmin 0 rgba(0, 0, 0, .16);
+}
+.card .ico::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 28%; background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, .1)); pointer-events: none; }
+.card .lbl { text-shadow: 0 2px 0 rgba(255, 255, 255, .9); }
+/* 가끔 카드 위로 빛이 스쳐 지나감 (카드마다 시간차) */
+.card::before { content: ""; position: absolute; top: -20%; bottom: -20%; width: 40%; left: -60%; background: linear-gradient(100deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .55), rgba(255, 255, 255, 0)); transform: skewX(-18deg); pointer-events: none; z-index: 2; animation: cardSheen 7s ease-in-out infinite; }
+.card:nth-child(3n+2)::before { animation-delay: 1.3s; }
+.card:nth-child(3n)::before { animation-delay: 2.6s; }
+.card.off::before { display: none; }
+@keyframes cardSheen { 0%, 78% { left: -60%; } 92%, 100% { left: 130%; } }
+@media (prefers-reduced-motion: reduce) { .card::before { animation: none; display: none; } }
+.card[data-hand].hover { transform: scale(1.07) translateY(-.6vmin); }
+/* v61: 결과 화면 — 칸이 톡 튀어나오고, 이긴 쪽은 빛남, 점수는 선수 색 그러데이션 */
+.rcol { background: linear-gradient(180deg, color-mix(in srgb, var(--c) 14%, #fff), #fff 45%); box-shadow: 0 .8vmin 0 rgba(0, 0, 0, .18); animation: rcolIn .45s cubic-bezier(.2, 1.5, .4, 1) both; }
+.rcol.rwin { animation: rcolIn .45s cubic-bezier(.2, 1.5, .4, 1) both, rwinGlow 1.6s ease-in-out .5s infinite; }
+@keyframes rcolIn { from { transform: scale(.6) translateY(4vmin); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes rwinGlow { 50% { box-shadow: 0 .8vmin 0 rgba(0, 0, 0, .18), 0 0 0 .5vmin color-mix(in srgb, var(--c) 35%, transparent), 0 0 4vmin color-mix(in srgb, var(--c) 60%, transparent); } }
+.rscore .rnum { background: linear-gradient(180deg, color-mix(in srgb, var(--c) 55%, #fff), var(--c) 55%, color-mix(in srgb, var(--c) 70%, #000)); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 .5vmin 0 rgba(0, 0, 0, .15)); }
+.res h2 { text-shadow: 0 .4vmin 0 rgba(0, 0, 0, .12); }
+@media (prefers-reduced-motion: reduce) { .rcol, .rcol.rwin { animation: none; } }

@@ -1,8 +1,8 @@
 // 두더지 잡기: 구멍에서 튀어나온 두더지를 주먹으로 콩! 헬멧 두더지는 두 번 쳐야 함(2점), 토끼는 치면 안 됨
-import { burst, popup, shake, outlinedText, FONT, rnd, clamp } from "../fx.js?v=60";
-import { sfx } from "../audio.js?v=60";
-import { bodyRef } from "./bodyref.js?v=60";
-import { makeBoss } from "./boss.js?v=60";
+import { burst, popup, shake, outlinedText, FONT, rnd, clamp, shade } from "../fx.js?v=61";
+import { sfx } from "../audio.js?v=61";
+import { bodyRef } from "./bodyref.js?v=61";
+import { makeBoss } from "./boss.js?v=61";
 
 const PUNCH = 3.0;          // 타격 인정 속도 (얼음 깨기와 같음)
 const POP = 0.15;           // 올라오고 내려가는 시간
@@ -82,7 +82,8 @@ export default {
         for (const h of holes) {
           const { x, y } = pos(h);
           // 구멍 뒤쪽
-          ctx.fillStyle = "#3b2414"; ctx.beginPath(); ctx.ellipse(x, y, r * 1.15, r * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+          { const g = ctx.createRadialGradient(x, y + r * 0.08, r * 0.1, x, y, r * 1.15); g.addColorStop(0, "#120904"); g.addColorStop(0.7, "#2e1a0c"); g.addColorStop(1, "#4a2d16");   // 깊어 보이는 구멍
+            ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, r * 1.15, r * 0.38, 0, 0, Math.PI * 2); ctx.fill(); }
           // 튀어나온 정도 (0~1)
           let k = 0;
           if (h.state === "up") k = Math.min(1, h.t / POP);
@@ -97,10 +98,19 @@ export default {
             } else {
               const gold = h.kind === "gold", body = gold ? "#f2b800" : "#8a5a2b", belly = gold ? "#ffe680" : "#c49a6c";
               if (gold) { ctx.save(); ctx.shadowColor = "#fff2a0"; ctx.shadowBlur = r * 0.8; ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(x, by, r * 0.75, r * 0.9 * squash, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
-              ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(x, by, r * 0.75, r * 0.9 * squash, 0, 0, Math.PI * 2); ctx.fill();
-              ctx.fillStyle = belly; ctx.beginPath(); ctx.ellipse(x, by + r * 0.35, r * 0.45, r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+              // 귀 → 몸(위 왼쪽이 밝은 둥근 빛) → 배
+              for (const s of [-1, 1]) { ctx.fillStyle = shade(body, -0.25); ctx.beginPath(); ctx.arc(x + s * r * 0.5, by - r * 0.72 * squash, r * 0.17, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#ffb3c1"; ctx.beginPath(); ctx.arc(x + s * r * 0.5, by - r * 0.72 * squash, r * 0.08, 0, Math.PI * 2); ctx.fill(); }
+              { const g = ctx.createRadialGradient(x - r * 0.28, by - r * 0.45, r * 0.08, x, by, r * 1.05); g.addColorStop(0, shade(body, 0.42)); g.addColorStop(0.55, body); g.addColorStop(1, shade(body, -0.35));
+                ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, by, r * 0.75, r * 0.9 * squash, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = shade(body, -0.45); ctx.lineWidth = Math.max(1.5, r * 0.04); ctx.stroke(); }
+              { const g = ctx.createRadialGradient(x, by + r * 0.25, r * 0.05, x, by + r * 0.35, r * 0.5); g.addColorStop(0, shade(belly, 0.35)); g.addColorStop(1, belly);
+                ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, by + r * 0.35, r * 0.45, r * 0.4, 0, 0, Math.PI * 2); ctx.fill(); }
               if (h.state === "hit") { outlinedText(ctx, "× ×", x, by - r * 0.25, r * 0.4, "#222", "#fff", 2); }
-              else { ctx.fillStyle = "#111"; for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(x + s * r * 0.25, by - r * 0.28, r * 0.09, 0, Math.PI * 2); ctx.fill(); } }
+              else { for (const s of [-1, 1]) { ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(x + s * r * 0.25, by - r * 0.28, r * 0.09, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x + s * r * 0.25 + r * 0.03, by - r * 0.315, r * 0.032, 0, Math.PI * 2); ctx.fill(); } }   // 눈 반짝
+              // 수염
+              ctx.strokeStyle = "rgba(40,20,10,.55)"; ctx.lineWidth = Math.max(1, r * 0.025); ctx.beginPath();
+              for (const s of [-1, 1]) for (const d of [-0.06, 0.05]) { ctx.moveTo(x + s * r * 0.2, by - r * 0.04 + d * r); ctx.lineTo(x + s * r * 0.55, by - r * 0.08 + d * r * 2.2); }
+              ctx.stroke();
               ctx.fillStyle = "#ff8fa3"; ctx.beginPath(); ctx.ellipse(x, by - r * 0.08, r * 0.14, r * 0.1, 0, 0, Math.PI * 2); ctx.fill();
               ctx.fillStyle = "#fff"; ctx.fillRect(x - r * 0.09, by + r * 0.02, r * 0.08, r * 0.13); ctx.fillRect(x + r * 0.01, by + r * 0.02, r * 0.08, r * 0.13);
               if (h.kind === "helmet" && h.armor > 0) {   // 빨간 헬멧
@@ -119,7 +129,13 @@ export default {
             ctx.restore();
           }
           // 구멍 앞쪽 흙 둔덕
-          ctx.fillStyle = "#7a4e2a"; ctx.beginPath(); ctx.ellipse(x, y + r * 0.12, r * 1.25, r * 0.3, 0, 0, Math.PI); ctx.fill();
+          { const g = ctx.createLinearGradient(0, y + r * 0.1, 0, y + r * 0.45); g.addColorStop(0, "#a8733f"); g.addColorStop(0.5, "#7a4e2a"); g.addColorStop(1, "#5a3519");   // 흙 둔덕(위가 밝게)
+            ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y + r * 0.12, r * 1.25, r * 0.3, 0, 0, Math.PI); ctx.fill();
+            ctx.fillStyle = "rgba(255,230,190,.35)"; ctx.beginPath(); ctx.ellipse(x - r * 0.35, y + r * 0.17, r * 0.35, r * 0.05, 0, 0, Math.PI * 2); ctx.fill();
+            // 풀 몇 가닥 (구멍마다 같은 자리)
+            ctx.strokeStyle = "#5fbf4a"; ctx.lineWidth = Math.max(1.5, r * 0.05); ctx.lineCap = "round"; ctx.beginPath();
+            for (const [dx, hgt, lean] of [[-1.1, 0.32, -0.12], [-1.0, 0.24, 0.1], [1.02, 0.3, 0.12], [1.12, 0.22, -0.08], [0.15, 0.2, 0.05]]) { const gx = x + dx * r, gy = y + r * (dx > -0.5 && dx < 0.5 ? 0.4 : 0.2); ctx.moveTo(gx, gy); ctx.quadraticCurveTo(gx + lean * r * 0.5, gy - hgt * r * 0.6, gx + lean * r, gy - hgt * r); }
+            ctx.stroke(); ctx.lineCap = "butt"; }
         }
         boss.draw(ctx);
       },

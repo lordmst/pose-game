@@ -3,9 +3,9 @@
 // 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임(옆걸음). 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받아칠 수 있음
 // 캐릭터의 라켓 팔은 내 손을 그대로 따라 하고, 휘두르면 휘두른 방향·세기대로 포핸드·백핸드·스매시 동작. 공은 라켓에 맞는 자리에서 날아감
 // 1인: 컴퓨터 상대 · 2인: 한 탁구대에서 둘이 대결(각자 화면은 자기 쪽에서 봄). 11점 먼저(2점 차), 서브는 2점마다 바뀜
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=60";
-import { sfx } from "../../audio.js?v=60";
-import { stage, THREE, box, cyl, ball as sphere, mesh, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText } from "./kit3d.js?v=60";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=61";
+import { sfx } from "../../audio.js?v=61";
+import { stage, THREE, box, cyl, ball as sphere, mesh, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText, fan } from "./kit3d.js?v=61";
 
 const FLIGHT = 1.1;    // 공이 상대에게서 나에게 오는 시간(초, 보통)
 const SWING = 2.4;     // 받아치기로 인정하는 손 속도(어깨너비/초)
@@ -45,7 +45,7 @@ function arena(scene) {
   [-1, 1].forEach(e => {
     for (let r = 0; r < 4; r++) {
       const step = box(18, 0.5, 1.2, "#3b4a6b"); step.position.set(0, 0.6 + r * 0.6, e * (8 + r * 1.1)); scene.add(step);
-      for (let i = 0; i < 18; i++) { const f = sphere(0.26, fanCols[(i + r * 2) % 6]); f.position.set(-8.5 + i, 1.15 + r * 0.6, e * (8 + r * 1.1)); f.userData.bob = Math.random() * 6; scene.add(f); scene.userData.fans.push(f); }
+      for (let i = 0; i < 18; i++) { const f = fan(fanCols[(i + r * 2) % 6], 0.26, i + r * 5); f.position.set(-8.5 + i, 1.15 + r * 0.6, e * (8 + r * 1.1)); f.userData.bob = Math.random() * 6; scene.add(f); scene.userData.fans.push(f); }
     }
   });
   for (let i = 0; i < 4; i++) {   // 천장 조명

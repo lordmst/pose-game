@@ -2,11 +2,14 @@
 export const P1C = "#ff4d4d", P2C = "#3d8bff";
 export const FONT = '"Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif';
 
-const parts = [], pops = [];
+const parts = [], pops = [], rings = [];
 let shakeT = 0, shakeDur = 1, shakeMag = 0;
 
 export function burst(x, y, o = {}) {
   const n = o.n ?? 14, colors = o.colors || [o.color || "#fff"];
+  // 큰 터짐에는 퍼지는 빛 고리 + 순간 번쩍 (smoke는 제외, ring: false로 끌 수 있음)
+  if (o.ring !== false && n >= 8 && o.shape !== "smoke" && rings.length < 24)
+    rings.push({ x, y, t: 0, life: 0.42, r0: (o.size ?? 8) * 1.2, r1: Math.max(36, (o.speed ?? 300) * 0.2), color: colors[0] });
   for (let i = 0; i < n; i++) {
     const a = o.spread != null ? (o.angle || 0) + (Math.random() - 0.5) * o.spread : Math.random() * Math.PI * 2;
     const sp = (o.speed ?? 300) * (0.35 + Math.random() * 0.85);
@@ -29,7 +32,7 @@ export function shakeOffset() {
   const k = shakeMag * (shakeT / shakeDur);
   return [(Math.random() - 0.5) * 2 * k, (Math.random() - 0.5) * 2 * k];
 }
-export function clearFx() { parts.length = 0; pops.length = 0; shakeT = 0; }
+export function clearFx() { parts.length = 0; pops.length = 0; rings.length = 0; shakeT = 0; }
 
 export function updateFx(dt) {
   shakeT = Math.max(0, shakeT - dt);
@@ -44,9 +47,46 @@ export function updateFx(dt) {
   j = 0;
   for (const q of pops) { q.t += dt; if (q.t >= q.life) continue; q.y += q.vy * dt; q.vy *= Math.pow(0.96, dt * 60); pops[j++] = q; }
   pops.length = j;
+  j = 0;
+  for (const r of rings) { r.t += dt; if (r.t < r.life) rings[j++] = r; }
+  rings.length = j;
 }
+// 빛 번짐 그림: 색마다 한 번만 만들어 두고 크기만 바꿔 씀
+const glowCache = new Map();
+function glowOf(color) {
+  let c = glowCache.get(color);
+  if (!c) {
+    c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, color); gr.addColorStop(0.35, color); gr.addColorStop(1, "rgba(0,0,0,0)");
+    g.globalAlpha = 0.9; g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    if (glowCache.size > 60) glowCache.clear();
+    glowCache.set(color, c);
+  }
+  return c;
+}
+const HEX6 = /^#[0-9a-f]{6}$/i;
 
 export function drawFx(ctx) {
+  // 1) 빛: 고리·번쩍·파편 둘레 번짐 (밝게 더하기)
+  if (rings.length || parts.length) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const r of rings) {
+      const k = r.t / r.life, e = 1 - Math.pow(1 - k, 3), rad = r.r0 + (r.r1 - r.r0) * e;
+      if (r.t < 0.14) { const f = 1 - r.t / 0.14, s = r.r1 * 0.9; ctx.globalAlpha = 0.55 * f; ctx.drawImage(glowOf("#ffffff"), r.x - s, r.y - s, s * 2, s * 2); }
+      ctx.globalAlpha = 0.85 * (1 - k); ctx.strokeStyle = r.color; ctx.lineWidth = Math.max(2, r.r1 * 0.09 * (1 - k));
+      ctx.beginPath(); ctx.arc(r.x, r.y, rad, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.6 * (1 - k); ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1, r.r1 * 0.03 * (1 - k));
+      ctx.beginPath(); ctx.arc(r.x, r.y, rad, 0, Math.PI * 2); ctx.stroke();
+    }
+    for (const p of parts) {
+      if (p.shape === "smoke" || p.shape === "confetti") continue;
+      const k = 1 - p.t / p.life, s = p.size * 1.5;
+      ctx.globalAlpha = 0.5 * k; ctx.drawImage(glowOf(p.color), p.x - s, p.y - s, s * 2, s * 2);
+    }
+    ctx.restore();
+  }
+  // 2) 파편
   for (const p of parts) {
     const k = 1 - p.t / p.life;
     ctx.globalAlpha = Math.min(1, k * 1.6);
@@ -66,7 +106,12 @@ export function drawFx(ctx) {
     const sc = k < 0.15 ? 0.6 + (k / 0.15) * 0.55 : 1.15 - Math.min(0.15, (k - 0.15) * 0.5);
     ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
     if (q.emoji) { ctx.font = `${Math.round(q.size * sc)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(q.text, q.x, q.y); }
-    else outlinedText(ctx, q.text, q.x, q.y, q.size * sc, q.color, q.stroke);
+    else {
+      // 점수 글자: 그림자 + 위가 밝은 그러데이션 + 굵은 테두리
+      const S = q.size * sc, fill = HEX6.test(q.color) ? (() => { const g = ctx.createLinearGradient(0, q.y - S * 0.5, 0, q.y + S * 0.5); g.addColorStop(0, shade(q.color, 0.55)); g.addColorStop(0.55, q.color); g.addColorStop(1, shade(q.color, -0.12)); return g; })() : q.color;
+      const a = ctx.globalAlpha; ctx.globalAlpha = a * 0.35; outlinedText(ctx, q.text, q.x + S * 0.05, q.y + S * 0.08, S, "#000", "#000"); ctx.globalAlpha = a;
+      outlinedText(ctx, q.text, q.x, q.y, S, fill, q.stroke, Math.max(4, S * 0.19));
+    }
   }
   ctx.globalAlpha = 1;
 }

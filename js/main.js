@@ -1,32 +1,32 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=60";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=60";
-import * as R from "./records.js?v=60";
-import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=60";
-import copy from "./games/copy.js?v=60";
-import math from "./games/math.js?v=60";
-import ice from "./games/ice.js?v=60";
-import star from "./games/star.js?v=60";
-import fruit from "./games/fruit.js?v=60";
-import mole from "./games/mole.js?v=60";
-import wall from "./games/wall.js?v=60";
-import rhythm from "./games/rhythm.js?v=60";
-import goalie from "./games/goalie.js?v=60";
-import { hangul, english } from "./games/word.js?v=60";
-import clockGame from "./games/clock.js?v=60";
-import run from "./games/run.js?v=60";
-import simon from "./games/simon.js?v=60";
-import conductor from "./games/conductor.js?v=60";
-import SPORTS from "./games/sports.js?v=60";
-import LEARN from "./games/learn.js?v=60";
-import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=60";
-import * as FUN from "./fun.js?v=60";
-import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=60";
-import { makeShots, saveShot } from "./photo.js?v=60";
-import { DIFFS, diffOf } from "./difficulty.js?v=60";
-import { startDemo } from "./demo.js?v=60";
-import * as REAL from "./realmusic.js?v=60";
-import * as FACE from "./face.js?v=60";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=61";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=61";
+import * as R from "./records.js?v=61";
+import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=61";
+import copy from "./games/copy.js?v=61";
+import math from "./games/math.js?v=61";
+import ice from "./games/ice.js?v=61";
+import star from "./games/star.js?v=61";
+import fruit from "./games/fruit.js?v=61";
+import mole from "./games/mole.js?v=61";
+import wall from "./games/wall.js?v=61";
+import rhythm from "./games/rhythm.js?v=61";
+import goalie from "./games/goalie.js?v=61";
+import { hangul, english } from "./games/word.js?v=61";
+import clockGame from "./games/clock.js?v=61";
+import run from "./games/run.js?v=61";
+import simon from "./games/simon.js?v=61";
+import conductor from "./games/conductor.js?v=61";
+import SPORTS from "./games/sports.js?v=61";
+import LEARN from "./games/learn.js?v=61";
+import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=61";
+import * as FUN from "./fun.js?v=61";
+import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=61";
+import { makeShots, saveShot } from "./photo.js?v=61";
+import { DIFFS, diffOf } from "./difficulty.js?v=61";
+import { startDemo } from "./demo.js?v=61";
+import * as REAL from "./realmusic.js?v=61";
+import * as FACE from "./face.js?v=61";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -130,7 +130,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 60;
+const APP_V = 61;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -854,6 +854,17 @@ function endGame() {
   rankView = { game: gameId, level: recLevel(players[0]) };
   setState("result");
   fitResult(); requestAnimationFrame(fitResult); setTimeout(fitResult, 300);   // 글꼴·그림이 늦게 그려져도 다시 맞춤
+  countUp();
+}
+// 결과 점수가 0부터 올라가며 나타남 (0.9초)
+function countUp() {
+  const els = [...document.querySelectorAll("#resCols .rnum")], t0 = performance.now(), D = 900;
+  const step = now => {
+    const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
+    els.forEach(el => { el.textContent = Math.round(+el.dataset.v * e); });
+    if (k < 1 && state === "result") requestAnimationFrame(step); else els.forEach(el => { el.textContent = el.dataset.v; });
+  };
+  requestAnimationFrame(step);
 }
 // 새로 받은 아이템이 쓸 수 있는 것이고 그 자리가 비었으면 바로 착용 (저장된 선수만)
 function autoWear(i, it) {
@@ -894,12 +905,12 @@ function renderResult(results, photos = [], team = null, partyEnd = false) {
     let badge = "";
     if (rec) badge = rec.rank === 1 && rec.total > 1 ? "전체 1위!" : rec.best ? "개인 최고 기록!" : rec.first ? "첫 기록!" : "";
     const col = document.createElement("div");
-    col.className = "rcol"; col.style.setProperty("--c", p.color);
+    col.className = "rcol" + (decided && p.score === top && results.length === 2 ? " rwin" : ""); col.style.setProperty("--c", p.color); col.style.animationDelay = `${i * 0.12}s`;
     const misHtml = mis ? mis.newly.map(t => `<div class="rmis">미션 완료! ${esc(t)}</div>`).join("") + (mis.stamp ? `<div class="rstamp">오늘의 미션 다 했어요! 도장 ${mis.stamps}개</div>` : "") : "";
     const itemHtml = it => `<div class="ritem"><span class="ico">${it.icon}</span><span>${it.special ? "특별 아이템!" : "아이템 획득!"} <b>${esc(it.name)}</b>${it.isNew ? "" : " (또 받았어요)"}${it.worn && wearOn ? " · 바로 착용!" : ""}${it.count ? `<small>모은 아이템 ${it.count}/${ITEMS.length}</small>` : ""}</span></div>`;
     col.innerHTML =
       `<div class="rname">${decided && p.score === top ? "👑 " : ""}${i + 1}P ${esc(p.name)}</div>` +
-      `<div class="rscore">${p.score}<small>점</small></div>` +
+      `<div class="rscore"><span class="rnum" data-v="${p.score}">${p.score}</span><small>점</small></div>` +
       (badge ? `<div class="rbadge">${badge}</div>` : "") +
       `<div class="rmeta">${team ? "팀에 보탠 점수" : rec ? `전체 ${rec.rank}위 (기록 ${rec.total}개 중)` : "손님 이름을 적으면 다음부터 기록이 저장돼요"}</div>` +
       `<div class="rmeta">난이도 ${diffOf(p.diff).label} · ${esc(extra)}${extra ? " · " : ""}최대 콤보 ${p.maxCombo}</div>` +

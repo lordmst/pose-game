@@ -4,9 +4,9 @@
 // 상대 엄지가 내 엄지 위로 올라와 누르려 하면(노란 경고) 얼른 빠져나가기. 못 빠져나가면 짐
 // 2인 대결(env.mode 2): 두 선수가 한 쌍의 손에서 각자 자기 엄지로 겨룸. 각 화면은 자기 주먹이 앞에 오게 보여 줌
 //   상대 엄지 위에서 콱 누르면 누르기 시작, 하나·둘·셋 버티면 이김. 눌린 사람은 엄지를 멀리 빼면 빠져나감
-import { burst, popup, rr, outlinedText } from "../../fx.js?v=60";
-import { sfx } from "../../audio.js?v=60";
-import { stage, THREE, box, ball as sphere, cyl, mesh, ground, tree, cloud } from "./kit3d.js?v=60";
+import { burst, popup, rr, outlinedText } from "../../fx.js?v=61";
+import { sfx } from "../../audio.js?v=61";
+import { stage, THREE, box, ball as sphere, cyl, mesh, ground, tree, cloud, fan } from "./kit3d.js?v=61";
 
 const PRESS = 1.6;        // 누르기로 치는 손이 아래로 내려가는 빠르기 (어깨너비/초)
 const COUNT = 1.5;        // 하나·둘·셋 (초)
@@ -60,7 +60,7 @@ function arena(scene) {
   const cols = ["#ff6b6b", "#ffd43b", "#69db7c", "#74c0fc", "#f783ac", "#ffa94d"];
   for (let r = 0; r < 3; r++) {
     const step = box(18, 0.6, 1.3, "#cfd8e3"); step.position.set(0, -1.3 + r * 0.7, -AR - 4.5 - r * 1.2); scene.add(step);
-    for (let i = 0; i < 14; i++) { const f = sphere(0.32, cols[(i + r * 2) % cols.length], { rough: 0.9 }); f.position.set(-8 + i * 1.23, -0.68 + r * 0.7, -AR - 4.5 - r * 1.2); scene.add(f); }
+    for (let i = 0; i < 14; i++) { const f = fan(cols[(i + r * 2) % cols.length], 0.32, i + r * 5); f.position.set(-8 + i * 1.23, -0.68 + r * 0.7, -AR - 4.5 - r * 1.2); scene.add(f); }
   }
   for (let i = 0; i < 12; i++) scene.add(tree(-16 + i * 3, -14 - (i % 3) * 2.5, 2 + (i % 2) * 0.6));
   for (let i = 0; i < 5; i++) scene.add(cloud(-30 + i * 15, 16 + (i % 2) * 4, -45, 3));

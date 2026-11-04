@@ -2,9 +2,9 @@
 // 두 손을 머리 위로 올리면 슛 준비 → 힘 막대가 오르내림 → 초록 칸일 때 손을 위로 '휙' 튕기면 슛
 // 랙 5개 × 공 5개, 랙의 마지막 공(무지개 머니볼)은 2배. 깨끗하게 들어가면(스위시) 보너스
 // 2인: 같은 골대에 동시에 슛하는 대결. 상대 캐릭터가 내 옆에서 자기 랙 순서대로 슛하는 모습이 실시간으로 보임. 위쪽에 두 사람 점수·랙 진행
-import { burst, popup, outlinedText, rr } from "../../fx.js?v=60";
-import { sfx } from "../../audio.js?v=60";
-import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, avatar, playerAvatar, textBoard } from "./kit3d.js?v=60";
+import { burst, popup, outlinedText, rr } from "../../fx.js?v=61";
+import { sfx } from "../../audio.js?v=61";
+import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, avatar, playerAvatar, textBoard, fan } from "./kit3d.js?v=61";
 
 const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 슛
 let shared = null;   // 2인 대결: 두 화면이 서로의 상태를 공개(p[slot])하고 상대를 그대로 그림
@@ -59,7 +59,7 @@ function court(scene) {
   scene.userData.fans = [];
   [-1, 1].forEach(sd => { for (let r = 0; r < 3; r++) {
     const step = box(0.9, 0.4, 10, "#d0d7e2"); step.position.set(sd * (8.8 + r * 0.9), 0.4 + r * 0.45, 3); scene.add(step);
-    for (let i = 0; i < 9; i++) { const f = mesh(new THREE.SphereGeometry(0.22, 12, 10), colors[(i + r) % colors.length]); f.position.set(sd * (8.8 + r * 0.9), 0.8 + r * 0.45, -1 + i * 1.0); f.userData.bob = Math.random() * 6; scene.add(f); scene.userData.fans.push(f); }
+    for (let i = 0; i < 9; i++) { const f = fan(colors[(i + r) % colors.length], 0.22, i + r * 5); f.position.set(sd * (8.8 + r * 0.9), 0.8 + r * 0.45, -1 + i * 1.0); f.userData.bob = Math.random() * 6; scene.add(f); scene.userData.fans.push(f); }
   } });
   for (let i = 0; i < 6; i++) scene.add(cloud(-50 + i * 20, 16 + (i % 3) * 3, -80, 4));
 }

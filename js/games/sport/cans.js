@@ -3,9 +3,9 @@
 // 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임. 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받아칠 수 있음
 // 깡통 하나에 1점, 받침이 없어진 깡통은 같이 무너짐. 다 쓰러뜨리면 보너스
 // 2인: 탁구대 두 개를 나란히 놓고 각자 자기 피라미드를 무너뜨리는 대결. 상대 캐릭터·공·깡통이 옆 탁구대에서 실시간으로 보임. 먼저 올 클리어하면 보너스
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=60";
-import { sfx } from "../../audio.js?v=60";
-import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, avatar, playerAvatar, racket, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=60";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=61";
+import { sfx } from "../../audio.js?v=61";
+import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, avatar, playerAvatar, racket, textBoard, bodyMover, moveGuide, moveText, fan } from "./kit3d.js?v=61";
 
 const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 움직이고 침
 let shared = null;   // 2인 대결: 두 화면이 서로의 상태를 공개(p[slot])하고 상대 탁구대를 그대로 그림. firstClear: 먼저 올 클리어한 자리
@@ -50,7 +50,7 @@ function hall(scene, oppX = 0) {
   scene.userData.fans = [];
   for (let r = 0; r < 4; r++) {
     const step = box(10, 0.45, 1, "#cfd8e3"); step.position.set(0, 0.9 + r * 0.55, -6.7 - r * 0.95); scene.add(step);
-    for (let i = 0; i < 14; i++) { const f = sphere(0.24, colors[(i + r * 2) % colors.length]); f.position.set(-4.4 + i * 0.68, 1.35 + r * 0.55, -6.7 - r * 0.95); f.userData.bob = Math.random() * 6; scene.add(f); scene.userData.fans.push(f); }
+    for (let i = 0; i < 14; i++) { const f = fan(colors[(i + r * 2) % colors.length], 0.24, i + r * 5); f.position.set(-4.4 + i * 0.68, 1.35 + r * 0.55, -6.7 - r * 0.95); f.userData.bob = Math.random() * 6; scene.add(f); scene.userData.fans.push(f); }
   }
   for (let i = 0; i < 10; i++) scene.add(tree((i % 2 ? 1 : -1) * (7 + (i % 3) * 2), -8 + i * 1.6, 1.4 + (i % 3) * 0.3));
   for (let i = 0; i < 5; i++) scene.add(cloud(-30 + i * 15, 14 + (i % 2) * 3, -50, 3));
