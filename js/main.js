@@ -1,32 +1,32 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=59";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=59";
-import * as R from "./records.js?v=59";
-import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=59";
-import copy from "./games/copy.js?v=59";
-import math from "./games/math.js?v=59";
-import ice from "./games/ice.js?v=59";
-import star from "./games/star.js?v=59";
-import fruit from "./games/fruit.js?v=59";
-import mole from "./games/mole.js?v=59";
-import wall from "./games/wall.js?v=59";
-import rhythm from "./games/rhythm.js?v=59";
-import goalie from "./games/goalie.js?v=59";
-import { hangul, english } from "./games/word.js?v=59";
-import clockGame from "./games/clock.js?v=59";
-import run from "./games/run.js?v=59";
-import simon from "./games/simon.js?v=59";
-import conductor from "./games/conductor.js?v=59";
-import SPORTS from "./games/sports.js?v=59";
-import LEARN from "./games/learn.js?v=59";
-import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=59";
-import * as FUN from "./fun.js?v=59";
-import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=59";
-import { makeShots, saveShot } from "./photo.js?v=59";
-import { DIFFS, diffOf } from "./difficulty.js?v=59";
-import { startDemo } from "./demo.js?v=59";
-import * as REAL from "./realmusic.js?v=59";
-import * as FACE from "./face.js?v=59";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=60";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=60";
+import * as R from "./records.js?v=60";
+import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=60";
+import copy from "./games/copy.js?v=60";
+import math from "./games/math.js?v=60";
+import ice from "./games/ice.js?v=60";
+import star from "./games/star.js?v=60";
+import fruit from "./games/fruit.js?v=60";
+import mole from "./games/mole.js?v=60";
+import wall from "./games/wall.js?v=60";
+import rhythm from "./games/rhythm.js?v=60";
+import goalie from "./games/goalie.js?v=60";
+import { hangul, english } from "./games/word.js?v=60";
+import clockGame from "./games/clock.js?v=60";
+import run from "./games/run.js?v=60";
+import simon from "./games/simon.js?v=60";
+import conductor from "./games/conductor.js?v=60";
+import SPORTS from "./games/sports.js?v=60";
+import LEARN from "./games/learn.js?v=60";
+import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=60";
+import * as FUN from "./fun.js?v=60";
+import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=60";
+import { makeShots, saveShot } from "./photo.js?v=60";
+import { DIFFS, diffOf } from "./difficulty.js?v=60";
+import { startDemo } from "./demo.js?v=60";
+import * as REAL from "./realmusic.js?v=60";
+import * as FACE from "./face.js?v=60";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -105,8 +105,8 @@ for (const k of ["sfx", "bgm", "tts"]) if (typeof saved[k] === "boolean") settin
 if (saved.vol) for (const k of ["sfx", "bgm", "voice"]) if (typeof saved.vol[k] === "number") settings.vol[k] = saved.vol[k];
 sel = (saved.lastSel || []).filter(id => !id.startsWith("guest") && R.players().some(p => p.id === id)).slice(0, 2);
 let songSel = saved.lastSong || "basic", curSong = "basic";
-let coopSel = !!saved.coop, catchOn = saved.catchUp !== false;   // 둘이 할 때 협동/대결 · 대결 따라잡기 보너스   // 리듬 박자 노래 ("random" = 아무거나)
-function saveSettings() { R.setSettings({ ...R.getSettings(), sfx: settings.sfx, bgm: settings.bgm, tts: settings.tts, vol: { ...settings.vol }, lastSel: sel, coop: coopSel, catchUp: catchOn }); }
+let coopSel = !!saved.coop, catchOn = saved.catchUp !== false, wearOn = saved.wearOn !== false;   // 둘이 할 때 협동/대결 · 대결 따라잡기 보너스   // 리듬 박자 노래 ("random" = 아무거나)
+function saveSettings() { R.setSettings({ ...R.getSettings(), sfx: settings.sfx, bgm: settings.bgm, tts: settings.tts, vol: { ...settings.vol }, lastSel: sel, coop: coopSel, catchUp: catchOn, wearOn }); }
 
 /* ---------- 화면 크기 ---------- */
 function resize() {
@@ -130,7 +130,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 59;
+const APP_V = 60;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -155,6 +155,7 @@ function setState(s) {
   const inGame = s === "countdown" || s === "play";
   $("#hud").hidden = !inGame; $("#btnQuit").hidden = !inGame;
   $("#btnVoice").hidden = !(inGame || s === "demo" || s === "ready");
+  updateWearBtn(inGame || s === "ready");
   if (s !== "countdown") $("#cd").hidden = true;
   $$("[data-hand]").forEach(el => { el._d = 0; el.style.setProperty("--p", 0); el.classList.remove("hover"); });
   uiCool = 0.7;
@@ -243,7 +244,7 @@ function renderSlots() {
       dbox.appendChild(b);
     }
     // 꾸미기: 모은 아이템 착용 (저장된 선수만)
-    if (!g) {
+    if (!g && wearOn) {
       const wb = document.createElement("button"); wb.type = "button"; wb.className = "wearbtn";
       const w = propOf(id, "wear", null) || {}, icons = WEAR_SLOTS.map(([k]) => w[k] && itemOf(w[k]) ? itemOf(w[k]).icon : "").join("");
       wb.textContent = `꾸미기 ${icons || "+"}`; wb.onclick = () => openWear(id);
@@ -296,6 +297,16 @@ $("#btnVoice").onclick = () => {
   saveSettings(); syncSoundUI();
 };
 syncSoundUI();
+/* ---------- 꾸미기 보이기 켜기·끄기 (선수 고르기 화면 · 게임 중 버튼) ---------- */
+// 끄면 화면에 그리지 않을 뿐, 모은 아이템과 착용해 둔 것은 그대로 남음
+function setWearOn(on) { wearOn = on; $("#opt-wear").checked = on; saveSettings(); if (state === "setup") renderSlots(); updateWearBtn(!$("#btnWear").hidden); }
+function updateWearBtn(show) {
+  const b = $("#btnWear"), any = slots.some(s => s && s.wear && Object.keys(s.wear).length);
+  b.hidden = !(show && (any || !wearOn)); b.textContent = wearOn ? "꾸미기 끄기" : "꾸미기 켜기";
+}
+$("#opt-wear").checked = wearOn;
+$("#opt-wear").onchange = () => setWearOn($("#opt-wear").checked);
+$("#btnWear").onclick = () => setWearOn(!wearOn);
 $("#btnRankSetup").onclick = () => openRanking("setup");
 $("#btnMissionSetup").onclick = () => openMissions("setup");
 
@@ -729,7 +740,7 @@ function drawPip(c, i, x, y, w, h, mark) {
   c.beginPath(); c.roundRect(x, y, w, h, U * 0.02); c.clip();
   c.translate(x + w / 2, y); c.scale(s, s); c.translate(-cx, 0);
   cam.draw(c, view.W, view.H);
-  if (P && tr.present && slots[i] && slots[i].wear) drawWear(c, P, slots[i].wear, itemOf, wearPipSt[i], lastT, lastDt);   // 작은 창 속 내 모습에도 꾸미기
+  if (wearOn && P && tr.present && slots[i] && slots[i].wear) drawWear(c, P, slots[i].wear, itemOf, wearPipSt[i], lastT, lastDt);   // 작은 창 속 내 모습에도 꾸미기
   // 뼈대 선(다각형 모양)은 그리지 않음: 작은 창에는 카메라에 비친 모습만 (점검용 ?bones=1 일 때만 표시)
   if (P && SHOW_BONES) {
     c.strokeStyle = slots[i].color; c.lineWidth = U * 0.02; c.lineCap = "round"; c.beginPath();
@@ -885,7 +896,7 @@ function renderResult(results, photos = [], team = null, partyEnd = false) {
     const col = document.createElement("div");
     col.className = "rcol"; col.style.setProperty("--c", p.color);
     const misHtml = mis ? mis.newly.map(t => `<div class="rmis">미션 완료! ${esc(t)}</div>`).join("") + (mis.stamp ? `<div class="rstamp">오늘의 미션 다 했어요! 도장 ${mis.stamps}개</div>` : "") : "";
-    const itemHtml = it => `<div class="ritem"><span class="ico">${it.icon}</span><span>${it.special ? "특별 아이템!" : "아이템 획득!"} <b>${esc(it.name)}</b>${it.isNew ? "" : " (또 받았어요)"}${it.worn ? " · 바로 착용!" : ""}${it.count ? `<small>모은 아이템 ${it.count}/${ITEMS.length}</small>` : ""}</span></div>`;
+    const itemHtml = it => `<div class="ritem"><span class="ico">${it.icon}</span><span>${it.special ? "특별 아이템!" : "아이템 획득!"} <b>${esc(it.name)}</b>${it.isNew ? "" : " (또 받았어요)"}${it.worn && wearOn ? " · 바로 착용!" : ""}${it.count ? `<small>모은 아이템 ${it.count}/${ITEMS.length}</small>` : ""}</span></div>`;
     col.innerHTML =
       `<div class="rname">${decided && p.score === top ? "👑 " : ""}${i + 1}P ${esc(p.name)}</div>` +
       `<div class="rscore">${p.score}<small>점</small></div>` +
@@ -1174,6 +1185,7 @@ function draw(t) {
 }
 // 꾸미기: 카메라 화면 속 선수에게 모은 아이템을 씌움
 function drawWears(t) {
+  if (!wearOn) return;
   trackers.forEach((tr, i) => { if (tr.pts && tr.present && slots[i] && slots[i].wear) drawWear(ctx, tr.pts, slots[i].wear, itemOf, wearSt[i], t, lastDt); });
 }
 // 2인: 화면 가운데 경계선. 어두운 테두리 + 흰 선 + 양쪽에 선수 색 띠, 아래에 '◀ 1P | 2P ▶' 이름표

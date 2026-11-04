@@ -2,9 +2,9 @@
 // 두 손을 머리 위로 올리면 슛 준비 → 힘 막대가 오르내림 → 초록 칸일 때 손을 위로 '휙' 튕기면 슛
 // 랙 5개 × 공 5개, 랙의 마지막 공(무지개 머니볼)은 2배. 깨끗하게 들어가면(스위시) 보너스
 // 2인: 같은 골대에 동시에 슛하는 대결. 상대 캐릭터가 내 옆에서 자기 랙 순서대로 슛하는 모습이 실시간으로 보임. 위쪽에 두 사람 점수·랙 진행
-import { burst, popup, outlinedText, rr } from "../../fx.js?v=59";
-import { sfx } from "../../audio.js?v=59";
-import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, avatar, playerAvatar, textBoard } from "./kit3d.js?v=59";
+import { burst, popup, outlinedText, rr } from "../../fx.js?v=60";
+import { sfx } from "../../audio.js?v=60";
+import { stage, THREE, ground, sea, box, cyl, mesh, palm, cloud, avatar, playerAvatar, textBoard } from "./kit3d.js?v=60";
 
 const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 슛
 let shared = null;   // 2인 대결: 두 화면이 서로의 상태를 공개(p[slot])하고 상대를 그대로 그림

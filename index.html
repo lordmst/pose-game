@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=59">
+<link rel="stylesheet" href="css/style.css?v=60">
 </head>
 <body>
 <video id="video" playsinline muted autoplay></video>
@@ -31,6 +31,7 @@
       <label class="vol"><input type="checkbox" id="opt-sfx"><span>효과음</span><input type="range" id="vol-sfx" min="0" max="100" step="5"></label>
       <label class="vol"><input type="checkbox" id="opt-bgm"><span>배경음악</span><input type="range" id="vol-bgm" min="0" max="100" step="5"></label>
       <p class="volnote">음성은 기기의 음성 엔진으로 나와서 아이폰·아이패드에서는 크기 조절 없이 켜기·끄기만 돼요</p>
+      <label class="vol wearopt"><input type="checkbox" id="opt-wear"><span>꾸미기 보이기</span><small>모자·안경·친구 아이템을 화면 속 선수에게 씌워요</small></label>
     </div>
     <div class="actions">
       <button id="btnStart" class="big" type="button">선수를 골라 주세요</button>
@@ -122,6 +123,7 @@
 </div>
 <button id="btnQuit" type="button" hidden>그만하기</button>
 <button id="btnVoice" type="button" hidden></button>
+<button id="btnWear" type="button" hidden></button>
 <div id="cd" hidden></div>
 
 <!-- 5. 결과 -->
@@ -210,6 +212,6 @@
     setTimeout(function () { if (!window.__appReady) show("게임을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요."); }, 8000);
   })();
 </script>
-<script type="module" src="js/main.js?v=59"></script>
+<script type="module" src="js/main.js?v=60"></script>
 </body>
 </html>
