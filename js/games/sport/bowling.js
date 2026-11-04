@@ -2,9 +2,9 @@
 // 조준 = 내 몸의 좌우 위치(옆으로 걸어서 맞춤), 휘두를 때 손이 옆으로 쏠리면 공이 휘어짐(커브). 굴러가는 공을 카메라가 따라감
 // 던지기 전에 추천 자리(1구: 1·3번 핀 사이, 2구: 남은 핀 쪽)를 점선으로 안내. 안내일 뿐이라 어디서 던져도 됨
 // 2인: 같은 볼링장의 바로 옆 레인에서 상대가 동시에 침(상대 캐릭터·공·핀이 실시간으로 보임). 위쪽 점수표는 두 줄(1P·2P), 프레임마다 이긴 쪽 표시
-import { burst, popup, shake, outlinedText, rr, clamp, FONT } from "../../fx.js?v=62";
-import { sfx } from "../../audio.js?v=62";
-import { stage, THREE, box, ball as sphere, mesh, mat, cyl, avatar, playerAvatar, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=62";
+import { burst, popup, shake, outlinedText, rr, clamp, FONT } from "../../fx.js?v=63";
+import { sfx } from "../../audio.js?v=63";
+import { stage, THREE, box, ball as sphere, mesh, mat, cyl, avatar, playerAvatar, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=63";
 
 const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 조준하고 던짐
 // 2인 대결: 두 화면이 서로의 상태를 공개(pub)하고, 상대 레인을 그 상태대로 그림. 각자 자기 공·핀은 자기 화면이 계산
@@ -82,7 +82,7 @@ export default {
   how: "공 든 손을 허리 아래로 내렸다가 앞으로 쭉 휘둘러 굴려요. 옆으로 걸어서 조준! 점선 자리가 추천 자리예요. 휘두를 때 손이 옆으로 가면 공이 휘어요",
   create(env) {
     const z = env.zone, v = env.view;
-    const st = stage(env, { fov: 50, sky: ["#1c1838", "#2b2357"], shadowSize: 6 });
+    const st = stage(env, { outfit: "bowling", fov: 50, sky: ["#1c1838", "#2b2357"], shadowSize: 6 });
     const { scene, camera, sun, hemi } = st;
     hemi.intensity = 1.3; sun.intensity = 1.2; sun.position.set(3, 9, 4); sun.target.position.set(0, 0, -6);
     // 2인: 상대 레인은 내 레인 바로 옆 (1P 화면에선 오른쪽, 2P 화면에선 왼쪽)

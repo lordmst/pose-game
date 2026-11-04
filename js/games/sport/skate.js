@@ -2,10 +2,10 @@
 // 방향 = 몸을 왼쪽·오른쪽으로 옮기기(내 몸 위치 = 보드 위치), 속도 = 제자리에서 무릎 들기(발 구르기)
 // 다음 동전 줄(또는 앞에 고깔이 있으면 피할 자리)을 바닥 점선·점선 원·방향 글자·카메라 작은 창 세로 점선으로 안내
 // 점프 = 두 손을 머리 위로 번쩍(또는 제자리 점프). 고깔·울타리는 피하거나 점프, 점프대에서 점프하면 트릭 보너스
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=62";
-import { sfx } from "../../audio.js?v=62";
-import { makeStepCounter } from "../run.js?v=62";
-import { stage, THREE, sea, palm, cloud, tree, box, cyl, mesh, playerAvatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=62";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=63";
+import { sfx } from "../../audio.js?v=63";
+import { makeStepCounter } from "../run.js?v=63";
+import { stage, THREE, sea, palm, cloud, tree, box, cyl, mesh, playerAvatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=63";
 
 const AIR = 0.8;                         // 점프 시간(초)
 const RS = 2.2, ZD = 70;                 // 게임 좌표 → 3D(m): 옆 1 = 2.2m, 앞 1 = 70m
@@ -77,7 +77,7 @@ export default {
   how: "몸을 왼쪽·오른쪽으로 옮기면 보드도 따라가요. 점선 자리로 가서 동전을 모으고, 제자리에서 무릎을 들면 빨라져요. 두 손을 머리 위로 번쩍 들면 점프! 장애물은 피하거나 넘어요",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff, steps = makeStepCounter();
-    const st = stage(env, { fov: 58, sky: ["#4fb3f6", "#e6f7ff"], fog: ["#dff2ff", 60, 170], shadowSize: 14 });
+    const st = stage(env, { outfit: "skate", fov: 58, sky: ["#4fb3f6", "#e6f7ff"], fog: ["#dff2ff", 60, 170], shadowSize: 14 });
     const { scene, camera } = st;
     // 바닷가 길: 오른쪽은 바다·모래, 왼쪽은 풀밭·언덕
     const grass = mesh(new THREE.PlaneGeometry(300, 600), "#7cc35a", { receive: true, cast: false }); grass.rotation.x = -Math.PI / 2; grass.position.set(-150 + ROAD + 2, -0.02, -150); scene.add(grass);

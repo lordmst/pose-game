@@ -3,9 +3,9 @@
 // 캐릭터의 라켓 팔은 내 손을 그대로 따라 하고, 휘두르면 휘두른 방향·세기대로 포핸드·백핸드·스매시. 공은 라켓에 맞는 자리에서 날아감
 // 1인: 컴퓨터 상대 · 2인: 네트를 사이에 두고 둘이 대결(각자 화면은 자기 편 뒤에서 봄, 편마다 네트 앞에 컴퓨터 짝꿍)
 // 점수는 테니스식(15·30·40, 듀스·어드밴티지, 게임). 2인은 게임마다 서브가 바뀜
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=62";
-import { sfx } from "../../audio.js?v=62";
-import { stage, THREE, ground, box, ball as sphere, mesh, tree, cloud, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText, fan as makeFan } from "./kit3d.js?v=62";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=63";
+import { sfx } from "../../audio.js?v=63";
+import { stage, THREE, ground, box, ball as sphere, mesh, tree, cloud, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText, fan as makeFan } from "./kit3d.js?v=63";
 
 const FLIGHT = 1.7;    // 공이 상대에게서 나에게 오는 시간(초, 보통)
 const SWING = 2.4;     // 스윙으로 인정하는 손 속도(어깨너비/초)
@@ -195,7 +195,7 @@ export default {
     else { M = newMatch(false); M.players[1] = newPlayer({ name: "상대", color: "#20c997", auto: true, cpu: true, autoP: CPU_RETURN[D.id] || 0.66, D }); }
     M.players[slot] = newPlayer({ name: env.name || `${slot + 1}P`, color: env.color || "#ff6b6b", D, auto: AUTO });
     const owner = slot === 0;
-    const st = stage(env, { fov: 52, sky: ["#58b7f5", "#d9f1ff"], shadowSize: 18 });
+    const st = stage(env, { outfit: "tennis", fov: 52, sky: ["#58b7f5", "#d9f1ff"], shadowSize: 18 });
     const { scene, camera } = st;
     ground(scene, "#5aa646", 300);
     // 경기 좌표 묶음: 1번 선수 화면은 180° 돌려서 자기가 앞(+z)에 오게

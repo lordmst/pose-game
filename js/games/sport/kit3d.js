@@ -79,6 +79,7 @@ function lookMat(m) {
 // opts: { fov, sky: [위색, 아래색], fog: [색, 가까이, 멀리], shadows, pip: "br"|"bl"|false,
 //         band: [위 비율, 아래 비율] → 화면의 그 띠에만 투명 배경으로 그림 (예: 지휘자 게임 아래쪽 오케스트라) }
 export function stage(env, opts = {}) {
+  curOutfit = opts.outfit || null;   // 이 장면에서 새로 만드는 캐릭터의 종목 옷 (OUTFITS)
   const z = env.zone, v = env.view;
   const canvas = document.createElement("canvas");
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: !!opts.band, powerPreference: "high-performance" });   // 테두리 계단 없애기(MSAA)
@@ -287,6 +288,51 @@ export function textBoard(w, h, opts = {}) {
 /* ---------- 캐릭터 (미이 같은 아바타) ----------
    발바닥이 y=0, 키 약 1.7. 기본은 +z(카메라 쪽)를 봄. 뒤에서 보는 내 캐릭터는 rotation.y = Math.PI
    팔: arm(k, 옆으로 든 각도, 앞으로 든 각도, 팔꿈치 굽힘) — k 0 = 왼팔, 1 = 오른팔 (캐릭터 기준) */
+/* ---------- 종목별 경기복 ----------
+   종목마다 널리 알려진 차림 (상표·로고는 없음). 선수 색(shirt)은 그대로 두어 1P·2P를 구별
+   top: tee(반팔) polo(반팔 깃) tank(민소매) bowling(두 색 반팔 셔츠) bare(맨몸) hoodie·jacket·wetsuit(긴팔)
+   bottom: pants shorts long(무릎 반바지) skirt trunks(복싱) */
+const WHITE = "#ffffff";
+export const OUTFITS = {
+  tennis:   c => ({ top: "polo", collar: WHITE, bottom: c.girl ? "skirt" : "shorts", pants: WHITE, socks: WHITE, head: "visor", headC: WHITE, wrist: WHITE }),
+  pingpong: c => ({ top: "tee", stripe: WHITE, bottom: "shorts", pants: "#1d1d24", socks: WHITE }),
+  volley:   c => ({ top: "tank", number: true, bottom: "shorts", pants: c.shirt, barefoot: true, shades: true }),
+  basket:   c => ({ top: "tank", number: true, trim: WHITE, bottom: "long", pants: c.shirt, socks: WHITE, sockStripe: c.shirt, wrist: WHITE }),
+  boxing:   c => ({ top: "bare", bottom: "trunks", pants: c.shirt === c.skin ? c.pants : c.shirt, band: WHITE, boots: true }),
+  bowling:  c => ({ top: "bowling", panel: "#f3ead2", collar: "#f3ead2", bottom: "pants", pants: "#2b2b33", shoe: "#eee4cf", soleC: "#8b2b2b" }),
+  golf:     c => ({ top: "polo", collar: WHITE, bottom: "pants", pants: "#cbb98f", head: "cap", headC: WHITE, glove: WHITE }),
+  archery:  c => ({ top: "polo", collar: WHITE, bottom: "pants", pants: "#3a3f4a", armguard: "#6b4423", chestguard: "#2b2b33", quiver: "#6b4423" }),
+  jumprope: c => ({ top: "tee", bottom: "shorts", pants: "#2b3a67", socks: WHITE, head: "headband", headC: WHITE }),
+  cans:     c => ({ top: "tee", number: true, bottom: "pants", pants: "#e9e9ef", head: "cap", headC: c.shirt, belt: "#2b2b33" }),   // 야구 유니폼처럼
+  skate:    c => ({ top: "hoodie", bottom: "pants", pants: "#4a5a7a", head: "helmet", headC: c.shirt, pads: "#2b2b33", shoe: "#2b2b33", soleC: WHITE }),
+  jetski:   c => ({ top: "wetsuit", suit: "#1d2433", vest: c.shirt, bottom: "pants", pants: "#1d2433", shoe: "#1d2433", soleC: "#1d2433", shades: true }),
+  plane:    c => ({ top: "jacket", suit: "#7a4a2a", scarf: c.shirt, bottom: "pants", pants: "#5a4632", head: "pilot", headC: "#6b4423" }),
+};
+let curOutfit = null;
+const lum = hex => { const c = new THREE.Color(hex); return 0.3 * c.r + 0.59 * c.g + 0.11 * c.b; };
+const hashN = s => { let h = 7; for (const ch of String(s)) h = (h * 31 + ch.codePointAt(0)) >>> 0; return h; };
+// 등번호(이름 + 번호) 그림
+function numberTex(shirt, name, num) {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 256;
+  const g = c.getContext("2d"), dark = lum(shirt) > 0.6, fg = dark ? "#1d2433" : "#ffffff", bd = dark ? "#ffffff" : "rgba(0,0,0,.45)";
+  g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round";
+  const F = '"Jua", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
+  if (name) { g.font = `bold 44px ${F}`; g.lineWidth = 6; g.strokeStyle = bd; g.strokeText(name, 128, 42); g.fillStyle = fg; g.fillText(name, 128, 42); }
+  g.font = `bold ${name ? 150 : 170}px ${F}`; g.lineWidth = 10; g.strokeStyle = bd; g.strokeText(String(num), 128, name ? 160 : 135); g.fillStyle = fg; g.fillText(String(num), 128, name ? 160 : 135);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const shade3k = (hex, k) => { const c = new THREE.Color(hex); c.multiplyScalar(k); return "#" + c.getHexString(); };
+function ring2(g, r, tube, color, y) { const m = mesh(new THREE.TorusGeometry(r, tube, 8, 32), color, { rough: 0.7, cast: false }); m.rotation.x = Math.PI / 2 - 0.12; m.position.y = y; m.scale.set(1, 1, 1); g.add(m); return m; }
+// 고글·선글라스: 두 알 + 띠. low: 눈 위치(선글라스) / 아니면 이마 위
+function goggles(g, y, frame, lens, low = false) {
+  [-1, 1].forEach(sd => {
+    const f = mesh(new THREE.TorusGeometry(0.045, 0.011, 6, 18), frame, { cast: false }); f.position.set(0.075 * sd, y, low ? 0.2 : 0.19); f.rotation.x = low ? 0 : -0.5; g.add(f);
+    const l = mesh(new THREE.CircleGeometry(0.044, 18), lens, { cast: false, metal: 0.3, rough: 0.2 }); l.position.set(0.075 * sd, y, low ? 0.204 : 0.195); l.rotation.x = low ? 0 : -0.5; g.add(l);
+  });
+  const br = box(0.05, 0.012, 0.012, frame, { cast: false }); br.position.set(0, y, low ? 0.205 : 0.195); g.add(br);
+  if (!low) ring2(g, 0.225, 0.014, frame, y - 0.02);
+  else [-1, 1].forEach(sd => { const arm = box(0.012, 0.012, 0.17, frame, { cast: false }); arm.position.set(0.12 * sd, y, 0.11); g.add(arm); });
+}
 const SKINS = ["#ffd7b5", "#f1c27d", "#e0ac69", "#c68642"], HAIRS = ["#3b2414", "#1f1f1f", "#7a4a1f", "#d9a441", "#a33b1f"];
 // 그릴 때만: 게임이 body에 준 숙임(x)·옆 기울기(z)는 엉덩이에서, 비틂(y)은 엉덩이 65% + 발 35%로 나눠 적용하고 그린 뒤 되돌림
 // (게임 쪽 계산·값은 그대로라 손 위치 등 판정이 바뀌지 않음)
@@ -318,23 +364,87 @@ function footBlob(root, r = 0.42) {
   m.onBeforeRender = () => { root.getWorldPosition(_bw); const y = Math.max(0, _bw.y); m.material.opacity = y > 0.6 ? 0 : 0.4 * (1 - y / 0.6); };
   root.add(m); return m;
 }
-export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], hair = HAIRS[0], girl = false, scale = 1 } = {}) {
+export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], hair = HAIRS[0], girl = false, scale = 1, outfit, name = "", number } = {}) {
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
   const R = LOOK.rim, SK = { rough: 0.55, grain: 0.03, rim: R }, CL = { rough: 0.85, rim: R }, HR = { rough: 0.42, grain: 0.05, env: 1, spec: 0.9, rim: R };
+  const ofn = OUTFITS[outfit === undefined ? curOutfit : outfit];
+  const O = ofn ? ofn({ shirt, pants, skin, girl }) : null;
+  if (O) { if (O.top === "bare") shirt = skin; if (O.pants) pants = O.pants; }
+  const top = O ? O.top : "default", bottom = O ? O.bottom : "pants";
+  const longSl = ["hoodie", "jacket", "wetsuit"].includes(top), noSl = top === "tank" || top === "bare";
+  const sleeveC = top === "jacket" || top === "wetsuit" ? O.suit : shirt;
+  const torsoC = top === "jacket" || top === "wetsuit" ? O.suit : shirt;
+  const legC = bottom === "pants" ? pants : skin;
   const legs = [-1, 1].map(s => {
     const p = new THREE.Group(); p.position.set(0.1 * s, 0.78, 0);
-    const l = mesh(capsule(0.08, 0.58, 4, 14), mat(pants, CL)); l.position.y = -0.37;
-    const shoe = mesh(capsule(0.065, 0.12, 3, 10), "#ffffff", { rough: 0.5 }); shoe.rotation.x = Math.PI / 2; shoe.scale.set(1.1, 1, 0.65); shoe.position.set(0, -0.76, 0.04);
-    const sole = mesh(capsule(0.068, 0.13, 3, 10), shirt, { rough: 0.6 }); sole.rotation.x = Math.PI / 2; sole.scale.set(1.12, 1.02, 0.3); sole.position.set(0, -0.795, 0.04);   // 옷 색 밑창
-    p.add(l, shoe, sole); body.add(p); return p;
+    const l = mesh(capsule(0.08, 0.58, 4, 14), mat(legC, bottom === "pants" ? CL : SK)); l.position.y = -0.37;
+    const bare = O && O.barefoot;
+    const shoe = mesh(capsule(0.065, 0.12, 3, 10), bare ? mat(skin, SK) : (O && O.shoe) || "#ffffff", { rough: 0.5 }); shoe.rotation.x = Math.PI / 2; shoe.scale.set(1.1, 1, bare ? 0.5 : 0.65); shoe.position.set(0, -0.76, 0.04);
+    p.add(l, shoe);
+    if (!bare) { const sole = mesh(capsule(0.068, 0.13, 3, 10), (O && O.soleC) || shirt, { rough: 0.6 }); sole.rotation.x = Math.PI / 2; sole.scale.set(1.12, 1.02, 0.3); sole.position.set(0, -0.795, 0.04); p.add(sole); }   // 밑창
+    if (O) {
+      // 반바지: 넓적다리를 덮는 짧은 통 (긴 반바지는 무릎까지, 복싱 트렁크는 짧고 넓게)
+      if (bottom === "shorts" || bottom === "long" || bottom === "trunks") {
+        const len = bottom === "long" ? 0.24 : bottom === "trunks" ? 0.1 : 0.13, r = bottom === "long" ? 0.105 : bottom === "trunks" ? 0.11 : 0.098;
+        const sh = mesh(capsule(r, len, 4, 14), mat(pants, CL)); sh.position.y = -0.04 - len / 2; p.add(sh);
+        if (O.trim && bottom === "long") { const tr = mesh(new THREE.TorusGeometry(r + 0.004, 0.012, 6, 20), O.trim, { cast: false }); tr.rotation.x = Math.PI / 2; tr.position.y = -0.04 - len - r * 0.55; p.add(tr); }
+      }
+      // 양말: 발목 위 (농구는 높게 + 줄무늬)
+      if (O.socks && !bare) {
+        const hi = O.sockStripe ? 0.2 : 0.09, so = mesh(new THREE.CylinderGeometry(0.083, 0.078, hi, 16), O.socks, { rough: 0.8 }); so.position.y = -0.69 + hi / 2; p.add(so);
+        if (O.sockStripe) [0.04, 0.075].forEach(d => { const st = mesh(new THREE.CylinderGeometry(0.0845, 0.0845, 0.016, 16), O.sockStripe, { cast: false }); st.position.y = -0.69 + hi - d; p.add(st); });
+      }
+      if (O.boots) { const bt = mesh(new THREE.CylinderGeometry(0.085, 0.08, 0.16, 16), "#1d1d24", { rough: 0.5 }); bt.position.y = -0.62; p.add(bt); }   // 복싱화(목이 긴 신발)
+      if (O.pads) { const kp = ball(0.07, O.pads, { rough: 0.6 }); kp.scale.set(1.15, 1.1, 0.8); kp.position.set(0, -0.38, 0.06); p.add(kp); }   // 무릎 보호대
+    }
+    body.add(p); return p;
   });
   // 윗몸 묶음: 엉덩이 높이(HIP)를 축으로 숙이고 비틂 → 숙여도 다리는 땅에 붙어 있음 (그릴 때만 적용, 아래 hipPose)
   const upper = new THREE.Group(); upper.position.y = HIP; body.add(upper);
   const U_ = o => { o.position.y -= HIP; upper.add(o); return o; };
-  const torso = mesh(capsule(0.2, 0.32, 6, 20), mat(shirt, CL)); torso.position.y = 1.08; torso.scale.set(1, 1, 0.75); U_(torso);
-  // 옷깃(흰 줄)·허리띠: 옷이 한 덩어리처럼 안 보이게
-  if (shirt !== skin) { const collar = mesh(new THREE.TorusGeometry(0.105, 0.028, 8, 28), "#ffffff", { rough: 0.7 }); collar.rotation.x = Math.PI / 2; collar.position.y = 1.395; collar.scale.set(1, 0.8, 1); U_(collar); }   // 맨몸(복싱)엔 옷깃 없음
-  const belt = mesh(new THREE.TorusGeometry(0.19, 0.03, 8, 32), "#2b2b33", { rough: 0.5 }); belt.rotation.x = Math.PI / 2; belt.position.y = 0.83; belt.scale.set(1.02, 0.78, 1); U_(belt);
+  const torso = mesh(capsule(0.2, 0.32, 6, 20), mat(torsoC, top === "bare" ? SK : CL)); torso.position.y = 1.08; torso.scale.set(1, 1, 0.75); U_(torso);
+  const ring = (r, tube, color, y, sx = 1, sz = 0.78) => { const m = mesh(new THREE.TorusGeometry(r, tube, 8, 32), color, { rough: 0.6, cast: false }); m.rotation.x = Math.PI / 2; m.position.y = y; m.scale.set(sx, sz, 1); return U_(m); };
+  if (!O) {
+    // 옷깃(흰 줄)·허리띠: 옷이 한 덩어리처럼 안 보이게
+    if (shirt !== skin) { const collar = mesh(new THREE.TorusGeometry(0.105, 0.028, 8, 28), "#ffffff", { rough: 0.7 }); collar.rotation.x = Math.PI / 2; collar.position.y = 1.395; collar.scale.set(1, 0.8, 1); U_(collar); }   // 맨몸(복싱)엔 옷깃 없음
+    ring(0.19, 0.03, "#2b2b33", 0.83, 1.02);
+  } else {
+    // 허리: 바지면 허리띠, 반바지·치마는 허리 밴드, 복싱 트렁크는 흰 띠, 맨몸·긴 옷은 없음
+    if (top === "bare") ring(0.205, 0.045, O.band || WHITE, 0.82, 1.0, 0.8);
+    else if (bottom === "pants" && !longSl) ring(0.19, 0.03, O.belt || "#2b2b33", 0.83, 1.02);
+    if (bottom === "skirt") { const sk = mesh(new THREE.CylinderGeometry(0.2, 0.29, 0.24, 24, 1, true), mat(pants, CL)); sk.material.side = THREE.DoubleSide; sk.position.y = 0.72; sk.scale.set(1, 1, 0.8); U_(sk); }
+    if (bottom === "trunks" || bottom === "shorts" || bottom === "long") { const hip = mesh(capsule(0.2, 0.02, 4, 18), mat(pants, CL)); hip.position.y = 0.76; hip.scale.set(1.02, 0.5, 0.78); U_(hip); }   // 반바지 엉덩이 부분
+    // 목: 피케 셔츠 깃(접힌 깃) · 반팔 둥근 목 · 민소매 V넥 테두리
+    if (top === "polo" || top === "bowling") {
+      const col = O.collar || WHITE;
+      [-1, 1].forEach(sd => { const f = box(0.11, 0.025, 0.07, col, { cast: false }); f.position.set(0.055 * sd, 1.385, 0.1); f.rotation.set(0.5, -0.5 * sd, 0.35 * sd); U_(f); });
+      ring(0.1, 0.022, col, 1.4, 1, 0.82);
+      const pl = box(0.035, 0.12, 0.01, col, { cast: false }); pl.position.set(0, 1.3, 0.152); U_(pl);   // 단추 줄
+    } else if (top === "tee") ring(0.1, 0.02, O.stripe || shirt, 1.4, 1, 0.82);
+    else if (top === "tank") { ring(0.11, 0.02, O.trim || WHITE, 1.39, 1, 0.82); [-1, 1].forEach(sd => { const st = box(0.06, 0.02, 0.28, O.trim || WHITE, { cast: false }); st.position.set(0.17 * sd, 1.37, 0); U_(st); }); }
+    else if (top === "hoodie") { const hood = ball(0.13, mat(shirt, CL)); hood.scale.set(1.25, 0.8, 0.7); hood.position.set(0, 1.39, -0.12); U_(hood); const pk = box(0.22, 0.09, 0.02, shade3k(shirt, 0.85), { cast: false }); pk.position.set(0, 0.95, 0.152); U_(pk); }
+    else if (top === "jacket" || top === "wetsuit") ring(0.105, 0.03, O.suit, 1.39, 1, 0.82);
+    // 볼링 셔츠: 앞뒤 세로 띠 두 줄 (두 색 셔츠)
+    if (top === "bowling") [-1, 1].forEach(sd => [1, -1].forEach(fz => { const pn = box(0.07, 0.42, 0.01, O.panel, { cast: false }); pn.position.set(0.09 * sd, 1.08, 0.151 * fz); U_(pn); }));
+    // 탁구 반팔 옆줄
+    if (O.stripe && top === "tee") [-1, 1].forEach(sd => { const st = box(0.012, 0.4, 0.17, O.stripe, { cast: false }); st.position.set(0.2 * sd, 1.08, 0); U_(st); });
+    // 구명조끼(수상오토바이): 두툼한 조끼 + 검은 띠
+    if (O.vest) { const v = mesh(capsule(0.225, 0.24, 6, 20), mat(O.vest, { rough: 0.7 })); v.position.y = 1.1; v.scale.set(1, 1, 0.82); U_(v); [0.98, 1.14].forEach(y => ring(0.228, 0.02, "#1d1d24", y, 1, 0.82)); }
+    // 양궁 가슴 보호대(대각선 띠) · 등 화살통
+    if (O.chestguard) { const cg = box(0.05, 0.5, 0.02, O.chestguard, { cast: false }); cg.position.set(0, 1.12, 0.152); cg.rotation.z = 0.7; U_(cg); const cb = box(0.05, 0.5, 0.02, O.chestguard, { cast: false }); cb.position.set(0, 1.12, -0.152); cb.rotation.z = -0.7; U_(cb); }
+    if (O.quiver) { const q = cyl(0.06, 0.05, 0.42, O.quiver, { rough: 0.6 }); q.position.set(-0.08, 1.2, -0.2); q.rotation.z = -0.35; U_(q); for (let i = 0; i < 3; i++) { const ar = cyl(0.008, 0.008, 0.18, "#d9c39a", { cast: false }); ar.position.set(-0.17 + i * 0.02, 1.47, -0.2 + (i - 1) * 0.02); ar.rotation.z = -0.35; U_(ar); const fl = box(0.03, 0.05, 0.005, ["#e03131", "#ffd43b", "#ffffff"][i], { cast: false }); fl.position.set(-0.2 + i * 0.02, 1.55, -0.2 + (i - 1) * 0.02); fl.rotation.z = -0.35; U_(fl); } }
+    // 비행 목도리
+    if (O.scarf) { ring(0.11, 0.04, O.scarf, 1.4, 1, 0.85); const tl = box(0.07, 0.24, 0.02, O.scarf, { cast: false }); tl.position.set(0.06, 1.27, -0.16); tl.rotation.set(-0.3, 0, 0.25); U_(tl); }
+    // 등번호(이름 + 번호): 등에 둥글게 감은 판, 앞가슴엔 작은 번호
+    if (O.number) {
+      const num = number ?? (name ? hashN(name) % 98 + 1 : 2 + (hashN(shirt + skin) % 30));
+      const tex = numberTex(shirt, name, num), mtl = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.85, depthWrite: false });
+      mtl.userData.look = true;
+      const back = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.205, 0.32, 20, 1, true, Math.PI - 0.75, 1.5), mtl); back.position.y = 1.1; back.scale.set(1, 1, 0.77); U_(back);
+      const ftex = numberTex(shirt, "", num), fm = new THREE.MeshStandardMaterial({ map: ftex, transparent: true, roughness: 0.85, depthWrite: false }); fm.userData.look = true;
+      const front = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.205, 0.16, 16, 1, true, -0.4, 0.8), fm); front.position.y = 1.16; front.scale.set(1, 1, 0.77); U_(front);
+    }
+  }
   const headG = new THREE.Group(); headG.position.y = 1.56; U_(headG);
   const head = ball(0.21, mat(skin, SK)); head.scale.set(1, 1.08, 1); headG.add(head);
   [-1, 1].forEach(s => { const ear = ball(0.045, mat(skin, SK)); ear.scale.set(0.6, 1, 0.8); ear.position.set(0.205 * s, 0.0, -0.01); headG.add(ear); });
@@ -355,13 +465,44 @@ export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], 
   });
   const nose = ball(0.024, mat(skin, SK), { cast: false }); nose.scale.set(1, 0.85, 0.8); nose.position.set(0, -0.015, 0.212); headG.add(nose);
   const mouth = mesh(new THREE.TorusGeometry(0.045, 0.012, 6, 12, Math.PI), "#7a3b1a", { cast: false }); mouth.position.set(0, -0.08, 0.195); mouth.rotation.z = Math.PI; headG.add(mouth);
+  if (O) {
+    const hc = O.headC || shirt;
+    const crown = (r, c, cut = 0.5) => { const m = mesh(new THREE.SphereGeometry(r, 28, 14, 0, Math.PI * 2, 0, Math.PI * cut), mat(c, { rough: 0.7 })); return m; };
+    if (O.head === "cap") {   // 야구모자: 둥근 윗부분 + 앞 챙
+      const cr = crown(0.232, hc); cr.position.y = 0.05; cr.rotation.x = -0.2; headG.add(cr);
+      const br = mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.018, 24, 1, false, -Math.PI / 2, Math.PI), hc, { rough: 0.7 }); br.scale.set(1, 1, 1.1); br.position.set(0, 0.075, 0.19); br.rotation.x = 0.12; headG.add(br);
+      const bt = ball(0.022, hc); bt.position.y = 0.27; headG.add(bt);
+    } else if (O.head === "visor") {   // 바이저: 이마 띠 + 앞 챙 (머리 위는 트임)
+      ring2(headG, 0.222, 0.03, hc, 0.08);
+      const br = mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.016, 24, 1, false, -Math.PI / 2, Math.PI), hc, { rough: 0.6 }); br.position.set(0, 0.08, 0.2); br.rotation.x = 0.18; headG.add(br);
+    } else if (O.head === "headband") ring2(headG, 0.222, 0.035, hc, 0.11);
+    else if (O.head === "helmet") {   // 스케이트 헬멧: 둥근 껍데기 + 숨구멍 줄 + 턱끈
+      const hm = crown(0.255, hc, 0.5); hm.position.set(0, 0.05, -0.02); hm.rotation.x = -0.38; headG.add(hm);
+      [-0.07, 0, 0.07].forEach(x => { const v = box(0.025, 0.012, 0.16, shade3k(hc, 0.7), { cast: false }); v.position.set(x, 0.255, 0.02); headG.add(v); });
+      [-1, 1].forEach(sd => { const st = box(0.012, 0.16, 0.012, "#1d1d24", { cast: false }); st.position.set(0.2 * sd, -0.08, 0.05); st.rotation.z = -0.25 * sd; headG.add(st); });
+    } else if (O.head === "pilot") {   // 비행 모자(가죽, 귀 덮개) + 이마에 올린 고글
+      const pc = crown(0.235, hc, 0.5); pc.position.set(0, 0.04, -0.01); pc.rotation.x = -0.4; headG.add(pc);
+      [-1, 1].forEach(sd => { const ef = ball(0.07, hc); ef.scale.set(0.5, 1, 0.9); ef.position.set(0.2 * sd, -0.02, 0); headG.add(ef); });
+      goggles(headG, 0.14, "#c9a227", "#9fd6ff");
+    }
+    if (O.shades) goggles(headG, 0.035, "#1d1d24", "#2b2b33", true);
+  }
   const arms = [1, -1].map(s => {        // 캐릭터 자신의 왼팔(+x쪽, 정면 기준)·오른팔
     const sh = new THREE.Group(); sh.position.set(0.27 * s, 1.34, 0); U_(sh);
-    const up = mesh(capsule(0.06, 0.2, 4, 12), mat(shirt, CL)); up.position.y = -0.15; sh.add(up);   // 어깨·팔꿈치가 둥글게
+    const upC = !O ? shirt : longSl ? sleeveC : skin;
+    const up = mesh(capsule(0.06, 0.2, 4, 12), mat(upC, upC === skin ? SK : CL)); up.position.y = -0.15; sh.add(up);   // 어깨·팔꿈치가 둥글게
+    if (O && !noSl && !longSl) { const sl = mesh(capsule(0.072, 0.07, 4, 12), mat(shirt, CL)); sl.position.y = -0.05; sh.add(sl); if (top === "polo" || top === "tee" && O.stripe) { const cf = mesh(new THREE.TorusGeometry(0.072, 0.012, 6, 16), O.collar || O.stripe, { cast: false }); cf.rotation.x = Math.PI / 2; cf.position.y = -0.12; sh.add(cf); } }   // 반팔 소매
     const el = new THREE.Group(); el.position.y = -0.3; sh.add(el);
-    const fo = mesh(capsule(0.05, 0.19, 4, 12), mat(skin, SK)); fo.position.y = -0.135; el.add(fo);
+    const foC = O && longSl ? sleeveC : skin;
+    const fo = mesh(capsule(0.05, 0.19, 4, 12), mat(foC, foC === skin ? SK : CL)); fo.position.y = -0.135; el.add(fo);
     const hand = new THREE.Group(); hand.position.y = -0.29; el.add(hand);
-    hand.add(ball(0.065, mat(skin, SK)));
+    const gloveOn = O && O.glove && s > 0;   // 골프 장갑: 왼손
+    hand.add(ball(0.065, gloveOn ? mat(O.glove, { rough: 0.6 }) : mat(skin, SK)));
+    if (O) {
+      if (O.wrist) { const wb = mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.06, 14), O.wrist, { rough: 0.8 }); wb.position.y = -0.22; el.add(wb); }   // 손목 밴드
+      if (O.pads) { const ep = ball(0.06, O.pads, { rough: 0.6 }); ep.scale.set(1, 1, 1.1); ep.position.set(0, 0, -0.03); el.add(ep); }   // 팔꿈치 보호대
+      if (O.armguard && s > 0) { const ag = mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.15, 14), O.armguard, { rough: 0.6 }); ag.position.y = -0.14; el.add(ag); }   // 양궁 팔 보호대(활 든 왼팔)
+    }
     return { sh, el, hand, s };
   });
   root.scale.setScalar(scale);
@@ -407,7 +548,7 @@ export function randomAvatar(i = 0) {
   return avatar({ shirt: shirts[i % shirts.length], pants: i % 2 ? "#495057" : "#1c7ed6", skin: SKINS[i % SKINS.length], hair: HAIRS[(i * 3) % HAIRS.length], girl: i % 2 === 1 });
 }
 // 선수 색으로 내 캐릭터
-export const playerAvatar = env => avatar({ shirt: env.color || "#ff6b6b", pants: "#2b3a67", girl: /엄마|연제/.test(env.name || "") });
+export const playerAvatar = (env, o = {}) => avatar({ shirt: env.color || "#ff6b6b", pants: "#2b3a67", girl: /엄마|연제/.test(env.name || ""), name: env.name || "", ...o });
 
 /* ---------- 관중 ---------- */
 // 관중 한 명: 머리·머리카락·몸·팔을 한 덩어리(정점 색)로 합쳐 그리기 한 번에 → 수십 명이어도 가벼움

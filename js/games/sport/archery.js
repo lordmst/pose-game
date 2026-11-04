@@ -1,8 +1,8 @@
 // 양궁 (스포츠 리조트처럼 3D 야외 사로): 내 캐릭터 어깨 뒤에서 과녁을 봄. 한 팔은 옆으로 쭉 뻗고(활), 다른 손은 가슴·얼굴 쪽으로 당기면(시위) 화면이 과녁으로 확대되고 조준점이 나타남
 // 활 든 팔을 위아래로, 몸을 옆으로 움직여 조준점을 과녁 가운데로 → 당긴 손을 휙 놓으면(빠르게 떼면) 발사. 화살이 날아가 꽂힘. 바람(깃발)도 계산!
-import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=62";
-import { sfx } from "../../audio.js?v=62";
-import { stage, THREE, ground, box, ball as sphere, mesh, cyl, tree, cloud, sea, palm, playerAvatar } from "./kit3d.js?v=62";
+import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=63";
+import { sfx } from "../../audio.js?v=63";
+import { stage, THREE, ground, box, ball as sphere, mesh, cyl, tree, cloud, sea, palm, playerAvatar } from "./kit3d.js?v=63";
 
 const RINGS = ["#ffffff", "#ffffff", "#2b2b2b", "#2b2b2b", "#3d8bff", "#3d8bff", "#ff4d4d", "#ff4d4d", "#ffd400", "#ffd400"];
 const RELEASE = 2.2;                 // 놓기로 인정하는 당긴 손 속도(어깨너비/초)
@@ -56,7 +56,7 @@ export default {
     const S = versus ? shared : { seed: 1 + Math.floor(Math.random() * 1e6), players: [null, null] };
     const P = S.players[slot] = { name: env.name || `${slot + 1}P`, color: env.color || "#ff3b5c", tracker: env.tracker, phase: "idle", shots: 0, total: 0, rings: [], dist: DISTS[0], group: 0, stuck: [] };
     const O = () => (versus ? S.players[other] : null);
-    const st = stage(env, { fov: 50, sky: ["#4fb3f2", "#e6f7ff"], shadowSize: 14 });
+    const st = stage(env, { outfit: "archery", fov: 50, sky: ["#4fb3f2", "#e6f7ff"], shadowSize: 14 });
     const { scene, camera } = st;
     ground(scene, "#74c25a", 400);
     const water = sea(scene, 800, -0.4); water.position.z = -300;

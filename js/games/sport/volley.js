@@ -4,9 +4,9 @@
 // 내 캐릭터 팔은 내 팔을 그대로 따라 하고(동작 사이), 받기·때리기·막기 때는 배구 동작(무릎 굽혀 받기, 도움닫기 점프 스파이크, 점프 블로킹)
 // 1인: 컴퓨터 두 명과 대결. 2인: 1P와 2P가 네트를 사이에 두고 서로 대결(각 편에 토스해 주는 컴퓨터 한 명).
 //      경기 상태(공·점수·단계)는 둘이 함께 쓰고, 각 화면은 자기 편 뒤에서 같은 경기를 봄
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=62";
-import { sfx } from "../../audio.js?v=62";
-import { stage, THREE, sea, box, cyl, mesh, palm, cloud, playerAvatar, randomAvatar, avatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=62";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=63";
+import { sfx } from "../../audio.js?v=63";
+import { stage, THREE, sea, box, cyl, mesh, palm, cloud, playerAvatar, randomAvatar, avatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=63";
 
 const SERVE = 1.6;     // 서브가 넘어오는 시간(초, 보통)
 const FAST = 0.95;     // 스파이크가 넘어오는 시간(초, 보통)
@@ -201,7 +201,7 @@ export default {
     const M = two ? (shared = shared || newMatch(2)) : newMatch(1);
     M.info[mine] = { color: env.color, name: env.name, D };
     M.progress = () => env.progress();
-    const st = stage(env, { fov: 50, sky: ["#4fb0f2", "#dff4ff"], shadowSize: 16 });
+    const st = stage(env, { outfit: "volley", fov: 50, sky: ["#4fb0f2", "#dff4ff"], shadowSize: 16 });
     const { scene, camera } = st;
     const water = beach(scene);
     const vb = mesh(new THREE.SphereGeometry(0.17, 24, 16), new THREE.MeshStandardMaterial({ map: ballTex(), roughness: 0.5 })); scene.add(vb);

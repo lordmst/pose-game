@@ -3,9 +3,9 @@
 // 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임. 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받아칠 수 있음
 // 깡통 하나에 1점, 받침이 없어진 깡통은 같이 무너짐. 다 쓰러뜨리면 보너스
 // 2인: 탁구대 두 개를 나란히 놓고 각자 자기 피라미드를 무너뜨리는 대결. 상대 캐릭터·공·깡통이 옆 탁구대에서 실시간으로 보임. 먼저 올 클리어하면 보너스
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=62";
-import { sfx } from "../../audio.js?v=62";
-import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, avatar, playerAvatar, racket, textBoard, bodyMover, moveGuide, moveText, fan } from "./kit3d.js?v=62";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=63";
+import { sfx } from "../../audio.js?v=63";
+import { stage, THREE, ground, box, ball as sphere, cyl, mesh, tree, cloud, avatar, playerAvatar, racket, textBoard, bodyMover, moveGuide, moveText, fan } from "./kit3d.js?v=63";
 
 const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 움직이고 침
 let shared = null;   // 2인 대결: 두 화면이 서로의 상태를 공개(p[slot])하고 상대 탁구대를 그대로 그림. firstClear: 먼저 올 클리어한 자리
@@ -68,7 +68,7 @@ export default {
   how: "몸을 좌우로 움직여 점선 자리로 가요. 날아오는 공을 휘둘러 깡통을 맞혀요. 휘두르는 방향으로 옆이, 손 높이로 위아래가 정해져요. 다 쓰러뜨리면 보너스!",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff;
-    const st = stage(env, { fov: 42, sky: ["#4aa8f0", "#d4efff"], shadowSize: 8 });
+    const st = stage(env, { outfit: "cans", fov: 42, sky: ["#4aa8f0", "#d4efff"], shadowSize: 8 });
     const { scene, camera } = st;
     const two = env.mode === 2, slot = two ? env.slot : 0, other = 1 - slot, OX = two ? (slot === 0 ? 2.3 : -2.3) : 0;   // 상대 탁구대: 1P 화면 오른쪽 / 2P 화면 왼쪽
     if (two && slot === 0) shared = { p: [null, null], firstClear: -1 };   // 새 경기마다 1P 화면이 먼저 만들어지며 새로 시작 (끝난 뒤 결과 글자에도 쓰려고 stop에서 지우지 않음)

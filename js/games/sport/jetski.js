@@ -1,9 +1,9 @@
 // 수상오토바이 (스포츠 리조트처럼 3D): 내 캐릭터 뒤에서 파도치는 바다를 달리며 부표 사이로 통과
 // 두 손을 앞으로 내밀어 손잡이를 잡은 것처럼 들고 있으면 출발, 내리면 멈춤. 방향 = 몸을 왼쪽·오른쪽으로 옮기기(내 몸 위치 = 수상오토바이 위치)
 // 다음 부표 문 가운데를 물 위 점선·점선 원·방향 글자·카메라 작은 창 세로 점선으로 안내. 빨강·노랑 부표 사이로 통과하면 점수, 별도 모으고 바위는 피하기
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=62";
-import { sfx } from "../../audio.js?v=62";
-import { stage, THREE, sea, palm, cloud, box, ball as sphere, cyl, mesh, playerAvatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=62";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=63";
+import { sfx } from "../../audio.js?v=63";
+import { stage, THREE, sea, palm, cloud, box, ball as sphere, cyl, mesh, playerAvatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=63";
 
 const TOP = 60;                         // 최고 속도(km/h, 보통)
 const JS = 6, ZD = 80;                  // 게임 좌표 → 3D(m): 옆 1 = 6m, 앞 1 = 80m
@@ -70,7 +70,7 @@ export default {
   how: "두 손을 가슴 앞으로 들어 손잡이를 잡아요(들고 있으면 출발). 몸을 왼쪽·오른쪽으로 옮기면 수상오토바이도 따라가요. 점선 자리로 가서 부표 사이를 통과하고, 바위는 피해요!",
   create(env) {
     const z = env.zone, v = env.view, D = env.diff;
-    const st = stage(env, { fov: 58, sky: ["#3aa6f2", "#e2f5ff"], fog: ["#d6efff", 90, 330], shadowSize: 16 });
+    const st = stage(env, { outfit: "jetski", fov: 58, sky: ["#3aa6f2", "#e2f5ff"], fog: ["#d6efff", 90, 330], shadowSize: 16 });
     const { scene, camera } = st;
     const water = sea(scene, 500, 0); water.material.color.set("#1f95d3");
     // 멀리 섬 · 해변 · 구름

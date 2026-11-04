@@ -1,9 +1,9 @@
 // 줄넘기 (스포츠 리조트의 몸풀기, 3D): 바닷가 광장에서 양쪽 친구가 줄을 돌려 주고, 줄이 발밑을 지나는 순간 점프!
 // 내 캐릭터는 정면에서 보이고, 내가 뛰면 같이 뜀. 2인은 긴 줄 하나를 둘이 나란히 넘으며 넘은 횟수로 대결(걸려도 줄은 계속 돎)
 // 점프 판정: 두 발목이 서 있을 때보다 함께 올라가면 (발목이 안 보이면 어깨가 확 올라가면) 공중에 있는 것으로 봄
-import { burst, popup, outlinedText, rr, FONT } from "../../fx.js?v=62";
-import { sfx } from "../../audio.js?v=62";
-import { stage, THREE, ground, sea, box, cyl, ball as sphere, mesh, palm, cloud, playerAvatar, randomAvatar } from "./kit3d.js?v=62";
+import { burst, popup, outlinedText, rr, FONT } from "../../fx.js?v=63";
+import { sfx } from "../../audio.js?v=63";
+import { stage, THREE, ground, sea, box, cyl, ball as sphere, mesh, palm, cloud, playerAvatar, randomAvatar } from "./kit3d.js?v=63";
 
 const PERIOD0 = 1.5, PERIOD_MIN = 0.85;   // 줄 한 바퀴 시간(초): 처음 → 가장 빠를 때
 const WIN = 0.16;                          // 줄이 발밑을 지날 때 앞뒤로 이만큼(초) 안에 공중이면 성공
@@ -45,7 +45,7 @@ export default {
     if (versus) { if (!shared) shared = newRope(D); R = shared; } else R = newRope(D);
     const P = R.players[slot] = { name: env.name || `${slot + 1}P`, color: env.color || "#ff6b6b", count: 0, streak: 0, best: 0, caught: 0, air: 0, tracker: env.tracker, flash: 0 };
     const hxR = versus ? HX + 1.1 : HX, myX = versus ? (slot ? JX : -JX) : 0;
-    const st = stage(env, { fov: 46, sky: ["#4fb3f6", "#e3f6ff"], shadowSize: 8 });
+    const st = stage(env, { outfit: "jumprope", fov: 46, sky: ["#4fb3f6", "#e3f6ff"], shadowSize: 8 });
     const { scene, camera } = st;
     const water = plaza(scene), rp = rope(scene, hxR);
     const me = playerAvatar(env); me.scale.setScalar(1.2); me.position.set(myX, 0, 0.3); scene.add(me);
