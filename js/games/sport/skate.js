@@ -2,10 +2,10 @@
 // 방향 = 몸을 왼쪽·오른쪽으로 옮기기(내 몸 위치 = 보드 위치), 속도 = 제자리에서 무릎 들기(발 구르기)
 // 다음 동전 줄(또는 앞에 고깔이 있으면 피할 자리)을 바닥 점선·점선 원·방향 글자·카메라 작은 창 세로 점선으로 안내
 // 점프 = 두 손을 머리 위로 번쩍(또는 제자리 점프). 고깔·울타리는 피하거나 점프, 점프대에서 점프하면 트릭 보너스
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=61";
-import { sfx } from "../../audio.js?v=61";
-import { makeStepCounter } from "../run.js?v=61";
-import { stage, THREE, sea, palm, cloud, tree, box, cyl, mesh, playerAvatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=61";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=62";
+import { sfx } from "../../audio.js?v=62";
+import { makeStepCounter } from "../run.js?v=62";
+import { stage, THREE, sea, palm, cloud, tree, box, cyl, mesh, playerAvatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=62";
 
 const AIR = 0.8;                         // 점프 시간(초)
 const RS = 2.2, ZD = 70;                 // 게임 좌표 → 3D(m): 옆 1 = 2.2m, 앞 1 = 70m
@@ -29,7 +29,20 @@ function extend(C, upTo, p) {
     C.nextCz += 0.36 - 0.1 * p;
   }
 }
-function skateboard(color) {
+// 스케이트보드 자세: 보드 위에 옆으로 서서(발은 보드 앞뒤로 벌림) 윗몸·머리만 가는 쪽으로 돌림, 두 팔은 앞뒤로 벌려 균형
+export const STANCE = Math.PI / 2;
+export function skaterPose(av, board, crouch, air, steer, armsUp, mimicPts) {
+  const spread = 0.2 + crouch * 0.5;                                    // 웅크릴수록 다리를 더 벌림(무릎 대신)
+  av.legs[0].rotation.set(0, 0, -spread); av.legs[1].rotation.set(0, 0, spread);
+  av.body.position.y = 0.1 - 0.78 * (1 - Math.cos(spread)) - crouch * 0.12;
+  av.body.rotation.set(0.18 + crouch * 0.5, -0.75, 0);                   // 살짝 숙이고 윗몸을 앞(가는 쪽)으로
+  av.headG.rotation.set(-0.1, -0.7, 0);                                   // 고개는 앞을 봄
+  if (air > 0 || armsUp) { av.arm(0, 2.3, 0.2, 0.3); av.arm(1, 2.3, 0.2, 0.3); }
+  else if (mimicPts) av.mimic(mimicPts, true);
+  else { av.arm(0, 1.05, 0.15, 0.35); av.arm(1, 1.05, -0.1, 0.35); }   // 앞뒤로 벌린 팔
+  board.rotation.y = -STANCE - steer * 0.25;                              // 보드는 늘 가는 방향
+}
+export function skateboard(color) {
   const g = new THREE.Group();
   const deck = box(0.26, 0.05, 0.95, color, { rough: 0.5 }); deck.position.y = 0.12; g.add(deck);
   [-1, 1].forEach(s => { const kick = box(0.26, 0.05, 0.16, color); kick.position.set(0, 0.16, s * 0.53); kick.rotation.x = s * 0.45; g.add(kick); });
@@ -83,9 +96,9 @@ export default {
     for (let i = 0; i < 8; i++) { const tr = tree(-ROAD - 3 - (i % 3) * 3, 0, 1.2 + (i % 2) * 0.3, i % 2 ? "#3f9b3f" : "#2f8a4f"); add(tr, -i * (SPAN / 8) - 9); }
     for (let i = 0; i < 4; i++) { const g = new THREE.Group(); const pole = cyl(0.06, 0.08, 4, "#495057"); pole.position.y = 2; const lamp = box(0.6, 0.12, 0.25, "#495057"); lamp.position.set(0.3, 4, 0); g.add(pole, lamp); g.position.x = -ROAD - 0.6; add(g, -i * (SPAN / 4) - 20); }
     // 나
-    const me = playerAvatar(env); me.rotation.y = Math.PI; scene.add(me);
-    const board = skateboard(env.color || "#3b5bdb"); me.add(board); board.position.y = -0.12;
-    me.body.position.y = 0.12;
+    const me = playerAvatar(env); me.rotation.order = "ZYX"; me.rotation.y = Math.PI + STANCE; scene.add(me);
+    const board = skateboard(env.color || "#3b5bdb"); me.add(board); board.position.y = -0.12; board.rotation.y = -STANCE;
+    me.body.position.y = 0.1;
     const mover = bodyMover(env, LMAX), guideM = moveGuide(scene);
     let target = null, prevL = 0;
 
@@ -190,27 +203,22 @@ export default {
         water.update(t);
         const k = air > 0 ? 1 - air / AIR : 0, jy = air > 0 ? Math.sin(Math.min(1, k) * Math.PI) * (onRamp ? 2.2 : 1.3) : 0;
         me.position.set(L * RS, jy, 0);
-        me.rotation.y = Math.PI + (air > 0 && onRamp ? Math.min(1, k) * Math.PI * 2 : 0);
-        me.rotation.z = steer * 0.28; board.rotation.y = -steer * 0.25;
-        // 몸: 웅크리기(점프 직전·공중), 발 구르기, 팔
-        const crouch = air > 0 ? 0.25 : 0.12;
-        me.body.position.y = 0.12 - crouch * 0.4;
-        me.leg(0, crouch * 1.5); me.leg(1, crouch * 1.5);
-        if (pushT < 0.3 && air <= 0) me.leg(pushLeg, -0.6 * Math.sin(pushT / 0.3 * Math.PI));
-        if (air > 0 || armsUp) { me.arm(0, 2.6, 0, 0.2); me.arm(1, 2.6, 0, 0.2); }
-        else if (env.tracker.pts) me.mimic(env.tracker.pts, true);
-        else { me.arm(0, 0.9, 0, 0.3); me.arm(1, 0.9, 0, 0.3); }
+        me.rotation.y = Math.PI + STANCE + (air > 0 && onRamp ? Math.min(1, k) * Math.PI * 2 : 0);
+        me.rotation.z = steer * 0.28;                                       // 가는 방향 축으로 기울며 돎 (회전 순서 ZYX라 옆으로 서 있어도 맞게 기욺)
+        // 몸: 웅크리기(점프 직전·공중), 발로 밀 때 살짝 들썩, 팔
+        const crouch = air > 0 ? 0.3 : 0.12 + (pushT < 0.3 && air <= 0 ? 0.08 * Math.sin(pushT / 0.3 * Math.PI) : 0);
+        skaterPose(me, board, crouch, air, steer, armsUp, env.tracker.pts && !(air > 0 || armsUp) ? env.tracker.pts : null);
         me.visible = !(safe > 0 && Math.floor(t * 10) % 2);
         // 상대: 같은 길에서 앞뒤·옆 위치 그대로, 점프도 같이
         if (two) {
           const Rv = C.racers[1 - env.slot];
-          if (Rv && !rival) { rival = playerAvatar({ color: Rv.color, name: Rv.name }); rival.rotation.y = Math.PI; const bd = skateboard(Rv.color || "#4dabf7"); rival.add(bd); bd.position.y = -0.12; rival.body.position.y = 0.06; rival.leg(0, 0.18); rival.leg(1, 0.18); scene.add(rival); }
+          if (Rv && !rival) { rival = playerAvatar({ color: Rv.color, name: Rv.name }); rival.rotation.order = "ZYX"; rival.rotation.y = Math.PI + STANCE; const bd = skateboard(Rv.color || "#4dabf7"); rival.add(bd); bd.position.y = -0.12; rival.userData.board = bd; scene.add(rival); }
           if (rival) {
             rival.visible = Rv.dist - dist < 1.2 && (Rv.dist - dist) * ZD > -1.5;   // 뒤처진 상대는 카메라 앞을 가리지 않게 숨김
             const ra = Rv.air || 0, rk = ra > 0 ? 1 - ra / AIR : 0, ry = ra > 0 ? Math.sin(Math.min(1, rk) * Math.PI) * (Rv.onRamp ? 2.2 : 1.3) : 0;
             rival.position.set(Rv.L * RS, ry, -(Rv.dist - dist) * ZD);
             rival.rotation.z = (Rv.steer || 0) * 0.28;
-            if (ra > 0) { rival.arm(0, 2.6, 0, 0.2); rival.arm(1, 2.6, 0, 0.2); } else { rival.arm(0, 0.9, 0, 0.3); rival.arm(1, 0.9, 0, 0.3); }
+            skaterPose(rival, rival.userData.board, ra > 0 ? 0.3 : 0.12, ra, Rv.steer || 0, false, null);
           }
         }
       },

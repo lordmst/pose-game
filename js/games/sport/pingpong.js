@@ -3,9 +3,9 @@
 // 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임(옆걸음). 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받아칠 수 있음
 // 캐릭터의 라켓 팔은 내 손을 그대로 따라 하고, 휘두르면 휘두른 방향·세기대로 포핸드·백핸드·스매시 동작. 공은 라켓에 맞는 자리에서 날아감
 // 1인: 컴퓨터 상대 · 2인: 한 탁구대에서 둘이 대결(각자 화면은 자기 쪽에서 봄). 11점 먼저(2점 차), 서브는 2점마다 바뀜
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=61";
-import { sfx } from "../../audio.js?v=61";
-import { stage, THREE, box, cyl, ball as sphere, mesh, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText, fan } from "./kit3d.js?v=61";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=62";
+import { sfx } from "../../audio.js?v=62";
+import { stage, THREE, box, cyl, ball as sphere, mesh, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText, fan } from "./kit3d.js?v=62";
 
 const FLIGHT = 1.1;    // 공이 상대에게서 나에게 오는 시간(초, 보통)
 const SWING = 2.4;     // 받아치기로 인정하는 손 속도(어깨너비/초)
@@ -162,14 +162,22 @@ function followArms(av, pts, a) {
   });
   return true;
 }
-// 휘두르기: 포핸드(오른쪽 뒤 → 왼쪽 앞) · 백핸드(몸 앞을 가로질러) · 스매시(위에서 아래로 크게). 크기는 휘두른 세기
-function stroke(av, T, fore, hard, amp) {
-  const dur = hard ? 0.2 : 0.28; if (T > dur + 0.18) return false;
-  const u = clamp(T / dur, 0, 1), e = u * u * (3 - 2 * u), a = clamp(amp, 0.6, 1.25);
-  av.body.rotation.x = 0.18 + (hard ? 0.25 * e : 0.08 * e);
-  if (hard) { av.body.rotation.y = (0.7 - 1.3 * e) * a; av.arm(1, 2.7 - 1.7 * e, 0.3 + 1.3 * e, 0.3); av.arm(0, 1.6 - 0.8 * e, 0.6, 0.6); }
-  else if (fore) { av.body.rotation.y = (0.75 - 1.4 * e) * a; av.arm(1, 1.05 + 0.25 * Math.sin(e * Math.PI), -0.4 + 1.9 * e * a, 0.8 - 0.5 * e); av.arm(0, 0.4, 0.7, 1.1); }
-  else { av.body.rotation.y = (-0.7 + 1.3 * e) * a; av.arm(1, -0.25 + 1.05 * e, 0.9 + 0.6 * e, 1.5 - 0.9 * e); av.arm(0, 0.35, 0.5, 1.0); }
+// 휘두르기: 세 장면(뒤로 뺌 → 공 맞는 순간 → 마무리)을 부드럽게 이어서. 값 = [몸 돌림, 오른팔 옆, 앞, 팔꿈치, 왼팔 옆, 앞, 팔꿈치]
+// 탁구는 팔꿈치를 굽힌 채 짧게 휘두름(팔을 쭉 펴고 크게 돌리면 어색함). 스매시만 위에서 앞 아래로 크게
+const STROKE = {
+  fore:  [[0.5, 0.6, -0.1, 1.25, 0.45, 0.85, 1.2], [0.0, 0.45, 1.05, 1.0, 0.4, 0.7, 1.1], [-0.42, 0.22, 1.85, 1.45, 0.35, 0.55, 1.0]],
+  back:  [[-0.22, -0.42, 0.75, 1.7, 0.35, 0.6, 1.0], [0.0, 0.08, 1.1, 1.1, 0.35, 0.6, 1.0], [0.14, 0.5, 1.35, 0.65, 0.35, 0.6, 1.0]],
+  smash: [[0.55, 0.75, 2.7, 1.4, 0.6, 1.6, 0.6], [0.1, 0.42, 1.85, 0.45, 0.4, 1.0, 0.8], [-0.38, 0.02, 0.95, 0.6, 0.3, 0.6, 1.0]],
+};
+const IMPACT = 0.45;   // 휘두르는 시간 중 공 맞는 때(비율)
+export function stroke(av, T, fore, hard, amp) {
+  const dur = hard ? 0.22 : 0.3; if (T > dur + 0.2) return false;
+  const u = clamp(T / dur, 0, 1), K = STROKE[hard ? "smash" : fore ? "fore" : "back"], a = clamp(amp, 0.7, 1.15);
+  const [A, B, w] = u < IMPACT ? [K[0], K[1], u / IMPACT] : [K[1], K[2], (u - IMPACT) / (1 - IMPACT)], e = w * w * (3 - 2 * w);
+  const v = A.map((x, i) => x + (B[i] - x) * e);
+  av.body.rotation.x = 0.16 + (hard ? 0.18 * u : 0.05 * u);
+  av.body.rotation.y = v[0] * a;
+  av.arm(1, v[1], v[2], v[3]); av.arm(0, v[4], v[5], v[6]);
   return true;
 }
 // 준비 자세(무릎 살짝 굽히고 앞으로) + 옆걸음(좌우로 움직일 때 다리를 번갈아)

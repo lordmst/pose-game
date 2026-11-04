@@ -2,9 +2,9 @@
 // 조준 = 내 몸의 좌우 위치(옆으로 걸어서 맞춤), 휘두를 때 손이 옆으로 쏠리면 공이 휘어짐(커브). 굴러가는 공을 카메라가 따라감
 // 던지기 전에 추천 자리(1구: 1·3번 핀 사이, 2구: 남은 핀 쪽)를 점선으로 안내. 안내일 뿐이라 어디서 던져도 됨
 // 2인: 같은 볼링장의 바로 옆 레인에서 상대가 동시에 침(상대 캐릭터·공·핀이 실시간으로 보임). 위쪽 점수표는 두 줄(1P·2P), 프레임마다 이긴 쪽 표시
-import { burst, popup, shake, outlinedText, rr, clamp, FONT } from "../../fx.js?v=61";
-import { sfx } from "../../audio.js?v=61";
-import { stage, THREE, box, ball as sphere, mesh, mat, cyl, avatar, playerAvatar, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=61";
+import { burst, popup, shake, outlinedText, rr, clamp, FONT } from "../../fx.js?v=62";
+import { sfx } from "../../audio.js?v=62";
+import { stage, THREE, box, ball as sphere, mesh, mat, cyl, avatar, playerAvatar, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=62";
 
 const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 조준하고 던짐
 // 2인 대결: 두 화면이 서로의 상태를 공개(pub)하고, 상대 레인을 그 상태대로 그림. 각자 자기 공·핀은 자기 화면이 계산
@@ -89,7 +89,7 @@ export default {
     const two = env.mode === 2, slot = two ? env.slot : 0, other = 1 - slot, oppN = two ? (slot === 0 ? 1 : -1) : 0, OX = oppN * 1.9;
     if (two && slot === 0) shared = { p: [null, null] };   // 새 경기마다 1P 화면이 먼저 만들어지며 새로 시작 (끝난 뒤 결과 글자에도 쓰려고 stop에서 지우지 않음)
     hall(scene, oppN);
-    const me = playerAvatar(env); me.scale.setScalar(1.15); me.rotation.y = Math.PI; scene.add(me);
+    const me = playerAvatar(env); me.scale.setScalar(1.0); me.rotation.y = Math.PI; scene.add(me);
     // 공 (손가락 구멍 3개)
     const bmesh = new THREE.Group(), core = sphere(0.11, env.color || "#3b5bdb", { rough: 0.12, metal: 0.25 }); bmesh.add(core);
     [[0, 0.06, 0.09], [-0.03, 0.09, 0.05], [0.03, 0.09, 0.05]].forEach(([x, y, zz]) => { const h = sphere(0.016, "#111", { cast: false }); h.position.set(x, y, zz); bmesh.add(h); });
@@ -322,8 +322,10 @@ export default {
         const target = phase === "roll" && ball ? Math.max(wz(LANE_LEN) + 6.5, wz(ball.y) + 3.6) : phase === "roll" ? camZ : 5.0;
         camZ += (target - camZ) * 0.12;
         const near = clamp((camZ - 1) / 4, 0, 1);             // 1 = 캐릭터 뒤(던지기 전), 0 = 레인 위(공 따라감)
-        const cx = wx(aimX) * 0.5 + 0.45 * near + (two ? OX * 0.32 : 0);   // 2인: 옆 레인 상대도 보이게
-        camera.position.set(cx, 1.5 + 1.4 * near, camZ); camera.lookAt(cx * 0.5 - 0.2 * near, 0.2, camZ - 10);
+        // 던지기 전: 캐릭터 오른쪽 어깨 위 높은 곳에서 → 캐릭터는 화면 왼쪽 아래, 레인과 핀이 가운데에 트여 보임
+        const cx = wx(aimX) * 0.5 + 0.95 * near + (two ? OX * 0.32 : 0);   // 2인: 옆 레인 상대도 보이게
+        camera.position.set(cx, 1.5 + 2.1 * near, camZ); camera.lookAt(cx * 0.5 - 0.35 * near, 0.2 - 0.3 * near, camZ - 10);
+        me.visible = !(camZ < me.position.z + 1.8 && camZ > me.position.z - 1.5 && near < 0.95);   // 공을 따라가는 카메라가 캐릭터를 지나갈 땐 숨김(머리가 화면을 가득 가리지 않게)
         st.draw(ctx);
         const U = v.U;
         if (two) { drawVersus(ctx); return; }

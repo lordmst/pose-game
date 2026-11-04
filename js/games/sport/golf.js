@@ -1,9 +1,9 @@
 // 골프 (스포츠 리조트처럼 3D 섬 코스): 내 캐릭터 뒤에서 깃발 쪽을 봄. 두 손을 모아 머리 위로 들어 올렸다가(백스윙) 빠르게 아래로 휘두르면 샷
 // 손을 높이 들수록 멀리 날아감 → 깃발까지 거리에 맞게 높이를 조절. 휘두를 때 손이 옆으로 쏠리면 공이 휨, 바람도 있음
 // 카메라가 날아가는 공을 따라감. 그린 위에 올라가면 퍼팅(작게 들었다가 툭)으로 컵에 넣기. 오른쪽 위에 작은 지도
-import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=61";
-import { sfx } from "../../audio.js?v=61";
-import { stage, THREE, box, ball as sphere, mesh, cyl, tree, palm, cloud, sea, playerAvatar } from "./kit3d.js?v=61";
+import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=62";
+import { sfx } from "../../audio.js?v=62";
+import { stage, THREE, box, ball as sphere, mesh, cyl, tree, palm, cloud, sea, playerAvatar } from "./kit3d.js?v=62";
 
 const SWING = 2.2;                         // 다운스윙으로 인정하는 손 속도(어깨너비/초)
 const MAX_DIST = 170;                      // 끝까지 들었을 때 날아가는 거리(m)
@@ -26,6 +26,39 @@ function club() {
   const grip = cyl(0.02, 0.02, 0.22, "#222"); grip.position.y = -0.02; g.add(grip);
   const head = box(0.11, 0.05, 0.05, "#9aa0a6", { metal: 0.7, rough: 0.3 }); head.position.set(0.04, -0.96, 0); g.add(head);
   return g;
+}
+/* ---------- 스윙 자세 ----------
+   s: -1 백스윙 꼭대기 · 0 어드레스(=공 맞는 순간) · +1 피니시. 한 줄로 이어진 동작이라 중간에 튀지 않음
+   캐릭터는 공을 바라보고 서 있고, 깃발은 캐릭터의 왼쪽(+x) */
+const DOWN_T = 0.09, FOLLOW_T = 0.42;      // 휘두른 뒤: 공까지 내려오는 시간 · 피니시까지 시간(초)
+const ease = k => 1 - Math.pow(1 - k, 3);
+export function swingS(A) {
+  if (A.swingT < DOWN_T + FOLLOW_T + 0.1 || A.phase === "fly" || A.phase === "result" || A.phase === "wait") {
+    const top = -Math.max(0.35, Math.min(1, A.maxLv || 0.6)) * (A.putting ? 0.5 : 1);
+    if (A.swingT < DOWN_T) { const k = A.swingT / DOWN_T; return top * (1 - k * k); }         // 꼭대기 → 공 (점점 빠르게)
+    const k = Math.min(1, (A.swingT - DOWN_T) / FOLLOW_T); return ease(k) * (A.putting ? 0.45 : 1);   // 공 → 피니시
+  }
+  const lv = A.phase === "back" ? Math.max(A.level, (A.maxLv || 0) * 0.9) : A.level;
+  return -Math.min(1, lv || 0) * (A.putting ? 0.5 : 1);
+}
+const mix = (a, b, k) => a + (b - a) * k;
+export function golfPose(a, s, putting = false) {
+  const b = Math.max(0, -s), f = Math.max(0, s);               // b: 백스윙 정도, f: 팔로스루 정도
+  // 몸 전체가 발을 축으로 돌아서 많이 숙이면 넘어지는 것처럼 보임 → 아주 조금만
+  a.body.rotation.set(0.08 * (1 - f), -b * 1.05 + f * 1.35, 0);   // 어깨 회전: 뒤로 비틀었다가 깃발 쪽으로
+  a.headG.rotation.set(-0.35 + f * 0.3, b * 0.85 - f * 0.55, 0); // 공을 계속 보다가 피니시에서 깃발 쪽으로
+  // 팔: 어드레스는 두 손을 몸 앞 가운데 모아 아래로 → 백스윙은 오른쪽 어깨 위로 → 피니시는 왼쪽 어깨 위로
+  const lift = 0.3 + (b ? b * 1.95 : f * 2.05);
+  // 왼팔(0): 백스윙에선 가슴을 가로질러 쭉 펴고, 피니시에선 팔꿈치를 접음 / 오른팔(1): 반대
+  a.arm(0, mix(-0.45, -0.62, b) + f * 0.5, lift, 0.05 + f * 1.25);
+  a.arm(1, mix(-0.45, 0.05, b) - f * 0.17, lift, 0.12 + b * 1.25);
+  const club = a.userData.club;
+  if (club) {
+    // 클럽: 손목을 꺾어 백스윙 꼭대기·피니시에서 머리 뒤로 눕게, 어드레스에선 공에 닿게
+    const cock = Math.max(b, f);
+    club.rotation.set(-0.15 - cock * 1.25, 0, -0.45 + b * 0.25 + f * 0.1);
+  }
+  if (putting) { a.headG.rotation.y *= 0.3; }
 }
 const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 침
 const hash = (a, b) => { let x = (a * 374761393 + b * 668265263) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); x ^= x >>> 16; return (x >>> 0) / 4294967296; };
@@ -59,7 +92,7 @@ export default {
     let course = new THREE.Group(); scene.add(course);
     const flag = flagMesh(); scene.add(flag);
     const me = playerAvatar(env); me.scale.setScalar(1.15); me.rotation.y = Math.PI / 2; scene.add(me);
-    const myClub = me.hold(1, club());
+    me.userData.club = me.hold(1, club());
     const gball = sphere(0.09, "#ffffff", { rough: 0.3 }); scene.add(gball);
     const shadow = flat(new THREE.CircleGeometry(0.12, 14), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3 }), 0.04); scene.add(shadow);
     const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 40 }, () => new THREE.Vector3())), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 })); trail.frustumCulled = false; scene.add(trail);
@@ -174,20 +207,8 @@ export default {
       return { dir, yaw };
     }
     // 골퍼 자세 (내 캐릭터·상대 캐릭터 같이 씀). A = { phase, level, maxLv, swingT, putting }
-    function animAv(a, A) {
-      const lv = A.phase === "back" ? Math.max(A.level, A.maxLv * 0.9) : A.phase === "address" ? A.level : 0;
-      if (A.swingT < 0.6) {   // 휘두르고 난 뒤 팔로스루
-        const u = Math.min(1, A.swingT / 0.25);
-        a.body.rotation.y = -0.2 + 1.3 * u;
-        a.arm(0, 0, 0.5 + 2.2 * u, 0.2); a.arm(1, 0, 0.5 + 2.2 * u, 0.2);
-      } else if (A.phase === "fly" || A.phase === "result" || A.phase === "wait") { a.body.rotation.y = 1.1; a.arm(0, 0, 2.6, 0.3); a.arm(1, 0, 2.6, 0.3); }
-      else {
-        const k = A.putting ? Math.min(lv, 0.5) : lv;
-        a.body.rotation.y = -k * 1.1;
-        a.arm(0, 0.05, 0.5 + k * 2.3, 0.1 + k * 0.6); a.arm(1, -0.05, 0.5 + k * 2.3, 0.1 + k * 0.4);
-      }
-    }
-    function animGolfer() { P.anim = { phase, level, maxLv, swingT, putting }; animAv(me, P.anim); myClub.rotation.set(0.25, 0, 0); }
+    function animAv(a, A) { golfPose(a, swingS(A), A.putting); }
+    function animGolfer() { P.anim = { phase, level, maxLv, swingT, putting }; animAv(me, P.anim); }
     // 2인: 상대 골퍼와 상대 공 (같은 홀일 때만 보임)
     let rival = null, rivalBall = null, autoT = 0, autoLv = 0;
     return {
@@ -234,7 +255,7 @@ export default {
           }
           const Op = O();
           if (Op && !rival) {
-            rival = playerAvatar({ color: Op.color, name: Op.name }); rival.scale.setScalar(1.15); rival.hold(1, club()); scene.add(rival);
+            rival = playerAvatar({ color: Op.color, name: Op.name }); rival.scale.setScalar(1.15); rival.userData.club = rival.hold(1, club()); scene.add(rival);
             rivalBall = sphere(0.1, Op.color, { rough: 0.3 }); scene.add(rivalBall);
           }
           if (Op && rival) {

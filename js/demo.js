@@ -1,15 +1,16 @@
 // 게임 설명 시연: 만화 캐릭터가 '진짜 게임'을 직접 해 보이는 방식
 // 캐릭터 몸의 좌표를 선수 인식 결과처럼 게임에 넣어 주므로, 터지고 깨지는 장면이 실제 규칙 그대로 나옴
-import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=61";
-import { DIFFS } from "./difficulty.js?v=61";
-import { speak } from "./audio.js?v=61";
+import { popup, rr, outlinedText, FONT, clamp } from "./fx.js?v=62";
+import { DIFFS } from "./difficulty.js?v=62";
+import { speak } from "./audio.js?v=62";
 
 /* ---------- 캐릭터 자세 ----------
    팔: 어깨 기준 손목 위치 (바깥쪽 +, 아래쪽 +, 단위 = 팔 한 마디 길이)
    다리: 엉덩이 기준 무릎·발목 위치, drop = 몸이 내려가는 정도 */
-const ARM = { up: [0.25, -2.0], wide: [2.0, 0], down: [0.35, 1.9], hips: [0.15, 1.6], heart: [-0.5, -1.7], guard: [0.45, 0.85], cheer: [0.9, -1.7],
+const ARM = { up: [0.25, -2.0], wide: [2.0, 0], down: [0.35, 1.9], hips: [0.15, 1.6], heart: [-0.5, -1.7], guard: [-0.02, 0.14], cheer: [0.9, -1.7],
   head: [-0.35, -0.9], shoulders: [0.15, 0.25], cross: [-1.1, 0.2], clap: [-0.62, 0.8], diag: [0.95, -1.7],
   vup: [1.35, -1.4], penguin: [1.25, 1.45], strong: [1.0, -1.0], tophead: [-0.15, -1.55] };
+const ELBOW_OUT = ["hips", "head", "heart", "strong", "tophead"];   // 허리·머리에 손: 팔꿈치는 바깥 옆
 const LEG = { stand: { drop: 0, k: [0.05, 1.3], a: [0.1, 2.6] }, squat: { drop: 0.9, k: [0.5, 0.4], a: [0.4, 1.7] }, raise: { drop: 0, k: [0.25, 0.15], a: [0.25, 1.1] }, out: { drop: 0.1, k: [0.45, 1.2], a: [0.95, 2.4] } };
 const POSE = {
   rest: ["down", "down"], up: ["up", "up"], wide: ["wide", "wide"], left: ["up", "down"], right: ["down", "up"],
@@ -39,8 +40,9 @@ class Puppet {
   get shoulderY() { return this.v.H * 0.44; }
   get activeHand() { return this.active >= 0 ? this.hands[this.active] : null; }
   setPose(id) { const [la, ra, ll = "stand", rl = "stand", lean = 0] = POSE[id] || POSE.rest; this.rest(0, la, 1.3); this.rest(1, ra, 1.3); this.legs = [ll, rl]; this.leanT = lean; }
-  rest(k, preset = "down", speed = 1.0) { const a = this.arms[k]; a.mode = "preset"; a.preset = preset; a.speed = speed; }
-  reach(k, x, y, speed = 0.9) { const a = this.arms[k]; a.mode = "reach"; a.tx = x; a.ty = y; a.speed = speed; }
+  rest(k, preset = "down", speed = 1.0) { const a = this.arms[k]; a.mode = "preset"; a.preset = preset; a.speed = speed; a.elbow = null; }
+  // elbow: "out"이면 팔꿈치를 꼭 바깥 옆으로 (글자 모양처럼 팔꿈치 자리가 정해진 자세)
+  reach(k, x, y, speed = 0.9, elbow = null) { const a = this.arms[k]; a.mode = "reach"; a.tx = x; a.ty = y; a.speed = speed; a.elbow = elbow; }
   jump() { if (this.jumpT <= 0) this.jumpT = 0.45; }
   update(dt) {
     const v = this.v, u = this.u;
@@ -64,7 +66,7 @@ class Puppet {
       const ox = a.w.x, oy = a.w.y, mx = tx - ox, my = ty - oy, md = Math.hypot(mx, my), step = a.speed * v.U * dt;
       if (md <= step) { a.w.x = tx; a.w.y = ty; } else { a.w.x += mx / md * step; a.w.y += my / md * step; }
       [a.w.x, a.w.y] = within(s, a.w.x, a.w.y, 1.98 * u);
-      a.e = ik(s, a.w, u, side, cx);
+      a.e = ik(s, a.w, u, side, a.e, a.elbow || (a.mode === "preset" && ELBOW_OUT.includes(a.preset) ? "out" : null));
       const h = this.hands[k], ddt = Math.max(dt, 1e-3);
       h.vx = (a.w.x - ox) / ddt; h.vy = (a.w.y - oy) / ddt; h.x = a.w.x; h.y = a.w.y;
       h.speed = Math.hypot(h.vx, h.vy); h.bodySpeed = h.speed / this.scale;
@@ -202,12 +204,25 @@ function sparkles(ctx, x, y, R, t, u) {
 }
 function within(s, x, y, max) { const dx = x - s.x, dy = y - s.y, d = Math.hypot(dx, dy); return d > max ? [s.x + dx / d * max, s.y + dy / d * max] : [x, y]; }
 function lerpP(a, b, f) { return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; }
-// 팔꿈치 위치(두 마디 팔): 몸 바깥쪽으로 굽힘
-function ik(s, w, u, side, cx) {
+// 팔꿈치 위치(두 마디 팔). 사람 팔처럼:
+//  손이 어깨보다 아래면 팔꿈치는 아래로 처짐(주먹을 앞에 들어도 팔꿈치가 어깨 높이로 들리지 않음)
+//  손이 어깨보다 위면 팔꿈치는 몸 바깥쪽으로 (만세·머리 위 손)
+//  두 경우가 비슷하면 지난 장면의 팔꿈치 쪽을 유지해서 팔꿈치가 휙 뒤집히지 않게
+function ik(s, w, u, side, prev, mode) {
   const dx = w.x - s.x, dy = w.y - s.y, d = clamp(Math.hypot(dx, dy), 1e-3, 1.98 * u);
   const base = Math.atan2(dy, dx), a = Math.acos(d / (2 * u));
   const c = [base + a, base - a].map(t => ({ x: s.x + Math.cos(t) * u, y: s.y + Math.sin(t) * u }));
-  return (c[0].x - cx) * side >= (c[1].x - cx) * side ? c[0] : c[1];
+  if (mode === "out") return (c[0].x - s.x) * side >= (c[1].x - s.x) * side ? c[0] : c[1];
+  const wd = clamp((dy / u + 0.2) / 0.6, 0, 1), wo = 0.35 + (1 - wd) * 0.65;
+  const score = e => wd * (e.y - s.y) / u + wo * (e.x - s.x) * side / u + (prev ? (dist(e, prev) < u * 0.6 ? 0.25 : 0) : 0);
+  const eIk = score(c[0]) >= score(c[1]) ? c[0] : c[1];
+  // 손이 어깨 가까이 있으면(팔을 접어 손을 앞에 든 자세): 팔꿈치는 아래로 늘어뜨리고 아래팔이 화면 쪽으로 나와 짧아 보이게
+  // (두 마디 길이를 늘 같게 그리면 팔꿈치가 어깨 높이 옆으로 들려 '닭 날개'처럼 보임)
+  const hang = { x: s.x + side * 0.26 * u, y: s.y + 0.97 * u }, dh = dist(w, hang);
+  const t = clamp((dh - 0.75 * u) / (0.3 * u), 0, 1);
+  if (t >= 1) return eIk;
+  const m = { x: hang.x + (eIk.x - hang.x) * t, y: hang.y + (eIk.y - hang.y) * t }, dm = Math.hypot(m.x - s.x, m.y - s.y) || 1;
+  return { x: s.x + (m.x - s.x) / dm * u, y: s.y + (m.y - s.y) / dm * u };
 }
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 

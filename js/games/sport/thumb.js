@@ -4,9 +4,9 @@
 // 상대 엄지가 내 엄지 위로 올라와 누르려 하면(노란 경고) 얼른 빠져나가기. 못 빠져나가면 짐
 // 2인 대결(env.mode 2): 두 선수가 한 쌍의 손에서 각자 자기 엄지로 겨룸. 각 화면은 자기 주먹이 앞에 오게 보여 줌
 //   상대 엄지 위에서 콱 누르면 누르기 시작, 하나·둘·셋 버티면 이김. 눌린 사람은 엄지를 멀리 빼면 빠져나감
-import { burst, popup, rr, outlinedText } from "../../fx.js?v=61";
-import { sfx } from "../../audio.js?v=61";
-import { stage, THREE, box, ball as sphere, cyl, mesh, ground, tree, cloud, fan } from "./kit3d.js?v=61";
+import { burst, popup, rr, outlinedText } from "../../fx.js?v=62";
+import { sfx } from "../../audio.js?v=62";
+import { stage, THREE, box, ball as sphere, cyl, mesh, ground, tree, cloud, fan } from "./kit3d.js?v=62";
 
 const PRESS = 1.6;        // 누르기로 치는 손이 아래로 내려가는 빠르기 (어깨너비/초)
 const COUNT = 1.5;        // 하나·둘·셋 (초)
@@ -24,30 +24,60 @@ function match(env) {
   return shared;
 }
 
-// 3D 손: 주먹(가운데서 깍지) + 소매 + 엄지(뿌리→끝 통통한 막대, 손톱). sgn +1 = 내 손(카메라 쪽), -1 = 상대
-function hand3d(scene, sgn, sleeve, skin) {
+// 3D 손: 주먹(가운데서 깍지) + 소매 + 엄지. sgn +1 = 내 손(카메라 쪽), -1 = 상대
+// 엄지는 '씨름 선수'처럼: 납작하고 끝이 둥글게 좁아지는 두 마디(주름), 등쪽 손톱, 선수 색 머리띠, 바닥 쪽 얼굴
+// (매끈한 막대 끝에 둥근 공을 얹으면 다른 모양처럼 보여서 이렇게 바꿈)
+export function hand3d(scene, sgn, sleeve, skin) {
   const g = new THREE.Group(); scene.add(g);
-  const base = new THREE.Vector3(0.25 * sgn, 0.95, 0.45 * sgn);
-  const fist = mesh(new THREE.SphereGeometry(1, 24, 16), skin, { rough: 0.7 }); fist.scale.set(0.85, 0.6, 0.75); fist.position.set(0, 0.45, 0.55 * sgn); g.add(fist);
-  for (let i = 0; i < 4; i++) { const f = mesh(new THREE.CapsuleGeometry(0.15, 0.35, 4, 10), skin, { rough: 0.7 }); f.rotation.x = Math.PI / 2; f.position.set(-0.5 + i * 0.33 + 0.08 * sgn, 0.55 + (i % 2) * 0.05, -0.2 * sgn); g.add(f); }   // 깍지 낀 손가락
+  const base = new THREE.Vector3(0.25 * sgn, 1.08, 0.45 * sgn);
+  // 주먹: 둥근 공이 아니라 네모난 손바닥 + 손등 마디 4개 + 앞으로 감아 쥔 손가락 (손 모양이 바로 보이게)
+  const palm = mesh(new THREE.BoxGeometry(1.3, 0.62, 0.95), skin, { rough: 0.7 }); palm.position.set(0, 0.42, 0.58 * sgn); g.add(palm);
+  const back = mesh(new THREE.CapsuleGeometry(0.31, 0.68, 6, 16), skin, { rough: 0.7 }); back.rotation.z = Math.PI / 2; back.scale.set(1, 1, 1.45); back.position.set(0, 0.5, 0.62 * sgn); g.add(back);   // 둥근 손등
+  for (let i = 0; i < 4; i++) {
+    const x = -0.48 + i * 0.32;
+    const kn = sphere(0.15, skin, { rough: 0.7 }); kn.scale.set(1, 0.8, 1); kn.position.set(x, 0.74, 0.2 * sgn); g.add(kn);            // 손등 마디
+    const f = mesh(new THREE.CapsuleGeometry(0.135, 0.3, 4, 10), skin, { rough: 0.7 }); f.rotation.x = Math.PI / 2; f.position.set(x + 0.08 * sgn, 0.6 + (i % 2) * 0.04, -0.12 * sgn); g.add(f);   // 깍지 낀 손가락
+    const ln = box(0.012, 0.3, 0.012, shade3(skin, 0.8), { cast: false }); ln.position.set(x + 0.16, 0.46, 0.06 * sgn); g.add(ln);           // 손가락 사이 주름
+  }
   const arm = cyl(0.5, 0.56, 3, sleeve); arm.rotation.x = Math.PI / 2; arm.position.set(0, 0.35, 2.2 * sgn); g.add(arm);
   const cuff = cyl(0.53, 0.53, 0.25, "#ffffff"); cuff.rotation.x = Math.PI / 2; cuff.position.set(0, 0.35, 0.95 * sgn); g.add(cuff);
-  const seg = cyl(0.22, 0.27, 1, skin, { rough: 0.7 }); g.add(seg);
-  const knuckle = sphere(0.28, skin, { rough: 0.7 }); knuckle.position.copy(base); g.add(knuckle);
-  const tip = new THREE.Group(); g.add(tip);
-  const ball_ = sphere(0.26, skin, { rough: 0.7 }); ball_.scale.set(1, 1.1, 1); tip.add(ball_);
-  const nail = sphere(0.16, NAIL, { rough: 0.3 }); nail.scale.set(1, 0.35, 1.2); nail.position.set(0, 0.22, -0.05 * sgn); tip.add(nail);
+  const crease = shade3(skin, 0.78);
+  // 엄지 뿌리 마디(굵게) — 위로 갈수록 아주 조금만 가늘어짐
+  const seg = cyl(0.27, 0.3, 1, skin, { rough: 0.7 }); g.add(seg);
+  const knuckle = sphere(0.3, skin, { rough: 0.7 }); knuckle.scale.set(1, 0.9, 0.85); knuckle.position.copy(base); g.add(knuckle);
+  // 끝 마디: 마디 굵기 그대로 둥글게 마무리(끝이 부풀지 않게)
+  const tip = new THREE.Group(); tip.scale.set(1.14, 1, 1.14); g.add(tip);
+  const end = mesh(new THREE.CapsuleGeometry(0.265, 0.22, 6, 18), skin, { rough: 0.7 }); end.scale.set(1, 1, 0.82); end.position.y = -0.05; tip.add(end);
+  const ring = mesh(new THREE.TorusGeometry(0.262, 0.022, 6, 24), crease, { cast: false }); ring.rotation.x = Math.PI / 2; ring.scale.set(1, 0.82, 1); ring.position.y = -0.2; tip.add(ring);   // 마디 주름
+  // 손톱: 등쪽(엄지 주인이 보는 쪽), 크고 납작하게, 끝에 하얀 테
+  const nail = sphere(0.19, NAIL, { rough: 0.25 }); nail.scale.set(0.95, 1.15, 0.32); nail.position.set(0, 0.08, 0.19 * sgn); tip.add(nail);
+  const nailTip = sphere(0.19, "#ffffff", { rough: 0.3 }); nailTip.scale.set(0.9, 0.3, 0.3); nailTip.position.set(0, 0.27, 0.195 * sgn); tip.add(nailTip);
+  // 씨름 선수 머리띠(선수 색) + 뒤로 날리는 끈
+  const band = mesh(new THREE.TorusGeometry(0.275, 0.055, 8, 28), sleeve, { rough: 0.6 }); band.rotation.x = Math.PI / 2; band.scale.set(1, 0.84, 1); band.position.y = 0.02; tip.add(band);
+  const tails = [-1, 1].map(s => { const t = box(0.07, 0.24, 0.03, sleeve); t.position.set(0.13 * s, -0.06, 0.27 * sgn); t.rotation.z = 0.5 * s; tip.add(t); return t; });
+  // 얼굴: 바닥 쪽(상대가 보는 쪽) — 눈·결의에 찬 눈썹·입
+  const F = -sgn, eyes = [-1, 1].map(s => { const e = sphere(0.045, "#1d1d1d", { cast: false }); e.scale.set(0.8, 1.2, 0.5); e.position.set(0.09 * s, 0.12, 0.215 * F); tip.add(e);
+    const hl = sphere(0.014, "#ffffff", { cast: false }); hl.position.set(0.09 * s + 0.015, 0.14, 0.232 * F); tip.add(hl);
+    const br = box(0.09, 0.022, 0.02, "#3a2414", { cast: false }); br.position.set(0.09 * s, 0.205, 0.215 * F); br.rotation.z = -0.35 * s * F * sgn; tip.add(br); return e; });
+  const mouth = mesh(new THREE.TorusGeometry(0.05, 0.014, 6, 12, Math.PI), "#7a3b1a", { cast: false }); mouth.position.set(0, 0.02, 0.215 * F); mouth.rotation.z = Math.PI; tip.add(mouth);
+  const cheeks = [-1, 1].map(s => { const c = sphere(0.035, "#ff9fae", { cast: false, opacity: 0.6 }); c.scale.set(1, 0.6, 0.3); c.position.set(0.16 * s, 0.04, 0.2 * F); tip.add(c); return c; });
   const up = new THREE.Vector3(0, 1, 0), glowM = {};
   return {
     g,
+    // 엄지 길이는 늘 같게(TL). 엄지 끝이 멀리 가면 늘어나지 않고 손 전체가 따라 미끄러짐
     set(p, h) {
-      const top = new THREE.Vector3(p.x, h, p.z), mid = base.clone().add(top).multiplyScalar(0.5), d = top.clone().sub(base);
-      seg.position.copy(mid); seg.scale.set(1, Math.max(0.1, d.length()), 1); seg.quaternion.setFromUnitVectors(up, d.normalize());
+      const TL = 0.85, want = new THREE.Vector3(p.x, h, p.z), d0 = want.clone().sub(base), dh = Math.hypot(d0.x, d0.z);
+      const need = Math.max(0, dh - Math.sqrt(Math.max(0, TL * TL - d0.y * d0.y)));
+      g.position.set(dh > 1e-4 ? d0.x / dh * need : 0, 0, dh > 1e-4 ? d0.z / dh * need : 0);
+      const top = want.clone().sub(g.position), mid = base.clone().add(top).multiplyScalar(0.5), d = top.clone().sub(base);
+      seg.position.copy(mid); seg.scale.set(1.14, Math.max(0.1, d.length()), 0.96); seg.quaternion.setFromUnitVectors(up, d.normalize());   // 굵고 짧게(막대처럼 보이지 않게)
       tip.position.copy(top); tip.quaternion.copy(seg.quaternion);
+      tails.forEach((t, i) => { t.rotation.x = Math.sin(performance.now() / 120 + i) * 0.25; });   // 끈이 살랑
     },
-    glow(c) { ball_.material = c ? (glowM[c] || (glowM[c] = new THREE.MeshStandardMaterial({ color: skin, emissive: c, emissiveIntensity: 0.6 }))) : seg.material; },
+    glow(c) { end.material = c ? (glowM[c] || (glowM[c] = new THREE.MeshStandardMaterial({ color: skin, emissive: c, emissiveIntensity: 0.6 }))) : seg.material; },
   };
 }
+const shade3 = (hex, k) => { const c = new THREE.Color(hex); c.multiplyScalar(k); return "#" + c.getHexString(); };
 function arena(scene) {
   ground(scene, "#86c96a", 200, -1.6);
   const table = cyl(3.4, 3.6, 1.2, "#c98a4b", { receive: true }); table.position.y = -0.62; scene.add(table);

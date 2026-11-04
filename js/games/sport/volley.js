@@ -4,9 +4,9 @@
 // 내 캐릭터 팔은 내 팔을 그대로 따라 하고(동작 사이), 받기·때리기·막기 때는 배구 동작(무릎 굽혀 받기, 도움닫기 점프 스파이크, 점프 블로킹)
 // 1인: 컴퓨터 두 명과 대결. 2인: 1P와 2P가 네트를 사이에 두고 서로 대결(각 편에 토스해 주는 컴퓨터 한 명).
 //      경기 상태(공·점수·단계)는 둘이 함께 쓰고, 각 화면은 자기 편 뒤에서 같은 경기를 봄
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=61";
-import { sfx } from "../../audio.js?v=61";
-import { stage, THREE, sea, box, cyl, mesh, palm, cloud, playerAvatar, randomAvatar, avatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=61";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=62";
+import { sfx } from "../../audio.js?v=62";
+import { stage, THREE, sea, box, cyl, mesh, palm, cloud, playerAvatar, randomAvatar, avatar, bodyMover, moveGuide, moveText } from "./kit3d.js?v=62";
 
 const SERVE = 1.6;     // 서브가 넘어오는 시간(초, 보통)
 const FAST = 0.95;     // 스파이크가 넘어오는 시간(초, 보통)
@@ -158,21 +158,37 @@ function stance(av, t, vx, low = 1) {
   av.body.position.y += Math.abs(sw) * 0.05;
 }
 // 동작별 자세 (u: 0~1 진행)
-function actPose(av, a) {
+// 팔 각도는 앞뒤 면(fwd)으로 크게 휘두름: 옆으로 들었다가(raise) 앞으로 바꾸면 팔이 옆으로 휙 쓸리는 것처럼 보여서
+const sm = k => k * k * (3 - 2 * k);
+export function actPose(av, a) {
   const u = Math.min(1, a.t / 0.75);
-  if (a.k === "recv") {                                                   // 무릎 굽혀 두 팔을 앞에 모으고, 닿는 순간 살짝 들어 올림
-    const lift = Math.sin(Math.min(1, a.t / 0.35) * Math.PI) * 0.35;
-    av.body.rotation.x = 0.4 - lift * 0.5; av.body.position.y = -0.14 + lift * 0.12;
-    av.arm(0, -0.2, 0.75 + lift, 0); av.arm(1, -0.2, 0.75 + lift, 0); return 0;
+  if (a.k === "recv") {                                                   // 리시브: 무릎 굽혀 두 팔을 앞에 쭉 펴 모으고(손목을 붙임), 닿는 순간 팔을 살짝 들어 올림
+    const lift = Math.sin(Math.min(1, a.t / 0.35) * Math.PI);
+    av.body.rotation.x = 0.22 - lift * 0.1; av.body.position.y = -0.1 + lift * 0.06;
+    av.arm(0, -0.42, 0.85 + lift * 0.4, 0.02); av.arm(1, -0.42, 0.85 + lift * 0.4, 0.02); return 0;
   }
-  if (a.k === "spike") {                                                  // 도움닫기 점프 → 팔을 머리 뒤로 젖혔다가 세게 내려침
-    const sw = Math.min(1, a.t / 0.16);
-    av.arm(1, 2.9 - 1.6 * sw, -0.5 + 2.0 * sw, 1.4 - 1.2 * sw); av.arm(0, 2.2, 0.6, 0.4); av.body.rotation.x = -0.2 + 0.5 * sw;
+  if (a.k === "spike") {                                                  // 스파이크: 팔을 머리 뒤로 젖혀(팔꿈치 굽힘) → 머리 위로 → 앞 아래로 쭉 내려침, 왼팔은 앞을 가리켰다가 아래로
+    const k = Math.min(1, a.t / 0.2), e = sm(k);
+    av.arm(1, 0.28, 3.45 - 2.55 * e, 1.5 - 1.35 * Math.min(1, k * 1.6));
+    av.arm(0, 0.3, 2.3 - 1.6 * e, 0.3);
+    av.body.rotation.x = -0.15 + 0.4 * e;
     return Math.sin(u * Math.PI) * 0.95;
   }
-  if (a.k === "block") { av.arm(0, 2.95, 0.3, 0); av.arm(1, 2.95, 0.3, 0); av.body.rotation.x = 0; return Math.sin(u * Math.PI) * 0.85; }
-  if (a.k === "serve") { const sw = Math.min(1, a.t / 0.25); av.arm(1, 2.8 - 1.2 * sw, 0.2 + 1.2 * sw, 0.3); av.arm(0, 2.4 - 1.5 * sw, 0.4, 0.3); return Math.sin(u * Math.PI) * 0.4; }
-  if (a.k === "set") { const e = Math.min(1, a.t / 0.3); av.arm(0, 2.6, 0.5, 1.3 - 1.0 * e); av.arm(1, 2.6, 0.5, 1.3 - 1.0 * e); av.body.rotation.x = -0.1; return e < 1 ? 0.1 * Math.sin(e * Math.PI) : 0; }
+  if (a.k === "block") {                                                  // 블로킹: 두 팔을 머리 위로 쭉, 손은 네트 쪽으로 살짝 앞
+    const k = sm(Math.min(1, a.t / 0.18));
+    av.arm(0, 0.18, 1.2 + 1.65 * k, 0.4 * (1 - k)); av.arm(1, 0.18, 1.2 + 1.65 * k, 0.4 * (1 - k)); av.body.rotation.x = 0;
+    return Math.sin(u * Math.PI) * 0.85;
+  }
+  if (a.k === "serve") {                                                  // 서브(위로 치기): 오른팔 머리 뒤 → 앞으로, 왼팔은 공 던진 뒤 내림
+    const k = Math.min(1, a.t / 0.25), e = sm(k);
+    av.arm(1, 0.25, 3.35 - 2.2 * e, 1.3 - 1.2 * Math.min(1, k * 1.5)); av.arm(0, 0.25, 2.6 - 1.9 * e, 0.2);
+    return Math.sin(u * Math.PI) * 0.4;
+  }
+  if (a.k === "set") {                                                    // 토스: 이마 위에서 두 손을 모았다가(팔꿈치 굽힘) 위로 쭉 밀어 올림
+    const e = sm(Math.min(1, a.t / 0.3));
+    av.arm(0, 0.38 - 0.2 * e, 2.45 + 0.4 * e, 1.5 - 1.3 * e); av.arm(1, 0.38 - 0.2 * e, 2.45 + 0.4 * e, 1.5 - 1.3 * e);
+    av.body.rotation.x = -0.06; return e < 1 ? 0.1 * Math.sin(e * Math.PI) : 0;
+  }
   return 0;
 }
 
@@ -288,9 +304,9 @@ export default {
         av.mimic(env.tracker.pts, true);
         if (SIMAUTO || !env.tracker.pts) {   // 팔이 안 보이면 준비 자세
           const n = need(), k = M.B ? M.B.t / M.B.T : 0;
-          if (n === "recv" && k > 0.4) { av.arm(0, -0.2, 0.75, 0); av.arm(1, -0.2, 0.75, 0); }
-          else if (n === "spike" && M.ph === "set" && k > 0.4) { av.arm(1, 2.9, -0.5, 1.4); av.arm(0, 2.2, 0.5, 0.4); }
-          else if (n === "block" && M.ph === "set" && k > 0.5) { av.arm(0, 2.8, 0.3, 0); av.arm(1, 2.8, 0.3, 0); }
+          if (n === "recv" && k > 0.4) { av.arm(0, -0.42, 0.85, 0.02); av.arm(1, -0.42, 0.85, 0.02); }
+          else if (n === "spike" && M.ph === "set" && k > 0.4) { av.arm(1, 0.28, 3.45, 1.5); av.arm(0, 0.3, 2.3, 0.3); }
+          else if (n === "block" && M.ph === "set" && k > 0.5) { av.arm(0, 0.18, 2.85, 0); av.arm(1, 0.18, 2.85, 0); }
           else { av.arm(0, 0.35, 0.7, 0.9); av.arm(1, 0.35, 0.7, 0.9); }
         }
       }
@@ -307,8 +323,8 @@ export default {
       av.headG.rotation.x = 0;
       let y = 0;
       if (a) y = actPose(av, a);
-      else if (isMain && M.side === s && M.ph === "recv" && M.B && M.B.t / M.B.T > 0.4) { av.arm(0, -0.2, 0.75, 0); av.arm(1, -0.2, 0.75, 0); }
-      else if (isMain && M.side === s && M.ph === "set" && M.B && M.B.t / M.B.T > 0.4) { av.arm(1, 2.9, -0.5, 1.4); av.arm(0, 2.2, 0.5, 0.4); y = Math.max(0, (M.B.t / M.B.T - 0.75) * 2) * 0.6; }
+      else if (isMain && M.side === s && M.ph === "recv" && M.B && M.B.t / M.B.T > 0.4) { av.arm(0, -0.42, 0.85, 0.02); av.arm(1, -0.42, 0.85, 0.02); }
+      else if (isMain && M.side === s && M.ph === "set" && M.B && M.B.t / M.B.T > 0.4) { av.arm(1, 0.28, 3.45, 1.5); av.arm(0, 0.3, 2.3, 0.3); y = Math.max(0, (M.B.t / M.B.T - 0.75) * 2) * 0.6; }
       else { av.arm(0, 0.35, 0.7, 0.9 + Math.sin(t * 2 + s) * 0.05); av.arm(1, 0.35, 0.7, 0.9); }
       av.position.y = y;
     }

@@ -1,11 +1,12 @@
 // 벽 통과: 사람 모양 구멍이 뚫린 벽이 다가옴. 벽이 닿을 때 구멍 자리로 가서 구멍 모양대로 자세를 잡고 있으면 통과
 // 구멍은 왼쪽·오른쪽으로 옮겨 다니고, 앉기·무릎 들기·옆으로 기울이기 같은 전신 자세가 자주 나옴
-import { burst, popup, shake, outlinedText, rr } from "../fx.js?v=61";
-import { sfx } from "../audio.js?v=61";
-import { POSES, figData, poseMatches, drawPoseFig, limbHints } from "./copy.js?v=61";
+import { burst, popup, shake, outlinedText, rr } from "../fx.js?v=62";
+import { sfx } from "../audio.js?v=62";
+import { POSES, figData, poseMatches, drawPoseFig, limbHints } from "./copy.js?v=62";
 
 const TRAVEL = 4.2;    // 벽이 멀리서 닿기까지 걸리는 시간(초, 보통)
 const GAP = 0.9;       // 벽 사이 쉬는 시간
+const FORCE_CUT = typeof location !== "undefined" && /wallcut=1/.test(location.search);   // 점검용: 맞든 안 맞든 몸 모양으로 뚫어 봄
 const MOVE_RATE = 0.6;  // 구멍이 가운데가 아닌 곳에 뚫리는 비율 (처음 두 벽은 가운데)
 
 // 벽 통과에만 있는 자세: 윗몸을 옆으로 기울이기 (그림은 엉덩이를 중심으로 윗몸을 돌려 그림)
@@ -41,6 +42,21 @@ export default {
       return Math.abs((p[23].x + p[24].x) / 2 - holeX()) < Math.max(sw * 0.9, z.w * 0.08);
     }
     let place = true, pendingOff = null;
+    // 통과할 때 벽이 실제 내 몸 모양으로도 뚫리게: 화면 크기 임시 캔버스에 벽을 그리고 내 몸(관절선)을 지움
+    const tmp = document.createElement("canvas"), tc = tmp.getContext("2d");
+    let cutK = 0, cutAt = 0;
+    const LIMBS = [[11, 13], [13, 15], [12, 14], [14, 16], [23, 25], [25, 27], [24, 26], [26, 28], [11, 23], [12, 24]];
+    function cutBody(c, pts, m, a = 1) {
+      if (!pts || !pts[11].v || !pts[12].v) return;
+      const sw = Math.hypot(pts[11].x - pts[12].x, pts[11].y - pts[12].y) || v.U * 0.1, lw = sw * 0.55 * m;
+      c.save(); c.globalCompositeOperation = "destination-out"; c.globalAlpha = a; c.strokeStyle = c.fillStyle = "#000"; c.lineCap = c.lineJoin = "round"; c.lineWidth = lw;
+      // 몸통(어깨·엉덩이 네 점) 채우기
+      if (pts[23].v && pts[24].v) { c.beginPath(); [11, 12, 24, 23].forEach((i, n) => n ? c.lineTo(pts[i].x, pts[i].y) : c.moveTo(pts[i].x, pts[i].y)); c.closePath(); c.fill(); c.stroke(); }
+      c.beginPath(); for (const [a, b] of LIMBS) if (pts[a].v && pts[b].v) { c.moveTo(pts[a].x, pts[a].y); c.lineTo(pts[b].x, pts[b].y); } c.stroke();
+      for (const i of [15, 16]) if (pts[i].v) { c.beginPath(); c.arc(pts[i].x, pts[i].y, lw * 0.75, 0, Math.PI * 2); c.fill(); }
+      if (pts[0].v) { c.beginPath(); c.ellipse(pts[0].x, pts[0].y - sw * 0.12, sw * 0.5 * m + lw * 0.2, sw * 0.62 * m + lw * 0.2, 0, 0, Math.PI * 2); c.fill(); }   // 머리
+      c.restore();
+    }
     const rand = env.rand || Math.random;   // 협동: 두 선수가 같은 순서의 벽을 받음
     let wall = null, gapT = 0.6, passed = 0, crashed = 0, count = 0, lastId = null, matched = false, paintedKey = "";
     function nextWall() {
@@ -119,9 +135,23 @@ export default {
         const cx = z.cx, by = v.H * 0.98 - (1 - e) * v.H * 0.33;          // 멀리 있을 땐 화면 가운데쯤, 가까워지면 바닥
         const key = `${wall.pose.id}|${wall.off}|${matched}|${Math.round(W)}x${Math.round(H)}`;
         if (key !== paintedKey) { paintWall(W, H, wall.pose, matched ? "#2fd36b" : "#ffe066", wall.off); paintedKey = key; }   // 구멍 테두리: 평소 노랑, 맞으면 초록   // 실제 크기로 한 번 그려 두고 확대·축소만
-        ctx.save(); ctx.globalAlpha = alpha;
-        ctx.drawImage(off, cx - w / 2, by - h, w, h);
-        ctx.restore();
+        // 맞는 자세로 가까이 오면(또는 통과하면) 내 몸 모양으로 벽을 서서히 뚫음 → 몸이 벽돌에 가려지지 않음
+        const now = performance.now(), dtc = Math.min(0.1, (now - cutAt) / 1000); cutAt = now;
+        const want = wall.result === "pass" || (FORCE_CUT && !wall.result && k > 0.5) ? 1 : !wall.result && matched && k > 0.5 ? 1 : 0;
+        cutK += (want - cutK) * Math.min(1, dtc * (want ? 6 : 3));
+        if (cutK > 0.02 && wall.result !== "crash") {
+          const dpr = v.dpr || 1, TW = Math.max(2, Math.round(z.w * dpr)), TH = Math.max(2, Math.round(v.H * dpr));
+          if (tmp.width !== TW || tmp.height !== TH) { tmp.width = TW; tmp.height = TH; }
+          tc.setTransform(1, 0, 0, 1, 0, 0); tc.clearRect(0, 0, TW, TH);
+          tc.setTransform(dpr, 0, 0, dpr, -z.x0 * dpr, 0);
+          tc.drawImage(off, cx - w / 2, by - h, w, h);
+          cutBody(tc, env.tracker.pts, 0.75 + 0.25 * cutK, Math.min(1, cutK * 1.3));
+          ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(tmp, z.x0, 0, z.w, v.H); ctx.restore();
+        } else {
+          ctx.save(); ctx.globalAlpha = alpha;
+          ctx.drawImage(off, cx - w / 2, by - h, w, h);
+          ctx.restore();
+        }
         if (!wall.result) {
           // 자세 카드: 벽이 멀리 있을 때부터 크게 보여 줌. 팔다리마다 맞으면 초록, 고칠 곳은 노랗게 깜빡임
           const cw = Math.min(z.w * 0.34, v.U * 0.3), ch = cw * 1.25, cxx = env.slot === 1 ? z.x1 - cw - v.U * 0.025 : z.x0 + v.U * 0.025, cy = v.H * 0.17;

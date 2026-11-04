@@ -186,7 +186,7 @@ export function stage(env, opts = {}) {
       k = Math.min(k, Math.sqrt(MAX_PIXELS / Math.max(1, z.w * bh)));
       const W = Math.max(2, Math.round(z.w * k)), H = Math.max(2, Math.round(bh * k));
       if (W !== w || H !== h) { w = W; h = H; renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); }
-      renderer.render(scene, camera);
+      hipPose(scene, true); renderer.render(scene, camera); hipPose(scene, false);
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
       ctx.drawImage(canvas, z.x0, v.H * b0, z.w, bh);
       if (opts.pip !== false) api.pip(ctx, opts.pip || "br");
@@ -202,7 +202,7 @@ export function stage(env, opts = {}) {
     // 3D 위치 → 화면 좌표 (글자·효과를 2D로 얹을 때)
     get quality() { return quality; },
     toScreen(p) { const q = p.clone().project(camera), [b0, b1] = opts.band || [0, 1]; return { x: z.x0 + (q.x + 1) / 2 * z.w, y: v.H * (b0 + (1 - q.y) / 2 * (b1 - b0)), behind: q.z > 1 }; },
-    dispose() { if (envTex) envTex.dispose(); scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); renderer.dispose(); renderer.forceContextLoss(); },
+    dispose() { for (const a of [...AVS]) { let r = a; while (r.parent) r = r.parent; if (r === scene || !a.parent) AVS.delete(a); } if (envTex) envTex.dispose(); scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); renderer.dispose(); renderer.forceContextLoss(); },
   };
   return api;
 }
@@ -288,6 +288,18 @@ export function textBoard(w, h, opts = {}) {
    발바닥이 y=0, 키 약 1.7. 기본은 +z(카메라 쪽)를 봄. 뒤에서 보는 내 캐릭터는 rotation.y = Math.PI
    팔: arm(k, 옆으로 든 각도, 앞으로 든 각도, 팔꿈치 굽힘) — k 0 = 왼팔, 1 = 오른팔 (캐릭터 기준) */
 const SKINS = ["#ffd7b5", "#f1c27d", "#e0ac69", "#c68642"], HAIRS = ["#3b2414", "#1f1f1f", "#7a4a1f", "#d9a441", "#a33b1f"];
+// 그릴 때만: 게임이 body에 준 숙임(x)·옆 기울기(z)는 엉덩이에서, 비틂(y)은 엉덩이 65% + 발 35%로 나눠 적용하고 그린 뒤 되돌림
+// (게임 쪽 계산·값은 그대로라 손 위치 등 판정이 바뀌지 않음)
+const HIP = 0.8, AVS = new Set();
+export function hipPose(scene, on) {
+  for (const a of AVS) {
+    let r = a; while (r.parent) r = r.parent;
+    if (r !== scene) continue;
+    const b = a.body.rotation, u = a.upper.rotation;
+    if (on) { a.userData.hipSave = [b.x, b.y, b.z]; u.set(b.x, b.y * 0.65, b.z); b.set(0, b.y * 0.35, 0); }
+    else if (a.userData.hipSave) { const [x, y, z] = a.userData.hipSave; b.set(x, y, z); u.set(0, 0, 0); a.userData.hipSave = null; }
+  }
+}
 // 발밑 그림자(동그란 흐린 얼룩): 그림자 기능이 꺼진 낮은 화질에서도 땅에 서 있는 느낌
 let blobTex = null;
 function blobTexture() {
@@ -316,11 +328,14 @@ export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], 
     const sole = mesh(capsule(0.068, 0.13, 3, 10), shirt, { rough: 0.6 }); sole.rotation.x = Math.PI / 2; sole.scale.set(1.12, 1.02, 0.3); sole.position.set(0, -0.795, 0.04);   // 옷 색 밑창
     p.add(l, shoe, sole); body.add(p); return p;
   });
-  const torso = mesh(capsule(0.2, 0.32, 6, 20), mat(shirt, CL)); torso.position.y = 1.08; torso.scale.set(1, 1, 0.75); body.add(torso);
+  // 윗몸 묶음: 엉덩이 높이(HIP)를 축으로 숙이고 비틂 → 숙여도 다리는 땅에 붙어 있음 (그릴 때만 적용, 아래 hipPose)
+  const upper = new THREE.Group(); upper.position.y = HIP; body.add(upper);
+  const U_ = o => { o.position.y -= HIP; upper.add(o); return o; };
+  const torso = mesh(capsule(0.2, 0.32, 6, 20), mat(shirt, CL)); torso.position.y = 1.08; torso.scale.set(1, 1, 0.75); U_(torso);
   // 옷깃(흰 줄)·허리띠: 옷이 한 덩어리처럼 안 보이게
-  if (shirt !== skin) { const collar = mesh(new THREE.TorusGeometry(0.105, 0.028, 8, 28), "#ffffff", { rough: 0.7 }); collar.rotation.x = Math.PI / 2; collar.position.y = 1.395; collar.scale.set(1, 0.8, 1); body.add(collar); }   // 맨몸(복싱)엔 옷깃 없음
-  const belt = mesh(new THREE.TorusGeometry(0.19, 0.03, 8, 32), "#2b2b33", { rough: 0.5 }); belt.rotation.x = Math.PI / 2; belt.position.y = 0.83; belt.scale.set(1.02, 0.78, 1); body.add(belt);
-  const headG = new THREE.Group(); headG.position.y = 1.56; body.add(headG);
+  if (shirt !== skin) { const collar = mesh(new THREE.TorusGeometry(0.105, 0.028, 8, 28), "#ffffff", { rough: 0.7 }); collar.rotation.x = Math.PI / 2; collar.position.y = 1.395; collar.scale.set(1, 0.8, 1); U_(collar); }   // 맨몸(복싱)엔 옷깃 없음
+  const belt = mesh(new THREE.TorusGeometry(0.19, 0.03, 8, 32), "#2b2b33", { rough: 0.5 }); belt.rotation.x = Math.PI / 2; belt.position.y = 0.83; belt.scale.set(1.02, 0.78, 1); U_(belt);
+  const headG = new THREE.Group(); headG.position.y = 1.56; U_(headG);
   const head = ball(0.21, mat(skin, SK)); head.scale.set(1, 1.08, 1); headG.add(head);
   [-1, 1].forEach(s => { const ear = ball(0.045, mat(skin, SK)); ear.scale.set(0.6, 1, 0.8); ear.position.set(0.205 * s, 0.0, -0.01); headG.add(ear); });
   const hairM = mesh(geo("hair", () => Object.assign(new THREE.SphereGeometry(0.225, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.52), { userData: { smooth: true } })), mat(hair, HR)); hairM.position.y = 0.03; hairM.rotation.x = -0.25; headG.add(hairM);
@@ -341,7 +356,7 @@ export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], 
   const nose = ball(0.024, mat(skin, SK), { cast: false }); nose.scale.set(1, 0.85, 0.8); nose.position.set(0, -0.015, 0.212); headG.add(nose);
   const mouth = mesh(new THREE.TorusGeometry(0.045, 0.012, 6, 12, Math.PI), "#7a3b1a", { cast: false }); mouth.position.set(0, -0.08, 0.195); mouth.rotation.z = Math.PI; headG.add(mouth);
   const arms = [1, -1].map(s => {        // 캐릭터 자신의 왼팔(+x쪽, 정면 기준)·오른팔
-    const sh = new THREE.Group(); sh.position.set(0.27 * s, 1.34, 0); body.add(sh);
+    const sh = new THREE.Group(); sh.position.set(0.27 * s, 1.34, 0); U_(sh);
     const up = mesh(capsule(0.06, 0.2, 4, 12), mat(shirt, CL)); up.position.y = -0.15; sh.add(up);   // 어깨·팔꿈치가 둥글게
     const el = new THREE.Group(); el.position.y = -0.3; sh.add(el);
     const fo = mesh(capsule(0.05, 0.19, 4, 12), mat(skin, SK)); fo.position.y = -0.135; el.add(fo);
@@ -352,9 +367,10 @@ export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], 
   root.scale.setScalar(scale);
   const blob = footBlob(root);
   const api = Object.assign(root, {
-    body, headG, arms, legs, blob,
+    body, upper, headG, arms, legs, blob,
     // 팔 자세 (라디안): raise 옆으로(0 내림, π/2 수평, π 만세), fwd 앞으로, bend 팔꿈치
-    arm(k, raise = 0, fwd = 0, bend = 0) { const a = arms[k]; a.sh.rotation.set(-fwd, 0, raise * a.s); a.el.rotation.set(-bend, 0, 0); },
+    // side: 팔꿈치를 몸 정면에서 보이는 면(옆)으로 굽힘(라디안, + = 바깥쪽). 선수 자세 따라 하기에 씀
+    arm(k, raise = 0, fwd = 0, bend = 0, side = 0) { const a = arms[k]; a.sh.rotation.set(-fwd, 0, raise * a.s); a.el.rotation.set(-bend, 0, side * a.s); },
     leg(k, lift = 0) { legs[k].rotation.x = -lift; },
     // 손에 물건 들기 (라켓 등). 손 기준 위치·회전은 물건 쪽에서 맞춤
     hold(k, obj) { arms[k].hand.add(obj); return obj; },
@@ -367,10 +383,12 @@ export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], 
         const side = k ? 1 : -1;                                   // 화면에서 바깥쪽 (왼팔은 왼쪽)
         const ux = (pts[e].x - pts[s].x) * side, uy = pts[e].y - pts[s].y;
         const raise = Math.atan2(ux, uy);                          // 0 아래, π/2 옆, π 위
-        const a1 = Math.atan2(pts[e].y - pts[s].y, pts[e].x - pts[s].x), a2 = Math.atan2(pts[w].y - pts[e].y, pts[w].x - pts[e].x);
-        const bend = Math.abs(((a2 - a1 + Math.PI * 3) % (Math.PI * 2)) - Math.PI);   // 0 = 쭉 편 팔
+        // 팔꿈치: 화면에 보이는 그대로(몸 정면 면에서) 굽힘. 앞으로 굽히면 뒤에서 볼 때 아래팔이 안 보여 이상해짐
+        const fore = Math.atan2((pts[w].x - pts[e].x) * side, pts[w].y - pts[e].y);
+        let rel = fore - raise; rel = Math.atan2(Math.sin(rel), Math.cos(rel));
         const kk = back ? k : 1 - k;                               // 뒤에서 보면 같은 팔, 마주 보면 거울처럼
-        api.arm(kk, Math.max(-0.3, Math.min(3.1, raise)), 0, Math.max(0, Math.min(2.4, bend)));
+        const r = Math.max(-0.3, Math.min(3.1, raise));
+        api.arm(kk, r, 0.12, 0.18, Math.max(-2.5, Math.min(2.5, rel + (raise - r))));
       });
       // 몸 기울기
       const tilt = Math.atan2((pts[12].y - pts[11].y), (pts[12].x - pts[11].x));
@@ -380,6 +398,7 @@ export function avatar({ shirt = "#ff6b6b", pants = "#3b5bdb", skin = SKINS[0], 
     idle(t) { body.position.y = Math.abs(Math.sin(t * 2)) * 0.02; },
   });
   api.arm(0, 0.15, 0, 0.2); api.arm(1, 0.15, 0, 0.2);
+  AVS.add(api);
   return api;
 }
 // 상대·같은 편 캐릭터를 다양하게
