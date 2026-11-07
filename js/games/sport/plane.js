@@ -1,14 +1,15 @@
 // 비행기 (스포츠 리조트의 섬 비행처럼 3D): 빨간 프로펠러 비행기 뒤에서 열대 섬 바다 위를 날기
 // 두 팔을 날개처럼 벌리고 날기. 기울이기 = 두 손 높이 차이(오른손이 낮으면 오른쪽으로), 날갯짓(두 손을 함께 아래로 휘두르기) = 위로 올라감
 // 팔을 벌리고 있으면 천천히 내려가고(활공), 팔을 내리면 빨리 내려감. 풍선·링을 모으고 섬 산에 부딪히지 않기
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=68";
-import { sfx } from "../../audio.js?v=68";
-import { stage, THREE, sea, palm, cloud, box, ball as sphere, cyl, mesh, avatar } from "./kit3d.js?v=68";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=69";
+import { sfx } from "../../audio.js?v=69";
+import { stage, THREE, sea, palm, cloud, box, ball as sphere, cyl, mesh, avatar } from "./kit3d.js?v=69";
 
 const ZRATE = 0.33;          // 물체가 멀리서 다가오는 속도(1/초, 보통)
 const FLAP = 2.0;            // 날갯짓으로 인정하는 손 아래 방향 속도(어깨너비/초)
 const XS = 7, AS = 16, Y0 = 1.2, ZD = 90;   // 게임 좌표 → 3D(m): 옆 1 = 7m, 높이 1 = 16m, 앞 1 = 90m
 
+const SHOW_RIVAL = false;   // 2인에서 상대 비행기를 내 화면에도 보일지 (가족 의견: 각자 자기 것만)
 const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 목표 쪽으로 기울이고 날갯짓
 // 코스: 풍선·링·섬을 '출발점에서의 거리(cz)'에 놓음. 2인은 같은 코스를 함께 씀. 링을 통과하면 잠깐 빨라짐(경주)
 const rng = seed => () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
@@ -83,7 +84,7 @@ export default {
     const two = env.mode === 2;
     const C = two ? (shared = shared || makeCourse()) : makeCourse();
     const done = new Set(), live = new Map();
-    let rival = null;                              // 2인: 상대 비행기 (상대 정보가 처음 들어오면 만듦)
+    let rival = null;                              // 2인: 상대 비행기 — 각 화면엔 그 화면 선수만 보이게 해서 만들지 않음(SHOW_RIVAL)
     if (two && env.color) tint(plane, env.color);
     function show(it) {
       const o = { ...it, src: it, z: it.cz - dist, done: false };
@@ -168,7 +169,7 @@ export default {
         // 상대 비행기: 같은 하늘에서 앞뒤·옆·높이 그대로
         if (two) {
           const Rv = C.racers[1 - env.slot];
-          if (Rv && !rival) { rival = airplane(Rv.color); if (Rv.color) tint(rival, Rv.color); scene.add(rival); }
+          if (SHOW_RIVAL && Rv && !rival) { rival = airplane(Rv.color); if (Rv.color) tint(rival, Rv.color); scene.add(rival); }
           if (rival) {
             rival.visible = Rv.dist - dist < 1.3 && (Rv.dist - dist) * ZD > -2;   // 뒤처진 상대는 카메라 앞을 가리지 않게 숨김
             rival.position.copy(wpos(Rv.X, Rv.A, Rv.dist - dist)); rival.rotation.set(clamp((Rv.vA || 0) * 1.4, -0.35, 0.45), -(Rv.steer || 0) * 0.15, Rv.roll || 0);

@@ -1,9 +1,9 @@
 // 줄넘기 (스포츠 리조트의 몸풀기, 3D): 바닷가 광장에서 양쪽 친구가 줄을 돌려 주고, 줄이 발밑을 지나는 순간 점프!
 // 내 캐릭터는 정면에서 보이고, 내가 뛰면 같이 뜀. 2인은 긴 줄 하나를 둘이 나란히 넘으며 넘은 횟수로 대결(걸려도 줄은 계속 돎)
 // 점프 판정: 두 발목이 서 있을 때보다 함께 올라가면 (발목이 안 보이면 어깨가 확 올라가면) 공중에 있는 것으로 봄
-import { burst, popup, outlinedText, rr, FONT } from "../../fx.js?v=68";
-import { sfx } from "../../audio.js?v=68";
-import { stage, THREE, ground, sea, box, cyl, ball as sphere, mesh, palm, cloud, playerAvatar, randomAvatar } from "./kit3d.js?v=68";
+import { burst, popup, outlinedText, rr, FONT } from "../../fx.js?v=69";
+import { sfx } from "../../audio.js?v=69";
+import { stage, THREE, ground, sea, box, cyl, ball as sphere, mesh, palm, cloud, playerAvatar, randomAvatar } from "./kit3d.js?v=69";
 
 const PERIOD0 = 1.5, PERIOD_MIN = 0.85;   // 줄 한 바퀴 시간(초): 처음 → 가장 빠를 때
 const WIN = 0.16;                          // 줄이 발밑을 지날 때 앞뒤로 이만큼(초) 안에 공중이면 성공
@@ -32,7 +32,6 @@ const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search 
 // 줄(rope) 상태: 1인은 이 화면만, 2인은 두 화면이 같은 줄을 씀(0번 화면이 돌림). 두 선수가 나란히 같은 줄을 넘음
 let shared = null;
 const newRope = D => ({ phase: 0.35, period: PERIOD0 / Math.max(0.8, D.speed), pause: 1.2, players: [null, null] });
-const JX = 0.95;   // 2인: 두 선수 자리 (1P 왼쪽 -JX, 2P 오른쪽 +JX)
 
 export default {
   id: "jumprope", title: "줄넘기", icon: "🪢", sec: 45, cursor: "", cat: "sport", bg: "#ffd1dc", desc: "줄이 발밑에 올 때 점프 · 2인 대결", scene3d: true,
@@ -44,12 +43,12 @@ export default {
     let R;
     if (versus) { if (!shared) shared = newRope(D); R = shared; } else R = newRope(D);
     const P = R.players[slot] = { name: env.name || `${slot + 1}P`, color: env.color || "#ff6b6b", count: 0, streak: 0, best: 0, caught: 0, air: 0, tracker: env.tracker, flash: 0 };
-    const hxR = versus ? HX + 1.1 : HX, myX = versus ? (slot ? JX : -JX) : 0;
+    // 2인도 각 화면에는 그 화면의 선수 한 명만 (줄 박자는 두 화면이 같음)
+    const hxR = HX, myX = 0;
     const st = stage(env, { outfit: "jumprope", fov: 46, sky: ["#4fb3f6", "#e3f6ff"], shadowSize: 8 });
     const { scene, camera } = st;
     const water = plaza(scene), rp = rope(scene, hxR);
     const me = playerAvatar(env); me.scale.setScalar(1.2); me.position.set(myX, 0, 0.3); scene.add(me);
-    let rival = null;   // 2인: 옆에서 같이 뛰는 상대 (상대 색, 상대 팔 동작 따라 함)
     const turners = [randomAvatar(3), randomAvatar(0)];
     turners.forEach((a, i) => { const s = i ? 1 : -1; a.scale.setScalar(1.15); a.position.set(s * (hxR + 0.5), 0, 0.3); a.rotation.y = -s * Math.PI / 2; scene.add(a); });
     let air = 0, airV = 0, wasAir = false, cheer = 0, t = 0, lastAir = -9, judged = false, myFloor = Math.floor(R.phase), endShown = false;
@@ -90,10 +89,7 @@ export default {
         wasAir = up;
         airV -= 14 * dt; air = Math.max(0, air + airV * dt); if (air === 0) airV = Math.max(0, airV);
         P.air = air; me.position.y = air; pose(me, air, env.tracker.pts);
-        // 2인: 상대 캐릭터 (상대가 들어오면 만들고, 상대의 점프 높이·팔 동작을 그대로)
-        const O = opp();
-        if (O && !rival) { rival = playerAvatar({ color: O.color, name: O.name }); rival.scale.setScalar(1.2); rival.position.set(-myX, 0, 0.3); scene.add(rival); }
-        if (O && rival) { rival.position.y = O.air; pose(rival, O.air, O.tracker && O.tracker.pts); }
+
         // 돌리는 친구들: 손이 줄과 같이 원을 그림
         const ang = (R.phase % 1) * Math.PI * 2;
         turners.forEach((a, i) => { a.arm(1 - i, 0.25, 1.15 + Math.cos(ang) * 0.4, 0.5 + Math.sin(ang) * 0.3); a.arm(i, 0.15, 0.2, 0.4); a.idle(t + i); a.body.position.y += cheer ? Math.abs(Math.sin(t * 12)) * 0.08 : 0; });
@@ -120,6 +116,7 @@ export default {
           }
         }
         // 2인: 끝나기 직전 승자 발표
+        const O = versus ? opp() : null;
         if (versus && O && !endShown && env.progress() > 0.985) {
           endShown = true;
           const win = P.count > O.count, tie = P.count === O.count;
@@ -129,7 +126,7 @@ export default {
       },
       draw(ctx) {
         rp.rotation.x = (R.phase % 1) * Math.PI * 2;
-        const aspect = z.w / v.H, cd = versus ? Math.max(7.4, 9.6 / aspect) : Math.max(7.4, 8.4 / aspect);   // 좁은 화면이면 뒤로 물러남
+        const aspect = z.w / v.H, cd = Math.max(7.4, 8.4 / aspect);   // 좁은 화면이면 뒤로 물러남
         camera.position.set(myX * 0.8, 2.1, cd); camera.lookAt(myX * 0.8, 1.05, 0);
         st.draw(ctx);
         const U = v.U, ph = R.phase % 1;
