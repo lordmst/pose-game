@@ -1,7 +1,7 @@
 // 제자리 달리기 경주: 무릎을 번갈아 들 때마다 앞으로. 토끼보다 먼저 결승선에!
 // 무릎이 안 보이면 팔을 앞뒤로 흔드는 동작(양손이 번갈아 오르내림)으로 대신 셈
-import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=66";
-import { sfx } from "../audio.js?v=66";
+import { burst, popup, outlinedText, rr, FONT } from "../fx.js?v=67";
+import { sfx } from "../audio.js?v=67";
 
 const LAP = 100;          // 한 바퀴 거리(m)
 const STEP_M = 2;         // 한 걸음에 가는 거리(m)

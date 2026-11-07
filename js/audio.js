@@ -21,7 +21,22 @@ export function wake() {
 }
 export const audioState = () => (ac ? ac.state : "none");
 // 화면을 만질 때마다 깨움 (아이패드는 사용자가 만진 순간에만 소리를 켤 수 있음)
-for (const ev of ["pointerdown", "touchend", "keydown"]) window.addEventListener(ev, () => { if (ac) wake(); else unlock(); }, { capture: true, passive: true });
+// 비밀번호 화면(#gate)을 누르는 동안은 만들지 않음: 아이패드는 글자 입력칸을 누를 때 만든 소리 장치가 멈춘 채로 남을 수 있어서,
+// 비밀번호 화면이 닫힌 뒤 처음 누를 때 만듦. click도 받음(아이패드에서 가장 확실한 '사용자가 누름' 신호)
+for (const ev of ["pointerdown", "touchend", "click", "keydown"]) window.addEventListener(ev, () => {
+  if (document.getElementById("gate")) return;
+  if (!ac) { unlock(); return; }
+  if (ev === "click" && ac.state !== "running") revive(); else wake();
+}, { capture: true, passive: true });
+// 눌러도 깨어나지 않는 소리 장치는 새로 만듦 (아이패드에서 드물게 멈춘 채로 남는 경우). 음악이 나오는 중엔 하지 않음
+let stuck = 0;
+function revive() {
+  wake();
+  if (++stuck < 2 || bgmGain || rGain || pGain || rTimer) return;
+  stuck = 0;
+  try { ac.onstatechange = null; ac.close(); } catch (e) {}
+  ac = null; unlock();
+}
 document.addEventListener("visibilitychange", () => { if (!document.hidden) wake(); });
 export function unlock() {
   try {
@@ -31,7 +46,7 @@ export function unlock() {
       sfxBus = ac.createGain(); sfxBus.connect(master);        // 효과음 크기
       musicBus = ac.createGain(); musicBus.connect(master);    // 배경음악·리듬 반주 크기
       applyVolumes();
-      ac.onstatechange = () => { if (ac.state !== "running") setTimeout(wake, 450); };
+      ac.onstatechange = () => { if (ac.state === "running") stuck = 0; else setTimeout(wake, 450); };
       const len = ac.sampleRate; noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
       const d = noiseBuf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     }

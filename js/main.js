@@ -1,32 +1,32 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=66";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=66";
-import * as R from "./records.js?v=66";
-import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=66";
-import copy from "./games/copy.js?v=66";
-import math from "./games/math.js?v=66";
-import ice from "./games/ice.js?v=66";
-import star from "./games/star.js?v=66";
-import fruit from "./games/fruit.js?v=66";
-import mole from "./games/mole.js?v=66";
-import wall from "./games/wall.js?v=66";
-import rhythm from "./games/rhythm.js?v=66";
-import goalie from "./games/goalie.js?v=66";
-import { hangul, english } from "./games/word.js?v=66";
-import clockGame from "./games/clock.js?v=66";
-import run from "./games/run.js?v=66";
-import simon from "./games/simon.js?v=66";
-import conductor from "./games/conductor.js?v=66";
-import SPORTS from "./games/sports.js?v=66";
-import LEARN from "./games/learn.js?v=66";
-import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=66";
-import * as FUN from "./fun.js?v=66";
-import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=66";
-import { makeShots, saveShot } from "./photo.js?v=66";
-import { DIFFS, diffOf } from "./difficulty.js?v=66";
-import { startDemo } from "./demo.js?v=66";
-import * as REAL from "./realmusic.js?v=66";
-import * as FACE from "./face.js?v=66";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=67";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=67";
+import * as R from "./records.js?v=67";
+import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=67";
+import copy from "./games/copy.js?v=67";
+import math from "./games/math.js?v=67";
+import ice from "./games/ice.js?v=67";
+import star from "./games/star.js?v=67";
+import fruit from "./games/fruit.js?v=67";
+import mole from "./games/mole.js?v=67";
+import wall from "./games/wall.js?v=67";
+import rhythm from "./games/rhythm.js?v=67";
+import goalie from "./games/goalie.js?v=67";
+import { hangul, english } from "./games/word.js?v=67";
+import clockGame from "./games/clock.js?v=67";
+import run from "./games/run.js?v=67";
+import simon from "./games/simon.js?v=67";
+import conductor from "./games/conductor.js?v=67";
+import SPORTS from "./games/sports.js?v=67";
+import LEARN from "./games/learn.js?v=67";
+import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=67";
+import * as FUN from "./fun.js?v=67";
+import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=67";
+import { makeShots, saveShot } from "./photo.js?v=67";
+import { DIFFS, diffOf } from "./difficulty.js?v=67";
+import { startDemo } from "./demo.js?v=67";
+import * as REAL from "./realmusic.js?v=67";
+import * as FACE from "./face.js?v=67";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -130,7 +130,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 66;
+const APP_V = 67;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -256,8 +256,8 @@ function renderSlots() {
   if (sel.length === 2) {
     const m = document.createElement("div"); m.className = "moderow";
     m.innerHTML = `<span>둘이 할 때</span><span class="seg"><button type="button" class="${coopSel ? "" : "on"}" data-m="vs">대결</button><button type="button" class="${coopSel ? "on" : ""}" data-m="co">협동</button></span>` +
-      (coopSel ? "" : `<label><input type="checkbox" id="optCatch" ${catchOn ? "checked" : ""}>뒤진 쪽 따라잡기 보너스</label>`) +
-      `<small>${coopSel ? "협동: 두 사람 점수를 합쳐 팀 기록에 도전해요. 둘이 함께 터치하는 우정 별, 함께 통과하면 보너스" : "대결: 점수가 크게 벌어지면 뒤진 쪽에 '역전 찬스'(점수 1.5배, 황금 목표물 더 자주)"}</small>`;
+      (coopSel ? "" : `<label><input type="checkbox" id="optCatch" ${catchOn ? "checked" : ""}>지고 있는 사람에게 역전 찬스 주기</label>`) +
+      `<small>${coopSel ? "협동: 두 사람 점수를 합쳐 팀 기록에 도전해요. 둘이 함께 터치하는 우정 별, 함께 통과하면 보너스" : "대결: 점수 차이가 크게 나면 지고 있는 사람에게 '역전 찬스'(점수 1.5배, 황금 목표물 더 자주)"}</small>`;
     m.querySelectorAll(".seg button").forEach(b => { b.onclick = () => { coopSel = b.dataset.m === "co"; saveSettings(); renderSlots(); }; });
     const cb = m.querySelector("#optCatch"); if (cb) cb.onchange = () => { catchOn = cb.checked; saveSettings(); };
     rows.appendChild(m);
@@ -612,7 +612,7 @@ function makeEnv(i) {
     pip: (c, x, y, w, h, mark) => drawPip(c, i, x, y, w, h, mark),
     // 재미 장치
     rush: () => (fun && fun.rush ? fun.rush : null),            // 돌발 이벤트 중이면 { name, t }
-    catchUp: () => !!(fun && fun.catch[i]),                       // 대결에서 뒤진 쪽 '역전 찬스'
+    catchUp: () => !!(fun && fun.catch[i]),                       // 대결에서 지고 있는 사람 '역전 찬스'
     stat: (k, n = 1) => { p.stats[k] = (p.stats[k] || 0) + n; if (k === "gold") shots.want(slots.length === 2 ? `${p.name} 대박!` : "대박!", 3); },   // 미션용 집계
     moment: (label, pri, delay) => shots.want(label, pri, delay),   // 웃긴 순간 사진
     rand: coop ? FUN.seeded(fun.seed) : null,                     // 협동: 두 선수가 같은 순서
@@ -649,7 +649,7 @@ function funTick(dt) {
   // 사진: 특별한 일이 없어도 두 장은 찍어 둠
   if (fun.snaps === 0 && prog > 0.3) { fun.snaps = 1; shots.want("열심히!", 0); }
   if (fun.snaps === 1 && prog > 0.72) { fun.snaps = 2; shots.want("집중!", 0); }
-  // 따라잡기: 대결에서 점수 차가 크면 뒤진 쪽 점수 1.5배 + 황금 목표물 더 자주 (차이가 절반으로 줄면 끝)
+  // 따라잡기: 대결에서 점수 차가 크면 지고 있는 사람 점수 1.5배 + 황금 목표물 더 자주 (차이가 절반으로 줄면 끝)
   if (players.length === 2 && !coop && catchOn && prog > 0.15) {
     const a = players[0].score, b = players[1].score, gap = Math.abs(a - b), th = Math.max(10, Math.max(a, b) * 0.3), lo = a < b ? 0 : 1;
     [0, 1].forEach(k => {
@@ -1044,8 +1044,8 @@ function renderMissions() {
     list.appendChild(card);
   }
   const lg = FUN.league(), champ = FUN.lastWeekChampion(), P = FUN.LEAGUE_PTS;
-  $("#leagueBox").innerHTML = `<h4>이번 주 가족 리그</h4>` +
-    (lg.length ? lg.map((x, i) => `<div class="lrow"><b class="rk">${i === 0 ? "👑" : i + 1}</b><span>${esc(x.name)}</span><b>${x.pts}점</b><small>${x.play}판 · 1등 ${x.win} · 최고 기록 ${x.best} · 도장 ${x.stamp}</small></div>`).join("") : '<p class="rule">이번 주 기록이 아직 없어요</p>') +
+  $("#leagueBox").innerHTML = `<h4>이번 주 가족 리그 <small>(점수 높은 순)</small></h4>` +
+    (lg.length ? lg.map((x, i) => `<div class="lrow${i < 3 ? " top" + (i + 1) : ""}"><b class="rk">${i + 1}<small>위</small></b><span>${i === 0 ? "👑 " : ""}${esc(x.name)}</span><b>${x.pts}<small>점</small></b><small>${x.play}판 했어요 · 게임 1등 ${x.win}번 · 내 최고 기록 깬 횟수 ${x.best}번 · 미션 도장 ${x.stamp}개</small></div>`).join("") : '<p class="rule">이번 주 기록이 아직 없어요</p>') +
     (champ ? `<p class="champ">지난주 챔피언: 👑 ${esc(champ.name)} (${champ.pts}점)</p>` : "") +
     `<p class="rule">한 판 ${P.play}점 · 이번 주 게임별 1등 ${P.win}점 · 개인 최고 기록 경신 ${P.best}점 · 미션 도장 ${P.stamp}점. 월요일마다 새로 시작해요</p>`;
 }
@@ -1073,12 +1073,15 @@ function renderRanking() {
   } else rankView.level = null;
   const key = R.gameKey(RG.recId || rankView.game, rankView.level);
   const ol = $("#rankList"); ol.innerHTML = "";
+  $("#rankTitle").textContent = `${RG.icon} ${RG.title}${SUB ? " · " + SUB[rankView.level] : ""} 순위 (점수 높은 순)`;
   const list = R.ranking(key, 10);
   if (!list.length) ol.innerHTML = '<li class="empty">아직 기록이 없어요. 첫 기록의 주인공이 되어 보세요!</li>';
   list.forEach((r, i) => {
     const d = new Date(r.at), li = document.createElement("li");
     if (justSaved.has(r.id)) li.className = "new";
-    li.innerHTML = `<b class="rk">${i + 1}</b><span class="nm">${esc(r.name)}</span><span class="sc">${r.score}점</span><span class="df ${r.diff || "normal"}">${diffOf(r.diff).label}</span><span class="dt">${d.getMonth() + 1}/${d.getDate()}${r.mode === 2 ? " · 대결" : ""}</span>`;
+    const meta = [diffOf(r.diff).label, `${d.getMonth() + 1}월 ${d.getDate()}일`, r.mode === 2 ? "대결" : "혼자"].join(" · ");
+    li.className = (li.className ? li.className + " " : "") + (i < 3 ? "top" + (i + 1) : "");
+    li.innerHTML = `<b class="rk">${i + 1}<small>위</small></b><span class="who"><b class="nm">${esc(r.name)}</b><small class="meta"><i class="df ${r.diff || "normal"}"></i>${esc(meta)}</small></span><span class="sc">${r.score}<small>점</small></span>`;
     ol.appendChild(li);
   });
   // 선수별 모은 아이템

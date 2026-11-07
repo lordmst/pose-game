@@ -2,7 +2,7 @@
 // 화면 아래 띠(band)에만 투명 배경으로 그려서, 위쪽의 카메라 화면(지휘하는 내 모습)은 그대로 보임
 // 6개 파트: 0 바이올린 · 1 트럼펫 · 2 클라리넷 · 3 팀파니 · 4 첼로 · 5 호른 (지휘자 게임의 SECTIONS 순서와 같음)
 // 박에 맞춰 연주 동작, 지휘를 잘할수록(energy) 크게, 왼손 터치로 부른 파트는 조명을 받고 신나게 연주
-import { stage, THREE, box, cyl, ball, mesh, randomAvatar } from "./sport/kit3d.js?v=66";
+import { stage, THREE, box, cyl, ball, mesh, randomAvatar } from "./sport/kit3d.js?v=67";
 
 const WOOD = "#8a4b22", GOLD = "#e8b923", BLACK = "#222222", COPPER = "#c06a2b";
 // 파트 자리: 줄(0 앞 ~ 2 뒤), 부채꼴 각도(도, 왼쪽 -), 사람 수

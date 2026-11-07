@@ -410,3 +410,34 @@ body:not(.live) .overlay { background: var(--y); }
 .rscore .rnum { background: linear-gradient(180deg, color-mix(in srgb, var(--c) 55%, #fff), var(--c) 55%, color-mix(in srgb, var(--c) 70%, #000)); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 .5vmin 0 rgba(0, 0, 0, .15)); }
 .res h2 { text-shadow: 0 .4vmin 0 rgba(0, 0, 0, .12); }
 @media (prefers-reduced-motion: reduce) { .rcol, .rcol.rwin { animation: none; } }
+
+/* v67: 순위 줄 — 등수 배지 · 이름(크게) + 난이도·날짜·혼자/대결(작게) · 점수 */
+.ranklistbox { flex: 2 1 380px; min-width: 0; display: flex; flex-direction: column; gap: .8vmin; }
+.ranklistbox h4 { font-weight: 400; font-size: clamp(15px, 2.4vmin, 22px); opacity: .8; }
+.ranklistbox #rankList { flex: none; }
+#rankList li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 2vmin; padding: 1vmin 2.2vmin; }
+#rankList li.empty { display: flex; }
+#rankList .rk { width: auto; min-width: 2.6em; height: 2.6em; border-radius: 50%; display: flex; align-items: baseline; justify-content: center; padding-top: .55em; box-sizing: border-box; background: #f1ebe0; color: #6b5a4a; font-size: .9em; }
+#rankList .rk small { font-size: .65em; margin-left: 1px; }
+#rankList li.top1 .rk { background: linear-gradient(180deg, #ffe680, #f2b800); color: #5a4300; }
+#rankList li.top2 .rk { background: linear-gradient(180deg, #f4f6f8, #b8c0c8); color: #3c4650; }
+#rankList li.top3 .rk { background: linear-gradient(180deg, #f6c79a, #c8834a); color: #4a2a10; }
+#rankList .who { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+#rankList .who .nm { font-weight: 400; font-size: 1.1em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#rankList .meta { font-size: .66em; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 5px; }
+#rankList .meta .df { width: 9px; height: 9px; border-radius: 50%; padding: 0; flex: none; }
+#rankList .sc { font-size: 1.35em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#rankList .sc small { font-size: .55em; margin-left: 2px; opacity: .8; }
+#rankBests h4, #rankItems h4 { white-space: nowrap; font-size: .9em; }
+#rankBests, #rankItems { flex: 1 1 170px; }
+/* v67: 리그 등수 배지 · 리그 점수 · 미션 카드 두 줄 배치(한 화면에) */
+.lrow { grid-template-columns: 2.4em 1fr auto; padding: .6vmin 0; }
+.lrow .rk { width: 2.2em; height: 2.2em; border-radius: 50%; display: flex; align-items: baseline; justify-content: center; padding-top: .5em; box-sizing: border-box; background: #f1ebe0; color: #6b5a4a; font-size: .85em; }
+.lrow .rk small { font-size: .65em; }
+.lrow.top1 .rk { background: linear-gradient(180deg, #ffe680, #f2b800); color: #5a4300; }
+.lrow.top2 .rk { background: linear-gradient(180deg, #f4f6f8, #b8c0c8); color: #3c4650; }
+.lrow.top3 .rk { background: linear-gradient(180deg, #f6c79a, #c8834a); color: #4a2a10; }
+.lrow > b:last-of-type small { font-size: .6em; margin-left: 1px; }
+.lrow > small { grid-column: 2 / 4; }
+@media (min-width: 900px) { .mislist { display: grid; grid-template-columns: 1fr 1fr; align-items: start; } }
+@media (min-width: 900px) { .mislist { flex: 5 1 560px; } }

@@ -1,8 +1,8 @@
 // 과일 자르기: 아래에서 던져 올린 과일을 손을 빠르게 휘둘러 자르기. 폭탄은 피하기
-import { burst, popup, shake, FONT, rnd } from "../fx.js?v=66";
-import { sfx } from "../audio.js?v=66";
-import { bodyRef } from "./bodyref.js?v=66";
-import { makeBoss } from "./boss.js?v=66";
+import { burst, popup, shake, FONT, rnd } from "../fx.js?v=67";
+import { sfx } from "../audio.js?v=67";
+import { bodyRef } from "./bodyref.js?v=67";
+import { makeBoss } from "./boss.js?v=67";
 
 const SLICE = 3.0;   // 자르기로 인정하는 손 속도 (어깨너비/초)
 const FRUITS = [["🍉", "#ff4d6d"], ["🍎", "#e8323c"], ["🍊", "#ff9a1f"], ["🍌", "#ffd23d"], ["🍍", "#f5c400"], ["🍓", "#e8323c"], ["🥝", "#8bc34a"], ["🍑", "#ffa07a"], ["🍇", "#8e44ad"], ["🥥", "#f0f0f0"], ["🍒", "#d0102a"], ["🍐", "#b5d334"], ["🥭", "#ffb020"], ["🍋", "#ffe14d"], ["🫐", "#4a5bd6"], ["🍈", "#c6e27a"]];
