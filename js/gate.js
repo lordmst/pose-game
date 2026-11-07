@@ -17,7 +17,7 @@
     "#gate .box.shake{animation:gshake .35s}@keyframes gshake{25%{transform:translateX(-10px)}50%{transform:translateX(10px)}75%{transform:translateX(-6px)}}";
   document.head.appendChild(css);
   var g = document.createElement("div"); g.id = "gate";
-  g.innerHTML = '<form class="box" autocomplete="off"><h1>몸으로 놀기</h1><p>비밀번호를 넣어 주세요</p>' +
+  g.innerHTML = '<form class="box" autocomplete="off"><h1>우리집 게임</h1><p>비밀번호를 넣어 주세요</p>' +
     '<div class="row"><input id="gatePw" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" aria-label="비밀번호"><button type="button" class="eye">보기</button></div>' +
     '<button type="submit" class="go">들어가기</button><div class="msg" role="alert"></div></form>';
   function mount() { document.body.appendChild(g); var i = g.querySelector("input"); setTimeout(function () { i.focus(); }, 50); }

@@ -1,7 +1,7 @@
 // OX 퀴즈 (한 게임 10문제): 문제를 듣고 맞으면 왼쪽(O), 틀리면 오른쪽(X)으로 몸을 옮기기. 시간이 끝났을 때 몸(어깨 가운데)이 있는 쪽으로 판정
 // 상식·안전·수 비교·덧셈·영어 단어·한글 문제를 섞어서, 한 게임에서는 같은 문제가 다시 나오지 않음. 2인은 같은 문제를 동시에 풂
-import { burst, popup, rr, outlinedText, FONT } from "../../fx.js?v=65";
-import { sfx } from "../../audio.js?v=65";
+import { burst, popup, rr, outlinedText, FONT } from "../../fx.js?v=66";
+import { sfx } from "../../audio.js?v=66";
 
 const ANSWER = 5.0;    // 답을 고르는 시간(초, 보통)
 const SHOW = 2.4;      // 정답·설명 보여 주는 시간(초)
