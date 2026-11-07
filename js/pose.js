@@ -1,5 +1,5 @@
 // 카메라 · 자세 인식 · 선수별 손 추적
-import { faceDist } from "./face.js?v=69";
+import { faceDist } from "./face.js?v=70";
 const MP_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const VIS = 0.5;                 // 이 값보다 신뢰도가 낮은 관절은 '안 보임'으로 처리
@@ -446,6 +446,8 @@ class SimDetector {
   }
   detect(video, ts) {
     const t = ts / 1000; let L = this.people.map(p => p.landmarks(t)); if (this.op) L.unshift(this.op.landmarks(t));
+    // &absent=1 : 선수가 아직 화면에 들어오지 않은 상태로 둠 (자리 잡기 화면 점검용)
+    if (/absent=1/.test(location.search)) L = [];
     // &intruder=1 : 시작 8초 뒤 크게(가까이) 보이는 사람이 오른쪽에서 왼쪽으로 선수 앞을 지나감. 지나가는 동안 선수는 가려져 안 보임
     if (/intruder=1/.test(location.search)) {
       if (this.t00 == null) this.t00 = t;

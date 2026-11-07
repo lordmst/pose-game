@@ -1,32 +1,32 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=69";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=69";
-import * as R from "./records.js?v=69";
-import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=69";
-import copy from "./games/copy.js?v=69";
-import math from "./games/math.js?v=69";
-import ice from "./games/ice.js?v=69";
-import star from "./games/star.js?v=69";
-import fruit from "./games/fruit.js?v=69";
-import mole from "./games/mole.js?v=69";
-import wall from "./games/wall.js?v=69";
-import rhythm from "./games/rhythm.js?v=69";
-import goalie from "./games/goalie.js?v=69";
-import { hangul, english } from "./games/word.js?v=69";
-import clockGame from "./games/clock.js?v=69";
-import run from "./games/run.js?v=69";
-import simon from "./games/simon.js?v=69";
-import conductor from "./games/conductor.js?v=69";
-import SPORTS from "./games/sports.js?v=69";
-import LEARN from "./games/learn.js?v=69";
-import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=69";
-import * as FUN from "./fun.js?v=69";
-import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=69";
-import { makeShots, saveShot } from "./photo.js?v=69";
-import { DIFFS, diffOf } from "./difficulty.js?v=69";
-import { startDemo } from "./demo.js?v=69";
-import * as REAL from "./realmusic.js?v=69";
-import * as FACE from "./face.js?v=69";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=70";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=70";
+import * as R from "./records.js?v=70";
+import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=70";
+import copy from "./games/copy.js?v=70";
+import math from "./games/math.js?v=70";
+import ice from "./games/ice.js?v=70";
+import star from "./games/star.js?v=70";
+import fruit from "./games/fruit.js?v=70";
+import mole from "./games/mole.js?v=70";
+import wall from "./games/wall.js?v=70";
+import rhythm from "./games/rhythm.js?v=70";
+import goalie from "./games/goalie.js?v=70";
+import { hangul, english } from "./games/word.js?v=70";
+import clockGame from "./games/clock.js?v=70";
+import run from "./games/run.js?v=70";
+import simon from "./games/simon.js?v=70";
+import conductor from "./games/conductor.js?v=70";
+import SPORTS from "./games/sports.js?v=70";
+import LEARN from "./games/learn.js?v=70";
+import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=70";
+import * as FUN from "./fun.js?v=70";
+import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=70";
+import { makeShots, saveShot } from "./photo.js?v=70";
+import { DIFFS, diffOf } from "./difficulty.js?v=70";
+import { startDemo } from "./demo.js?v=70";
+import * as REAL from "./realmusic.js?v=70";
+import * as FACE from "./face.js?v=70";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -130,7 +130,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 69;
+const APP_V = 70;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -1150,7 +1150,7 @@ function tick(dt) {
     // 준비 완료: 윗몸(얼굴·두 어깨)만 보이면 됨. 한 손 연습은 5초 넘게 안 되면 건너뜀 (멈춰서 시작이 안 되는 일 방지)
     const ok = trackers.map((tr, i) => upperOk(tr) && (!g.oneHand || tutOk[i] || noShape || presentT[i] > TUT_SKIP));
     // 선수가 다 인식되면 안내 창을 작게 접어 화면(내 몸)이 잘 보이게
-    $(".readybar").classList.toggle("compact", trackers.every(tr => tr.present) && (!g.oneHand || ok.every(Boolean)));   // 한 손 연습 안내는 끝날 때까지 보여 줌
+    $(".readybar").classList.toggle("compact", trackers.every(tr => tr.present));   // 선수가 다 인식되면 안내판을 작게 (한 손 연습은 한 줄 안내만 남김)
     const minShown = !g.oneHand || lastT - readyStartT >= TUT_MIN_SHOW;
     if (g.oneHand) {
       const note = noShape ? "멀어서 손 모양이 잘 안 보여요. 이럴 땐 허리 위로 들어 올린 손으로 골라요" : "";
@@ -1260,15 +1260,22 @@ function drawSkeletons() {
     outlinedText(ctx, open ? "선수는 만세!" : "제외", Math.max(view.U * 0.2, Math.min(view.W - view.U * 0.2, o.cx)), y, view.U * 0.04, "#eee", "#555");
   }
 }
+let readyBottom = 0;
 function drawReady() {
   const { H, U } = view;
+  // 서 있을 자리 틀은 위 안내판 아래부터 (안내판에 머리·든 손이 가리지 않게)
+  const rb = $(".readybar").getBoundingClientRect(); readyBottom = rb.bottom;
+  const y = Math.min(H * 0.5, Math.max(H * 0.2, rb.bottom + U * 0.025)), h = H * 0.9 - y;
   zones.forEach((z, i) => {
     const ok = upperOk(trackers[i]);
-    const w = Math.min(z.w * 0.6, U * 0.75), x = z.cx - w / 2, y = H * 0.3, h = H * 0.66;
+    const w = Math.min(z.w * 0.78, U * 0.75), x = z.cx - w / 2;
     ctx.save(); ctx.setLineDash(ok ? [] : [U * 0.025, U * 0.018]); ctx.lineWidth = U * 0.01;
     ctx.strokeStyle = ok ? "#2fd36b" : "rgba(255,255,255,.85)"; rr(ctx, x, y, w, h, U * 0.04); ctx.stroke(); ctx.restore();
-    const label = ok ? "좋아요!" : trackers[i] && trackers[i].present ? "얼굴과 어깨가 보이게" : `${i + 1}P ${slots[i].name} 여기서 만세!`;
-    outlinedText(ctx, label, z.cx, y + h - U * 0.05, U * 0.05, "#fff", ok ? "#1d8f47" : slots[i].color);
+    const lines = ok ? ["좋아요!"] : trackers[i] && trackers[i].present ? ["얼굴과 어깨가", "보이게"] : [`${i + 1}P ${slots[i].name}`, "여기서 만세!"];
+    // 구역 너비에 맞춰 글자 크기를 줄임 (2인에서 옆 사람 글자와 겹치지 않게)
+    ctx.font = `${Math.round(U * 0.05)}px ${FONT}`;
+    const fs = U * 0.05 * Math.min(1, ...lines.map(t => w * 0.95 / Math.max(1, ctx.measureText(t).width)));
+    lines.forEach((t, k) => outlinedText(ctx, t, z.cx, y + h - U * 0.035 - (lines.length - 1 - k) * fs * 1.15, fs, "#fff", ok ? "#1d8f47" : slots[i].color));
   });
 }
 function drawLost() {
