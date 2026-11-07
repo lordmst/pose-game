@@ -1,8 +1,8 @@
 // 얼음 깨기: 손을 빠르게 휘둘러 얼음을 치면 맞은 자리에서 금이 가고, 다 깨면 안에 든 물건이 튀어나옴
-import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=67";
-import { sfx } from "../audio.js?v=67";
-import { bodyRef } from "./bodyref.js?v=67";
-import { makeBoss } from "./boss.js?v=67";
+import { burst, popup, shake, rr, FONT, rnd, clamp } from "../fx.js?v=68";
+import { sfx } from "../audio.js?v=68";
+import { bodyRef } from "./bodyref.js?v=68";
+import { makeBoss } from "./boss.js?v=68";
 
 const PUNCH = 3.0;      // 타격으로 인정하는 손 속도 (어깨너비/초). 낮출수록 쉬움
 const STRONG = 7.5;     // 이 이상이면 강펀치(2타)

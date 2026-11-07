@@ -1,9 +1,9 @@
 // 골프 (스포츠 리조트처럼 3D 섬 코스): 내 캐릭터 뒤에서 깃발 쪽을 봄. 두 손을 모아 머리 위로 들어 올렸다가(백스윙) 빠르게 아래로 휘두르면 샷
 // 손을 높이 들수록 멀리 날아감 → 깃발까지 거리에 맞게 높이를 조절. 휘두를 때 손이 옆으로 쏠리면 공이 휨, 바람도 있음
 // 카메라가 날아가는 공을 따라감. 그린 위에 올라가면 퍼팅(작게 들었다가 툭)으로 컵에 넣기. 오른쪽 위에 작은 지도
-import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=67";
-import { sfx } from "../../audio.js?v=67";
-import { stage, THREE, box, ball as sphere, mesh, cyl, tree, palm, cloud, sea, playerAvatar } from "./kit3d.js?v=67";
+import { burst, popup, outlinedText, rr, clamp } from "../../fx.js?v=68";
+import { sfx } from "../../audio.js?v=68";
+import { stage, THREE, box, ball as sphere, mesh, cyl, tree, palm, cloud, sea, playerAvatar } from "./kit3d.js?v=68";
 
 const SWING = 2.2;                         // 다운스윙으로 인정하는 손 속도(어깨너비/초)
 const MAX_DIST = 170;                      // 끝까지 들었을 때 날아가는 거리(m)

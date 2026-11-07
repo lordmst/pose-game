@@ -1,5 +1,5 @@
 // 카메라 · 자세 인식 · 선수별 손 추적
-import { faceDist } from "./face.js?v=67";
+import { faceDist } from "./face.js?v=68";
 const MP_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const VIS = 0.5;                 // 이 값보다 신뢰도가 낮은 관절은 '안 보임'으로 처리
