@@ -1,32 +1,32 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=70";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=70";
-import * as R from "./records.js?v=70";
-import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=70";
-import copy from "./games/copy.js?v=70";
-import math from "./games/math.js?v=70";
-import ice from "./games/ice.js?v=70";
-import star from "./games/star.js?v=70";
-import fruit from "./games/fruit.js?v=70";
-import mole from "./games/mole.js?v=70";
-import wall from "./games/wall.js?v=70";
-import rhythm from "./games/rhythm.js?v=70";
-import goalie from "./games/goalie.js?v=70";
-import { hangul, english } from "./games/word.js?v=70";
-import clockGame from "./games/clock.js?v=70";
-import run from "./games/run.js?v=70";
-import simon from "./games/simon.js?v=70";
-import conductor from "./games/conductor.js?v=70";
-import SPORTS from "./games/sports.js?v=70";
-import LEARN from "./games/learn.js?v=70";
-import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=70";
-import * as FUN from "./fun.js?v=70";
-import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=70";
-import { makeShots, saveShot } from "./photo.js?v=70";
-import { DIFFS, diffOf } from "./difficulty.js?v=70";
-import { startDemo } from "./demo.js?v=70";
-import * as REAL from "./realmusic.js?v=70";
-import * as FACE from "./face.js?v=70";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=71";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=71";
+import * as R from "./records.js?v=71";
+import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=71";
+import copy from "./games/copy.js?v=71";
+import math from "./games/math.js?v=71";
+import ice from "./games/ice.js?v=71";
+import star from "./games/star.js?v=71";
+import fruit from "./games/fruit.js?v=71";
+import mole from "./games/mole.js?v=71";
+import wall from "./games/wall.js?v=71";
+import rhythm from "./games/rhythm.js?v=71";
+import goalie from "./games/goalie.js?v=71";
+import { hangul, english } from "./games/word.js?v=71";
+import clockGame from "./games/clock.js?v=71";
+import run from "./games/run.js?v=71";
+import simon from "./games/simon.js?v=71";
+import conductor from "./games/conductor.js?v=71";
+import SPORTS from "./games/sports.js?v=71";
+import LEARN from "./games/learn.js?v=71";
+import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=71";
+import * as FUN from "./fun.js?v=71";
+import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=71";
+import { makeShots, saveShot } from "./photo.js?v=71";
+import { DIFFS, diffOf } from "./difficulty.js?v=71";
+import { startDemo } from "./demo.js?v=71";
+import * as REAL from "./realmusic.js?v=71";
+import * as FACE from "./face.js?v=71";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -130,7 +130,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 70;
+const APP_V = 71;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {

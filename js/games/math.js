@@ -1,6 +1,6 @@
 // 수학 풍선: 정답이 적힌 풍선을 손으로 터뜨리기 (손을 잠깐 대거나 빠르게 치면 터짐)
-import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=70";
-import { sfx } from "../audio.js?v=70";
+import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=71";
+import { sfx } from "../audio.js?v=71";
 
 export const LEVELS = { add10: "덧셈 (10까지)", addsub20: "덧셈·뺄셈 (20까지)", mul: "구구단", mix: "사칙 혼합" };
 const OPS = { add10: ["+"], addsub20: ["+", "-"], mul: ["×"], mix: ["+", "-", "×", "÷"] };
@@ -12,20 +12,52 @@ const RISE_START = 0.12;   // 시작할 때 상승 속도 (초당 화면 높이 
 const RISE_END = 0.2;      // 끝날 무렵 속도 — 약 5초
 const josa = n => [0, 1, 3, 6, 7, 8].includes(n % 10) ? "은" : "는";   // 영·일·삼·육·칠·팔 → 은
 
+/* ---------- 문제 만들기 ----------
+   같은 문제가 자꾸 나오지 않게: 단계마다 나올 수 있는 문제를 모두 만들어 섞은 '문제 주머니'에서 하나씩 꺼냄.
+   주머니가 빌 때까지는 같은 문제가 다시 나오지 않고, 남은 주머니는 기기에 기억해서 다음 판에 이어서 꺼냄.
+   문제 모양도 두 가지: '3 + 5 = ?'(답 구하기)와 가끔 '3 + ? = 8'(빈칸 구하기, 덧셈·뺄셈 단계) */
+function allProblems(level) {
+  const L = [];
+  if (level === "add10") { for (let a = 1; a <= 9; a++) for (let b = 1; a + b <= 10; b++) L.push([a, "+", b]); }
+  if (level === "addsub20" || level === "mix") {
+    for (let a = 1; a <= 19; a++) for (let b = 1; a + b <= 20; b++) if (level === "addsub20" || a + b > 10) L.push([a, "+", b]);
+    for (let a = 3; a <= 20; a++) for (let b = 1; b < a; b++) if (level === "addsub20" || a > 10) L.push([a, "-", b]);
+  }
+  if (level === "mul" || level === "mix") for (let a = 2; a <= 9; a++) for (let b = 2; b <= 9; b++) L.push([a, "×", b]);
+  if (level === "mix") for (let b = 2; b <= 9; b++) for (let c = 2; c <= 9; c++) L.push([b * c, "÷", b]);
+  return L;
+}
+const calc = (a, op, b) => op === "+" ? a + b : op === "-" ? a - b : op === "×" ? a * b : a / b;
+const bag = {}, recent = [];
+function drawFromBag(level) {
+  const key = "posegame.mathbag." + level, all = allProblems(level), id = p => p.join("");
+  if (!bag[level]) { try { bag[level] = JSON.parse(localStorage.getItem(key) || "null"); } catch (e) {} }
+  let left = (bag[level] || []).filter(k => all.some(p => id(p) === k));
+  if (!left.length) left = shuffle(all.map(id));
+  // 바로 앞 몇 문제와 답이 같거나 숫자 두 개가 같은(순서만 바뀐) 문제는 뒤로 미룸
+  let i = left.findIndex(k => { const p = all.find(q => id(q) === k), ans = calc(...p); return !recent.some(r => r.ans === ans || (r.a === p[2] && r.b === p[0] && r.op === p[1])); });
+  if (i < 0) i = 0;
+  const k = left.splice(i, 1)[0];
+  bag[level] = left; try { localStorage.setItem(key, JSON.stringify(left)); } catch (e) {}
+  const p = all.find(q => id(q) === k);
+  recent.push({ a: p[0], op: p[1], b: p[2], ans: calc(...p) }); if (recent.length > 3) recent.shift();
+  return p;
+}
 export function makeProblem(level) {
-  const ops = OPS[level] || OPS.add10, op = ops[rnd(0, ops.length - 1)];
-  let a, b, ans;
-  if (op === "+") { const max = level === "add10" ? 10 : 20; a = rnd(1, max - 1); b = rnd(1, max - a); ans = a + b; }
-  else if (op === "-") { a = rnd(3, 20); b = rnd(1, a - 1); ans = a - b; }
-  else if (op === "×") { a = rnd(2, 9); b = rnd(2, 9); ans = a * b; }
-  else { b = rnd(2, 9); ans = rnd(2, 9); a = b * ans; }
+  if (!LEVELS[level]) level = "add10";
+  const [a, op, b] = drawFromBag(level), c = calc(a, op, b);
+  // 덧셈·뺄셈은 열 문제 중 셋쯤 빈칸 문제 (□에 들어갈 수 구하기)
+  const blank = (op === "+" || op === "-") && Math.random() < 0.3;
+  const ans = blank ? b : c;
   // 오답: 아이들이 자주 하는 실수(연산 혼동, 한 단 차이)를 섞음
-  const trap = op === "×" ? [a * (b + 1), a * (b - 1), a + b] : op === "-" ? [a + b] : op === "+" ? [Math.abs(a - b)] : [ans + b];
+  const trap = blank ? [c, op === "+" ? c + a : a + c] : op === "×" ? [a * (b + 1), a * (b - 1), a + b] : op === "-" ? [a + b] : op === "+" ? [Math.abs(a - b)] : [c + b];
   const pick = new Set();
   const t = shuffle(trap.filter(w => w !== ans && w >= 0));
   if (t.length && Math.random() < 0.6) pick.add(t[0]);
-  for (const w of shuffle([ans + 1, ans - 1, ans + 2, ans - 2, ans + 3])) { if (pick.size >= 2) break; if (w !== ans && w >= 0) pick.add(w); }
-  return { ans, text: `${a} ${op} ${b} = ?`, speech: `${a} ${READ[op]} ${b}${josa(b)}?`, choices: shuffle([ans, ...pick]) };
+  for (const w of shuffle([ans + 1, ans - 1, ans + 2, ans - 2, ans + 3, ans - 3])) { if (pick.size >= 2) break; if (w !== ans && w >= 0) pick.add(w); }
+  const text = blank ? `${a} ${op} ? = ${c}` : `${a} ${op} ${b} = ?`;
+  const speech = blank ? `${a} ${READ[op]} 몇은 ${c}${josa(c) === "은" ? "이에요" : "예요"}?` : `${a} ${READ[op]} ${b}${josa(b)}?`;
+  return { ans, text, speech, choices: shuffle([ans, ...pick]) };
 }
 
 export function drawBalloon(ctx, x, y, r, color, val, alpha, hover) {
