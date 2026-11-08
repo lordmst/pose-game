@@ -466,3 +466,12 @@ body:not(.live) .overlay { background: var(--y); }
 /* v74: 오류 알림 (화면 아래 작게) — 사진 찍어 보내면 원인 찾기 쉬움 */
 #errBox { position: fixed; left: 50%; bottom: max(8px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 99998; max-width: 94vw; padding: 6px 12px; border-radius: 10px; background: rgba(120, 0, 0, .85); color: #fff; font: 12px/1.35 -apple-system, sans-serif; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #errBox[hidden] { display: none; }
+
+/* v77: 비행 기록기 표시 (왼쪽 아래 작게). 점은 CSS 애니메이션 — JS가 멈춰도 돎 */
+#diag { position: fixed; left: 6px; bottom: max(6px, env(safe-area-inset-bottom)); z-index: 99997; display: flex; align-items: center; gap: 6px; font: 11px/1 ui-monospace, Menlo, monospace; color: #fff; background: rgba(0, 0, 0, .45); padding: 3px 7px; border-radius: 8px; pointer-events: none; }
+#diag .dot { width: 8px; height: 8px; border-radius: 50%; background: #4cd964; animation: diagspin 1s linear infinite; transform-origin: 8px 4px; }
+@keyframes diagspin { to { transform: rotate(360deg); } }
+.diagprev { margin-top: 1.2vmin; font-size: clamp(11px, 1.6vmin, 14px); color: #555; background: #f3f3f3; border-radius: 1.2vmin; padding: .8vmin 1.4vmin; text-align: left; }
+.diagprev.bad { background: #fff0f0; color: #a33; }
+.diagprev .mini { font-size: inherit; padding: .2vmin 1vmin; margin-left: .6vmin; border-radius: 1vmin; border: 1px solid currentColor; background: transparent; color: inherit; }
+.diagprev pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; max-height: 40vh; overflow: auto; margin: .6vmin 0 0; color: #333; }

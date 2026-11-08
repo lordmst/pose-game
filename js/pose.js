@@ -1,5 +1,5 @@
 // 카메라 · 자세 인식 · 선수별 손 추적
-import { faceDist } from "./face.js?v=76";
+import { faceDist } from "./face.js?v=77";
 // 점검용: ?mpbase=/경로 &posemodel=/경로 로 엔진·모델을 다른 곳(로컬 복사본)에서 받음
 const QS = (() => { try { return new URLSearchParams(location.search); } catch (e) { return new URLSearchParams(); } })();
 const MP_URL = QS.get("mpbase") || "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
@@ -23,11 +23,12 @@ export async function createDetector() {
     runningMode: "VIDEO", numPoses: 3,      // 선수 2명 + 조작하는 사람 1명까지 감지해야 선수를 놓치지 않음
     minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.5,
   });
-  let lm;
-  try { lm = await PoseLandmarker.createFromOptions(vision, opts("GPU")); }
-  catch (e) { lm = await PoseLandmarker.createFromOptions(vision, opts("CPU")); }
+  let lm, delegate = /cpu=1/.test(location.search) ? "CPU" : "GPU";   // ?cpu=1: 그래픽 칩 없이 인식 (멈춤 원인 가리기용)
+  try { lm = await PoseLandmarker.createFromOptions(vision, opts(delegate)); }
+  catch (e) { delegate = "CPU"; lm = await PoseLandmarker.createFromOptions(vision, opts("CPU")); }
   let lastTs = 0;
   return {
+    delegate,
     detect(video, ts) {
       if (ts <= lastTs) ts = lastTs + 1;
       lastTs = ts;

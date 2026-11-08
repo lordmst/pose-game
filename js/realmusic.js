@@ -1,6 +1,7 @@
 // 지휘자 게임용 실제 연주 녹음: 위키미디어 공용(Wikimedia Commons)의 퍼블릭 도메인·CC 녹음을 브라우저가 직접 받아 옴
 // 받아 온 녹음에서 박자(비트) 시각을 찾아(박자 추적) 지휘 화살표를 맞춤. 못 받으면 합성음으로 대신함
-import { audioOut, clock, settings } from "./audio.js?v=76";
+import { audioOut, clock, settings } from "./audio.js?v=77";
+import { crumb } from "./diag.js?v=77";
 
 // 녹음 목록: 파일 이름, 저장 위치(md5 앞 두 자리), 연주자, 이용 허락, 박자표(한 마디 박 수: 2·3·4)
 export const RECORDINGS = {
@@ -66,8 +67,8 @@ export function load(id) {
       try {
         const res = await fetch(u, { mode: "cors" });
         if (!res.ok) continue;
-        const buf = await res.arrayBuffer();
-        let buffer = await new Promise((ok, no) => out.ac.decodeAudioData(buf, ok, no));
+        const buf = await res.arrayBuffer(); crumb(`bgm decode ${id} ${(buf.byteLength / 1e6).toFixed(1)}MB…`);
+        let buffer = await new Promise((ok, no) => out.ac.decodeAudioData(buf, ok, no)); crumb(`bgm decoded ${id}`);
         const from = RECORDINGS[id].from || 0;
         if (from > 0 && from < buffer.duration - 5) {   // 유명한 부분부터 (예: 윌리엄 텔 피날레)
           const s0 = Math.floor(from * buffer.sampleRate), cut = out.ac.createBuffer(buffer.numberOfChannels, buffer.length - s0, buffer.sampleRate);

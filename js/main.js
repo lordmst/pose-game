@@ -1,33 +1,34 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=76";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=76";
-import * as audioMod from "./audio.js?v=76";
-import * as R from "./records.js?v=76";
-import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=76";
-import copy from "./games/copy.js?v=76";
-import math from "./games/math.js?v=76";
-import ice from "./games/ice.js?v=76";
-import star from "./games/star.js?v=76";
-import fruit from "./games/fruit.js?v=76";
-import mole from "./games/mole.js?v=76";
-import wall from "./games/wall.js?v=76";
-import rhythm from "./games/rhythm.js?v=76";
-import goalie from "./games/goalie.js?v=76";
-import { hangul, english } from "./games/word.js?v=76";
-import clockGame from "./games/clock.js?v=76";
-import run from "./games/run.js?v=76";
-import simon from "./games/simon.js?v=76";
-import conductor from "./games/conductor.js?v=76";
-import SPORTS from "./games/sports.js?v=76";
-import LEARN from "./games/learn.js?v=76";
-import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=76";
-import * as FUN from "./fun.js?v=76";
-import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=76";
-import { makeShots, saveShot } from "./photo.js?v=76";
-import { DIFFS, diffOf } from "./difficulty.js?v=76";
-import { startDemo } from "./demo.js?v=76";
-import * as REAL from "./realmusic.js?v=76";
-import * as FACE from "./face.js?v=76";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=77";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=77";
+import * as audioMod from "./audio.js?v=77";
+import * as R from "./records.js?v=77";
+import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=77";
+import copy from "./games/copy.js?v=77";
+import math from "./games/math.js?v=77";
+import ice from "./games/ice.js?v=77";
+import star from "./games/star.js?v=77";
+import fruit from "./games/fruit.js?v=77";
+import mole from "./games/mole.js?v=77";
+import wall from "./games/wall.js?v=77";
+import rhythm from "./games/rhythm.js?v=77";
+import goalie from "./games/goalie.js?v=77";
+import { hangul, english } from "./games/word.js?v=77";
+import clockGame from "./games/clock.js?v=77";
+import run from "./games/run.js?v=77";
+import simon from "./games/simon.js?v=77";
+import conductor from "./games/conductor.js?v=77";
+import SPORTS from "./games/sports.js?v=77";
+import LEARN from "./games/learn.js?v=77";
+import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=77";
+import * as FUN from "./fun.js?v=77";
+import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=77";
+import { makeShots, saveShot } from "./photo.js?v=77";
+import { DIFFS, diffOf } from "./difficulty.js?v=77";
+import { startDemo } from "./demo.js?v=77";
+import * as REAL from "./realmusic.js?v=77";
+import * as DIAG from "./diag.js?v=77";
+import * as FACE from "./face.js?v=77";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -63,7 +64,7 @@ const zones = [];
 
 let detector = null;
 const detectorP = createDetector()
-  .then(d => { detector = d; if (state === "setup") setMsg("준비 완료! 선수를 고르고 시작하세요"); return d; })
+  .then(d => { detector = d; DIAG.info.det = d.delegate || "sim"; DIAG.crumb("detector " + DIAG.info.det); if (state === "setup") setMsg("준비 완료! 선수를 고르고 시작하세요"); return d; })
   .catch(e => { setMsg("게임 엔진을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.", true); console.error(e); throw e; });
 detectorP.catch(() => {});
 // 손 모양(편 손/주먹) 판정기: 몸 인식이 준비된 뒤 이어서 불러옴. 실패해도 게임은 '들어 올린 손' 방식으로 동작
@@ -139,7 +140,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 76;
+const APP_V = 77;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -159,6 +160,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) chec
 /* ---------- 화면 전환 ---------- */
 const SCREENS = { setup: "scr-setup", select: "scr-select", song: "scr-song", demo: "scr-demo", ready: "scr-ready", result: "scr-result", ranking: "scr-ranking", party: "scr-party", mission: "scr-mission" };
 function setState(s) {
+  DIAG.crumb(`state ${state}→${s} ${gameId || ""}`);
   state = s;
   $$(".screen").forEach(el => el.classList.toggle("on", el.id === SCREENS[s]));
   const inGame = s === "countdown" || s === "play";
@@ -358,8 +360,8 @@ $("#btnStart").onclick = async () => {
     for (const gid of LEVEL_GAMES) { const G = GAMES[gid]; s[G.levelField] = propOf(id, G.levelField, firstLevel(G)); }
     return s;
   });
-  setMsg("카메라를 켜는 중...");
-  try { await cam.open(); }
+  setMsg("카메라를 켜는 중..."); DIAG.crumb("cam open…");
+  try { await cam.open(); DIAG.crumb(`cam ${video.videoWidth}x${video.videoHeight}`); }
   catch (e) { setMsg(cameraErrorText(e), true); return; }
   if (!detector) {
     setMsg("게임 엔진 불러오는 중... 잠시만 기다려 주세요");
@@ -452,6 +454,7 @@ $("#btnSetup").onclick = backToSetup;
 /* ---------- 3. 자리 잡기 ---------- */
 let readyCache = "";
 function chooseGame(id) {
+  DIAG.crumb("choose " + id);
   if (party && (party.done || party.list[party.i] !== id)) party = null;   // 파티 중에 다른 게임을 고르면 파티는 끝
   gameId = id;
   const grp = groupOf(id); if (grp) R.setSettings({ ...R.getSettings(), ["last_" + grp.id]: id });
@@ -1125,13 +1128,15 @@ function frame(now) {
   requestAnimationFrame(frame);
   // 화면이 한참 멈췄다 돌아오면(아이패드 그래픽이 붙잡힌 경우) 아래 빨간 띠에 알림 → 사진으로 원인 찾기
   if (prevFrameAt && now - prevFrameAt > 2500 && !document.hidden && ["select", "ready", "countdown", "play"].includes(state)) reportErr(new Error(`화면 ${((now - prevFrameAt) / 1000).toFixed(1)}초 멈춤`));
+  if (prevFrameAt && now - prevFrameAt > 300 && !document.hidden) DIAG.gap(now - prevFrameAt, `${state} ${gameId || ""}`);
   prevFrameAt = now;
   // 한 장면에서 오류가 나도 화면이 멈추지 않게: 계산과 그리기를 따로 감싸고, 오류는 화면 아래에 작게 알림
   try { frameBody(now); } catch (e) { reportErr(e); try { draw(lastT); } catch (e2) {} }
+  DIAG.frame(now, { state, game: gameId, camT: cam.sim ? lastT : (video.currentTime || 0) });
 }
 let errShown = -1e9;
 function reportErr(e) {
-  console.error(e);
+  console.error(e); DIAG.crumb("ERR " + ((e && e.message) || e));
   const now = performance.now(); if (now - errShown < 15000) return; errShown = now;
   const el = $("#errBox"); if (!el) return;
   el.textContent = `오류 v${APP_V} [${state}${gameId ? " " + gameId : ""}] ${(e && (e.message || e)) || ""} ${(e && e.stack ? e.stack.split("\n")[1] || "" : "").trim().slice(0, 90)}`;
@@ -1461,4 +1466,5 @@ renderSetup();
 setState("setup");
 if (detector) setMsg("준비 완료! 선수를 고르고 시작하세요"); else setMsg("게임 엔진 불러오는 중...");
 
+DIAG.init(APP_V).then(v => { DIAG.showPrev(v, $("#setupMsg").parentNode); if (v && v.kind !== "정상") console.warn("지난 실행", v); });
 window.__appReady = true;

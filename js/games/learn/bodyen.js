@@ -1,8 +1,8 @@
 // 영어 몸 이름 (Simon Says): 영어 지시를 듣고 몸으로 따라 하기. 머리·어깨·무릎 같은 몸 이름과 동작 단어를 영어로 익힘
 // 쉬움: 들리는 대로 다 따라 하기. 보통·어려움: "Simon says"가 붙은 지시만 따라 하기 (없으면 가만히)
-import { burst, popup, rr, outlinedText, FONT } from "../../fx.js?v=76";
-import { sfx } from "../../audio.js?v=76";
-import { COMMANDS as SIMON } from "../simon.js?v=76";
+import { burst, popup, rr, outlinedText, FONT } from "../../fx.js?v=77";
+import { sfx } from "../../audio.js?v=77";
+import { COMMANDS as SIMON } from "../simon.js?v=77";
 
 const ROUND = 4.6;       // 한 판(초): 듣고 따라 하는 시간 + 결과 보여 주는 시간
 const ANSWER = 3.3;      // 따라 하는 시간(초, 보통)
