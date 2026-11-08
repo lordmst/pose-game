@@ -1,5 +1,5 @@
 // 카메라 · 자세 인식 · 선수별 손 추적
-import { faceDist } from "./face.js?v=71";
+import { faceDist } from "./face.js?v=72";
 const MP_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const VIS = 0.5;                 // 이 값보다 신뢰도가 낮은 관절은 '안 보임'으로 처리
@@ -217,7 +217,6 @@ const FACE_KEEP = 5;      // 선수 얼굴을 이만큼 모아 평균으로 기�
 export class SigSampler {
   constructor() { this.cv = document.createElement("canvas"); this.ctx = this.cv.getContext("2d", { willReadFrequently: true }); this.data = null; }
   frame(video) {
-    this.data = null;
     const vw = video && (video.videoWidth || video.width), vh = video && (video.videoHeight || video.height);
     if (!vw || !vh) return;
     const w = 96, h = Math.max(1, Math.round(96 * vh / vw));

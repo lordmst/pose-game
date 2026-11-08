@@ -395,11 +395,11 @@ body:not(.live) .overlay { background: var(--y); }
 .card .ico::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 28%; background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, .1)); pointer-events: none; }
 .card .lbl { text-shadow: 0 2px 0 rgba(255, 255, 255, .9); }
 /* 가끔 카드 위로 빛이 스쳐 지나감 (카드마다 시간차) */
-.card::before { content: ""; position: absolute; top: -20%; bottom: -20%; width: 40%; left: -60%; background: linear-gradient(100deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .55), rgba(255, 255, 255, 0)); transform: skewX(-18deg); pointer-events: none; z-index: 2; animation: cardSheen 7s ease-in-out infinite; }
+.card::before { content: ""; position: absolute; top: -20%; bottom: -20%; width: 40%; left: 0; background: linear-gradient(100deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .55), rgba(255, 255, 255, 0)); transform: translateX(-150%) skewX(-18deg); pointer-events: none; z-index: 2; animation: cardSheen 7s ease-in-out infinite; will-change: transform; }
 .card:nth-child(3n+2)::before { animation-delay: 1.3s; }
 .card:nth-child(3n)::before { animation-delay: 2.6s; }
 .card.off::before { display: none; }
-@keyframes cardSheen { 0%, 78% { left: -60%; } 92%, 100% { left: 130%; } }
+@keyframes cardSheen { 0%, 78% { transform: translateX(-150%) skewX(-18deg); } 92%, 100% { transform: translateX(330%) skewX(-18deg); } }
 @media (prefers-reduced-motion: reduce) { .card::before { animation: none; display: none; } }
 .card[data-hand].hover { transform: scale(1.07) translateY(-.6vmin); }
 /* v61: 결과 화면 — 칸이 톡 튀어나오고, 이긴 쪽은 빛남, 점수는 선수 색 그러데이션 */

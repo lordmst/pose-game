@@ -1,32 +1,32 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=71";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=71";
-import * as R from "./records.js?v=71";
-import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=71";
-import copy from "./games/copy.js?v=71";
-import math from "./games/math.js?v=71";
-import ice from "./games/ice.js?v=71";
-import star from "./games/star.js?v=71";
-import fruit from "./games/fruit.js?v=71";
-import mole from "./games/mole.js?v=71";
-import wall from "./games/wall.js?v=71";
-import rhythm from "./games/rhythm.js?v=71";
-import goalie from "./games/goalie.js?v=71";
-import { hangul, english } from "./games/word.js?v=71";
-import clockGame from "./games/clock.js?v=71";
-import run from "./games/run.js?v=71";
-import simon from "./games/simon.js?v=71";
-import conductor from "./games/conductor.js?v=71";
-import SPORTS from "./games/sports.js?v=71";
-import LEARN from "./games/learn.js?v=71";
-import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=71";
-import * as FUN from "./fun.js?v=71";
-import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=71";
-import { makeShots, saveShot } from "./photo.js?v=71";
-import { DIFFS, diffOf } from "./difficulty.js?v=71";
-import { startDemo } from "./demo.js?v=71";
-import * as REAL from "./realmusic.js?v=71";
-import * as FACE from "./face.js?v=71";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=72";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=72";
+import * as R from "./records.js?v=72";
+import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=72";
+import copy from "./games/copy.js?v=72";
+import math from "./games/math.js?v=72";
+import ice from "./games/ice.js?v=72";
+import star from "./games/star.js?v=72";
+import fruit from "./games/fruit.js?v=72";
+import mole from "./games/mole.js?v=72";
+import wall from "./games/wall.js?v=72";
+import rhythm from "./games/rhythm.js?v=72";
+import goalie from "./games/goalie.js?v=72";
+import { hangul, english } from "./games/word.js?v=72";
+import clockGame from "./games/clock.js?v=72";
+import run from "./games/run.js?v=72";
+import simon from "./games/simon.js?v=72";
+import conductor from "./games/conductor.js?v=72";
+import SPORTS from "./games/sports.js?v=72";
+import LEARN from "./games/learn.js?v=72";
+import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=72";
+import * as FUN from "./fun.js?v=72";
+import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=72";
+import { makeShots, saveShot } from "./photo.js?v=72";
+import { DIFFS, diffOf } from "./difficulty.js?v=72";
+import { startDemo } from "./demo.js?v=72";
+import * as REAL from "./realmusic.js?v=72";
+import * as FACE from "./face.js?v=72";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -69,10 +69,15 @@ detectorP.catch(() => {});
 let handShape = null, shapeErr = 0, shapeSeenAt = -99, shapeRR = 0;
 detectorP.then(() => createHandShape()).then(h => { handShape = h; }).catch(e => console.warn("손 모양 인식 불러오기 실패", e));
 // 얼굴 확인(선수 인식 보조): 손 모양 다음에 불러옴. 실패해도 옷 색으로만 구분해서 동작
-detectorP.then(() => new Promise(r => setTimeout(r, 1500))).then(() => { if (!SIM) FACE.initFace(); });
-let faceT = 0;
+// 얼굴 엔진은 처음 준비할 때 그래픽을 잠깐 붙잡아서(아이패드에서 1~2초 멈춤), 만세·게임 중이 아닌 조용한 화면에서만 준비함
+const CALM = ["setup", "result", "ranking", "mission", "party"];
+function faceInitWhenCalm() { if (SIM) return; if (CALM.includes(state)) FACE.initFace(); else setTimeout(faceInitWhenCalm, 2000); }
+detectorP.then(() => new Promise(r => setTimeout(r, 1500))).then(faceInitWhenCalm);
+let faceT = 0, faceHold = 0, sampAt = -1e9;
 function faceTick(t) {
-  if (!assigner || !(SIM || FACE.faceReady()) || FACE.faceBusy() || t - faceT < 0.12) return;
+  // 얼굴 계산은 그래픽을 많이 써서 몸 인식과 겹치면 화면이 끊김 → 간격을 넉넉히, 만세로 막 인식된 직후 1초는 쉬고, 화면이 버벅이는 중엔 건너뜀
+  const gap = state === "play" ? 0.4 : 0.7;
+  if (!assigner || !(SIM || FACE.faceReady()) || FACE.faceBusy() || t - faceT < gap || t < faceHold || lastDt > 0.05) return;
   const need = assigner.faceNeeds(); if (!need.length) return;
   faceT = t; const n = need[0], a = assigner;
   FACE.describe(SIM ? null : video, n.r).then(d => { if (d && a === assigner) a.setFace(n.tid, d); });
@@ -130,7 +135,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 71;
+const APP_V = 72;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -1116,12 +1121,12 @@ function frame(now) {
   if (detector && cam.ready) { try { raws = detector.detect(video, now); } catch (e) { console.warn(e); } }
   if (!visSupported && raws.some(r => r.some(p => p.visibility > 0.01))) visSupported = true;
   const inGame = state === "play" || state === "countdown";
-  if (raws.length) sampler.frame(cam.sim ? null : video);   // 몸통 옷 색을 보려고 카메라 화면을 작게 한 장 읽음
+  if (raws.length && now - sampAt > 120) { sampAt = now; sampler.frame(cam.sim ? null : video); }   // 몸통 옷 색: 카메라 화면을 작게 한 장 읽음 (읽기가 무거워서 0.12초마다만)
   const as = assigner ? assigner.assign(raws, cam, view, dt, visSupported, !inGame, sampler) : [];
   faceTick(t);
   trackers.forEach((tr, i) => tr.update(as[i], cam, dt, t, visSupported));
   if (assigner) for (const i of assigner.takeFresh()) {
-    const L = assigner.locks[i];
+    const L = assigner.locks[i]; faceHold = t + 1.0;
     sfx.select(); popup(L.x, L.y, `${i + 1}P ${slots[i].name} 인식!`, { size: view.U * 0.06, color: "#fff", stroke: slots[i].color, life: 1.2 });
   }
   if (state === "select") updateSelBadges();
@@ -1260,11 +1265,13 @@ function drawSkeletons() {
     outlinedText(ctx, open ? "선수는 만세!" : "제외", Math.max(view.U * 0.2, Math.min(view.W - view.U * 0.2, o.cx)), y, view.U * 0.04, "#eee", "#555");
   }
 }
-let readyBottom = 0;
+let readyBottom = 0, readyRectAt = -1e9;
 function drawReady() {
   const { H, U } = view;
   // 서 있을 자리 틀은 위 안내판 아래부터 (안내판에 머리·든 손이 가리지 않게)
-  const rb = $(".readybar").getBoundingClientRect(); readyBottom = rb.bottom;
+  const nowMs = performance.now();
+  if (nowMs - readyRectAt > 300) { readyRectAt = nowMs; readyBottom = $(".readybar").getBoundingClientRect().bottom; }
+  const rb = { bottom: readyBottom };
   const y = Math.min(H * 0.5, Math.max(H * 0.2, rb.bottom + U * 0.025)), h = H * 0.9 - y;
   zones.forEach((z, i) => {
     const ok = upperOk(trackers[i]);
@@ -1295,7 +1302,7 @@ function drawLost() {
 function updateShapes(t) {
   trackers.forEach(tr => tr.hands.forEach(h => h.ageShape(t)));
   if (!handShape || !cam.ready || state === "setup") return;
-  if ((state === "play" || state === "countdown") && !GAMES[gameId].oneHand) return;   // 두 손 다 쓰는 게임은 판정 안 함(속도 확보)
+  if ((state === "play" || state === "countdown" || state === "ready") && !GAMES[gameId].oneHand) return;   // 두 손 다 쓰는 게임은 자리 잡기·게임 중 판정 안 함(속도 확보)
   const list = [];
   trackers.forEach(tr => { if (tr.raw) [0, 1].forEach(k => { if (tr.hands[k].vis) list.push([tr, k]); }); });
   if (!list.length) return;

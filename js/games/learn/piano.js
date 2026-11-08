@@ -1,8 +1,8 @@
 // 계이름 피아노: 화면 위쪽 건반 8개(도레미파솔라시도)를 손으로 눌러 소리 내기. 들려준 가락을 그대로 따라 치기(기억 놀이)
 // 맞히면 한 음씩 길어짐(최대 8음). 어려움은 동요 첫 소절(학교종·나비야·작은별·산토끼)을 앞에서부터 늘려 가며 익힘
 // 2인: 각자 자기 건반·자기 가락으로 따로 진행
-import { burst, popup, rr, outlinedText, FONT, rnd, shade } from "../../fx.js?v=71";
-import { sfx, settings } from "../../audio.js?v=71";
+import { burst, popup, rr, outlinedText, FONT, rnd, shade } from "../../fx.js?v=72";
+import { sfx, settings } from "../../audio.js?v=72";
 
 const KEYS = [
   ["도", "#ff5a5a", 60], ["레", "#ff9f43", 62], ["미", "#ffd23f", 64], ["파", "#37d67a", 65],
