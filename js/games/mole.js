@@ -1,8 +1,8 @@
 // 두더지 잡기: 구멍에서 튀어나온 두더지를 주먹으로 콩! 헬멧 두더지는 두 번 쳐야 함(2점), 토끼는 치면 안 됨
-import { burst, popup, shake, outlinedText, FONT, rnd, clamp, shade } from "../fx.js?v=72";
-import { sfx } from "../audio.js?v=72";
-import { bodyRef } from "./bodyref.js?v=72";
-import { makeBoss } from "./boss.js?v=72";
+import { burst, popup, shake, outlinedText, FONT, rnd, clamp, shade } from "../fx.js?v=73";
+import { sfx } from "../audio.js?v=73";
+import { bodyRef } from "./bodyref.js?v=73";
+import { makeBoss } from "./boss.js?v=73";
 
 const PUNCH = 3.0;          // 타격 인정 속도 (얼음 깨기와 같음)
 const POP = 0.15;           // 올라오고 내려가는 시간

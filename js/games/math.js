@@ -1,8 +1,8 @@
 // 수학 풍선: 정답이 적힌 풍선을 손으로 터뜨리기 (손을 잠깐 대거나 빠르게 치면 터짐)
-import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=72";
-import { sfx } from "../audio.js?v=72";
+import { burst, popup, rr, outlinedText, shade, rnd, shuffle } from "../fx.js?v=73";
+import { sfx } from "../audio.js?v=73";
 
-export const LEVELS = { add10: "덧셈 (10까지)", addsub20: "덧셈·뺄셈 (20까지)", mul: "구구단", mix: "사칙 혼합" };
+export const LEVELS = { add10: "덧셈 (10까지)", addsub20: "덧셈·뺄셈 (30까지)", mul: "구구단", mix: "사칙 혼합" };
 const OPS = { add10: ["+"], addsub20: ["+", "-"], mul: ["×"], mix: ["+", "-", "×", "÷"] };
 const READ = { "+": "더하기", "-": "빼기", "×": "곱하기", "÷": "나누기" };
 const COLORS = ["#ff5a5a", "#4da6ff", "#ffc233", "#a07bff", "#37d67a", "#ff8fd0"];
@@ -16,12 +16,14 @@ const josa = n => [0, 1, 3, 6, 7, 8].includes(n % 10) ? "은" : "는";   // 영�
    같은 문제가 자꾸 나오지 않게: 단계마다 나올 수 있는 문제를 모두 만들어 섞은 '문제 주머니'에서 하나씩 꺼냄.
    주머니가 빌 때까지는 같은 문제가 다시 나오지 않고, 남은 주머니는 기기에 기억해서 다음 판에 이어서 꺼냄.
    문제 모양도 두 가지: '3 + 5 = ?'(답 구하기)와 가끔 '3 + ? = 8'(빈칸 구하기, 덧셈·뺄셈 단계) */
+const MAX_AS = 30;   // 덧셈·뺄셈 범위
 function allProblems(level) {
   const L = [];
   if (level === "add10") { for (let a = 1; a <= 9; a++) for (let b = 1; a + b <= 10; b++) L.push([a, "+", b]); }
   if (level === "addsub20" || level === "mix") {
-    for (let a = 1; a <= 19; a++) for (let b = 1; a + b <= 20; b++) if (level === "addsub20" || a + b > 10) L.push([a, "+", b]);
-    for (let a = 3; a <= 20; a++) for (let b = 1; b < a; b++) if (level === "addsub20" || a > 10) L.push([a, "-", b]);
+    // 30까지 (단계 이름 'addsub20'은 예전 기록과 이어지게 그대로 둠)
+    for (let a = 1; a <= MAX_AS - 1; a++) for (let b = 1; a + b <= MAX_AS; b++) if (level === "addsub20" || a + b > 10) L.push([a, "+", b]);
+    for (let a = 3; a <= MAX_AS; a++) for (let b = 1; b < a; b++) if (level === "addsub20" || a > 10) L.push([a, "-", b]);
   }
   if (level === "mul" || level === "mix") for (let a = 2; a <= 9; a++) for (let b = 2; b <= 9; b++) L.push([a, "×", b]);
   if (level === "mix") for (let b = 2; b <= 9; b++) for (let c = 2; c <= 9; c++) L.push([b * c, "÷", b]);
@@ -30,7 +32,7 @@ function allProblems(level) {
 const calc = (a, op, b) => op === "+" ? a + b : op === "-" ? a - b : op === "×" ? a * b : a / b;
 const bag = {}, recent = [];
 function drawFromBag(level) {
-  const key = "posegame.mathbag." + level, all = allProblems(level), id = p => p.join("");
+  const key = "posegame.mathbag" + MAX_AS + "." + level, all = allProblems(level), id = p => p.join("");
   if (!bag[level]) { try { bag[level] = JSON.parse(localStorage.getItem(key) || "null"); } catch (e) {} }
   let left = (bag[level] || []).filter(k => all.some(p => id(p) === k));
   if (!left.length) left = shuffle(all.map(id));
