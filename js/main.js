@@ -1,33 +1,33 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=75";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=75";
-import * as audioMod from "./audio.js?v=75";
-import * as R from "./records.js?v=75";
-import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=75";
-import copy from "./games/copy.js?v=75";
-import math from "./games/math.js?v=75";
-import ice from "./games/ice.js?v=75";
-import star from "./games/star.js?v=75";
-import fruit from "./games/fruit.js?v=75";
-import mole from "./games/mole.js?v=75";
-import wall from "./games/wall.js?v=75";
-import rhythm from "./games/rhythm.js?v=75";
-import goalie from "./games/goalie.js?v=75";
-import { hangul, english } from "./games/word.js?v=75";
-import clockGame from "./games/clock.js?v=75";
-import run from "./games/run.js?v=75";
-import simon from "./games/simon.js?v=75";
-import conductor from "./games/conductor.js?v=75";
-import SPORTS from "./games/sports.js?v=75";
-import LEARN from "./games/learn.js?v=75";
-import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=75";
-import * as FUN from "./fun.js?v=75";
-import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=75";
-import { makeShots, saveShot } from "./photo.js?v=75";
-import { DIFFS, diffOf } from "./difficulty.js?v=75";
-import { startDemo } from "./demo.js?v=75";
-import * as REAL from "./realmusic.js?v=75";
-import * as FACE from "./face.js?v=75";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=76";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=76";
+import * as audioMod from "./audio.js?v=76";
+import * as R from "./records.js?v=76";
+import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=76";
+import copy from "./games/copy.js?v=76";
+import math from "./games/math.js?v=76";
+import ice from "./games/ice.js?v=76";
+import star from "./games/star.js?v=76";
+import fruit from "./games/fruit.js?v=76";
+import mole from "./games/mole.js?v=76";
+import wall from "./games/wall.js?v=76";
+import rhythm from "./games/rhythm.js?v=76";
+import goalie from "./games/goalie.js?v=76";
+import { hangul, english } from "./games/word.js?v=76";
+import clockGame from "./games/clock.js?v=76";
+import run from "./games/run.js?v=76";
+import simon from "./games/simon.js?v=76";
+import conductor from "./games/conductor.js?v=76";
+import SPORTS from "./games/sports.js?v=76";
+import LEARN from "./games/learn.js?v=76";
+import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=76";
+import * as FUN from "./fun.js?v=76";
+import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=76";
+import { makeShots, saveShot } from "./photo.js?v=76";
+import { DIFFS, diffOf } from "./difficulty.js?v=76";
+import { startDemo } from "./demo.js?v=76";
+import * as REAL from "./realmusic.js?v=76";
+import * as FACE from "./face.js?v=76";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -139,7 +139,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 75;
+const APP_V = 76;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -352,7 +352,7 @@ $("#btnReset").onclick = () => { if (confirm("모든 순위 기록을 지울까�
 $("#scr-setup").addEventListener("click", () => { if (state === "setup") setTimeout(() => REAL.prefetchBgm(), 50); });
 $("#btnStart").onclick = async () => {
   if (!sel.length) return;
-  unlock(); goFullscreen();
+  unlock();   // v76: 시작할 때 자동 전체 화면을 켜지 않음 (아이패드 Safari 전체 화면에서 멈춤 의심)
   slots = sel.map((id, i) => {
     const s = { id, profileId: profileOf(id), name: nameOf(id), diff: diffIdOf(id), color: SLOT_COLORS[i], wear: guestOf(id) ? null : propOf(id, "wear", null) };
     for (const gid of LEVEL_GAMES) { const G = GAMES[gid]; s[G.levelField] = propOf(id, G.levelField, firstLevel(G)); }
@@ -1137,10 +1137,29 @@ function reportErr(e) {
   el.textContent = `오류 v${APP_V} [${state}${gameId ? " " + gameId : ""}] ${(e && (e.message || e)) || ""} ${(e && e.stack ? e.stack.split("\n")[1] || "" : "").trim().slice(0, 90)}`;
   el.hidden = false; clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, 12000);
 }
+/* 카메라 감시 (v76): 영상이 1.5초 넘게 멈추면 다시 재생, 4초 넘게 멈추면 카메라를 다시 켬.
+   아이패드 Safari는 전체 화면 전환·알림 등으로 카메라 영상을 말없이 멈추는 경우가 있음 */
+let camT = -1, camStill = 0, camChk = 0, camFixing = false;
+function camWatch(now) {
+  if (cam.sim || !cam.stream || camFixing || now - camChk < 500) return; camChk = now;
+  if (document.hidden || !["select", "ready", "countdown", "play"].includes(state)) { camStill = 0; return; }
+  const ct = video.currentTime, tr = cam.stream.getVideoTracks()[0];
+  const dead = !tr || tr.readyState === "ended";
+  if (!dead && !video.paused && ct !== camT) { camT = ct; camStill = 0; return; }
+  camT = ct; if (!camStill) camStill = now;
+  const still = now - camStill;
+  if (still > 1500 && !dead) { const r = video.play(); if (r && r.catch) r.catch(() => {}); }
+  if (still > 4000 || (dead && still > 800)) {
+    camFixing = true; reportErr(new Error("카메라 영상 멈춤 → 다시 켜는 중"));
+    try { cam.close(); } catch (e) {}
+    cam.open().catch(e => reportErr(new Error("카메라 다시 켜기 실패: " + (e && e.message || e)))).finally(() => { camFixing = false; camStill = 0; });
+  }
+}
 function frameBody(now) {
   const t = now / 1000, dt = lastT ? Math.min(0.1, Math.max(0, t - lastT)) : 0.016; lastT = t; lastDt = dt;
   wake();   // 소리 장치가 멈췄으면 다시 깨움 (아이패드)
   cam.layout(view.W, view.H);
+  camWatch(now);
   let raws = [];
   if (detector && cam.ready) { try { raws = detector.detect(video, now); detErr = 0; } catch (e) { console.warn(e); if (++detErr === 30) reportErr(new Error("몸 인식 오류: " + (e && e.message || e))); } }
   if (!visSupported && raws.some(r => r.some(p => p.visibility > 0.01))) visSupported = true;
@@ -1424,6 +1443,7 @@ $("#btnFull").onclick = () => {
   if (fsEl()) { const x = document.exitFullscreen || document.webkitExitFullscreen; try { const r = x && x.call(document); if (r && r.catch) r.catch(() => {}); } catch (e) {} return; }
   if (!fsOk()) { toast("이 기기는 Safari 전체 화면이 안 돼요. 공유 버튼 → '홈 화면에 추가'로 만든 아이콘으로 열면 전체 화면이에요"); return; }
   goFullscreen();
+  toast("게임이 멈추면 전체 화면을 끄세요. 공유 → '홈 화면에 추가' 아이콘으로 열면 더 안정적이에요");
 };
 for (const ev of ["fullscreenchange", "webkitfullscreenchange"]) document.addEventListener(ev, () => { updateFullBtn(); setTimeout(() => window.dispatchEvent(new Event("resize")), 120); });
 updateFullBtn();
