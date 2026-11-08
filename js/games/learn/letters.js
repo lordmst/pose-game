@@ -1,8 +1,8 @@
 // 몸으로 글자: 화면에 나온 글자(한글 자모·영어 알파벳) 모양을 두 팔로 만들어 잠깐 버티면 성공
 // 화면은 거울이라 내 왼팔이 화면 왼쪽에 보임 → 글자 모양도 화면에 보이는 그대로 맞추면 됨
 // 몸 위에 '가야 할 팔 방향'을 반투명 선으로 그려 줌 (맞으면 초록). 2인은 같은 글자를 같은 때에
-import { burst, popup, rr, outlinedText, FONT } from "../../fx.js?v=74";
-import { sfx } from "../../audio.js?v=74";
+import { burst, popup, rr, outlinedText, FONT } from "../../fx.js?v=75";
+import { sfx } from "../../audio.js?v=75";
 
 const HOLD = 0.6;       // 모양을 이만큼(초) 유지하면 성공 (난이도 hold 배수)
 const ANSWER = 6.5;     // 한 글자 제한 시간(초, 난이도 poseTime 배수)

@@ -1,5 +1,5 @@
 // 모은 아이템 착용: 카메라 화면 속 내 머리·얼굴·목에 씌우고, '친구' 아이템은 어깨 옆에서 따라다님
-import { FONT } from "./fx.js?v=74";
+import { FONT } from "./fx.js?v=75";
 
 // slot: head 머리 · face 얼굴 · neck 목 · pet 친구. s: 머리(또는 어깨) 너비에 대한 크기, up: 눈에서 위로 올리는 정도
 export const WEAR = {

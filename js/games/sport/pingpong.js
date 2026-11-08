@@ -3,9 +3,9 @@
 // 몸을 좌우로 움직이면 캐릭터도 좌우로 움직임(옆걸음). 공이 오면 가야 할 자리를 점선으로 안내, 그 자리에서만 받아칠 수 있음
 // 캐릭터의 라켓 팔은 내 손을 그대로 따라 하고, 휘두르면 휘두른 방향·세기대로 포핸드·백핸드·스매시 동작. 공은 라켓에 맞는 자리에서 날아감
 // 1인: 컴퓨터 상대 · 2인: 한 탁구대에서 둘이 대결(각자 화면은 자기 쪽에서 봄). 11점 먼저(2점 차), 서브는 2점마다 바뀜
-import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=74";
-import { sfx } from "../../audio.js?v=74";
-import { stage, THREE, box, cyl, ball as sphere, mesh, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText, fan } from "./kit3d.js?v=74";
+import { burst, popup, shake, outlinedText, rr, clamp } from "../../fx.js?v=75";
+import { sfx } from "../../audio.js?v=75";
+import { stage, THREE, box, cyl, ball as sphere, mesh, playerAvatar, randomAvatar, racket, bodyMover, moveGuide, moveText, fan } from "./kit3d.js?v=75";
 
 const FLIGHT = 1.1;    // 공이 상대에게서 나에게 오는 시간(초, 보통)
 const SWING = 2.4;     // 받아치기로 인정하는 손 속도(어깨너비/초)
@@ -162,31 +162,53 @@ function followArms(av, pts, a) {
   });
   return true;
 }
-// 휘두르기: 세 장면(뒤로 뺌 → 공 맞는 순간 → 마무리)을 부드럽게 이어서. 값 = [몸 돌림, 오른팔 옆, 앞, 팔꿈치, 왼팔 옆, 앞, 팔꿈치]
-// 탁구는 팔꿈치를 굽힌 채 짧게 휘두름(팔을 쭉 펴고 크게 돌리면 어색함). 스매시만 위에서 앞 아래로 크게
+// 휘두르기: 세 장면(뒤로 뺌 → 공 맞는 순간 → 마무리). 값 = [몸 돌림, 오른팔 옆, 앞, 팔꿈치, 왼팔 옆, 앞, 팔꿈치, 라켓 면 돌림]
+// 탁구는 팔꿈치를 굽힌 채 몸통을 돌려 짧게 휘두름. 스매시만 위에서 앞 아래로 크게
 const STROKE = {
-  fore:  [[0.5, 0.6, -0.1, 1.25, 0.45, 0.85, 1.2], [0.0, 0.45, 1.05, 1.0, 0.4, 0.7, 1.1], [-0.42, 0.22, 1.85, 1.45, 0.35, 0.55, 1.0]],
-  back:  [[-0.22, -0.42, 0.75, 1.7, 0.35, 0.6, 1.0], [0.0, 0.08, 1.1, 1.1, 0.35, 0.6, 1.0], [0.14, 0.5, 1.35, 0.65, 0.35, 0.6, 1.0]],
-  smash: [[0.55, 0.75, 2.7, 1.4, 0.6, 1.6, 0.6], [0.1, 0.42, 1.85, 0.45, 0.4, 1.0, 0.8], [-0.38, 0.02, 0.95, 0.6, 0.3, 0.6, 1.0]],
+  fore:  [[0.6, 0.8, -0.05, 1.15, 0.5, 0.95, 1.25, 0.2], [0.0, 0.5, 0.95, 0.85, 0.42, 0.8, 1.15, 0], [-0.5, 0.35, 1.5, 1.65, 0.35, 0.6, 1.0, -0.15]],
+  back:  [[-0.42, -0.3, 0.8, 1.9, 0.38, 0.7, 1.1, Math.PI], [0.0, 0.15, 1.05, 1.05, 0.38, 0.7, 1.1, Math.PI], [0.32, 0.6, 1.3, 0.55, 0.38, 0.7, 1.1, Math.PI]],
+  smash: [[0.65, 0.8, 2.75, 1.45, 0.6, 1.7, 0.6, 0.25], [0.12, 0.42, 1.85, 0.45, 0.42, 1.05, 0.8, 0], [-0.45, 0.02, 0.9, 0.6, 0.3, 0.6, 1.0, -0.2]],
 };
-const IMPACT = 0.45;   // 휘두르는 시간 중 공 맞는 때(비율)
-export function stroke(av, T, fore, hard, amp) {
-  const dur = hard ? 0.22 : 0.3; if (T > dur + 0.2) return false;
-  const u = clamp(T / dur, 0, 1), K = STROKE[hard ? "smash" : fore ? "fore" : "back"], a = clamp(amp, 0.7, 1.15);
-  const [A, B, w] = u < IMPACT ? [K[0], K[1], u / IMPACT] : [K[1], K[2], (u - IMPACT) / (1 - IMPACT)], e = w * w * (3 - 2 * w);
-  const v = A.map((x, i) => x + (B[i] - x) * e);
-  av.body.rotation.x = 0.16 + (hard ? 0.18 * u : 0.05 * u);
-  av.body.rotation.y = v[0] * a;
-  av.arm(1, v[1], v[2], v[3]); av.arm(0, v[4], v[5], v[6]);
-  return true;
+// 준비 자세: 무릎 굽혀 낮게, 라켓은 배 앞, 다른 손도 앞으로 들어 균형
+const READY = [0, 0.3, 0.95, 1.4, 0.42, 0.8, 1.2, 0.1];
+const IMPACT = 0.42;   // 휘두르는 시간 중 공 맞는 때(비율)
+const lerpA = (A, B, e) => A.map((x, i) => x + (B[i] - x) * e);
+const easeIn = e => e * e, easeOut = e => 1 - Math.pow(1 - e, 3), easeIO = e => e * e * (3 - 2 * e);
+// 이번 장면의 목표 자세. 휘두르는 중 / 공이 오는 중(미리 뒤로 빼기) / 준비
+function strokeTarget(P, B, s) {
+  const dur = P.swingHard ? 0.3 : 0.38;
+  if (P.swingT < dur + 0.12) {
+    const K = STROKE[P.swingHard ? "smash" : P.swingDir < 0 ? "fore" : "back"], u = Math.min(1, P.swingT / dur);
+    return { T: u < IMPACT ? lerpA(K[0], K[1], easeIn(u / IMPACT)) : lerpA(K[1], K[2], easeOut((u - IMPACT) / (1 - IMPACT))), fast: true, amp: clamp(P.amp, 0.75, 1.15) };
+  }
+  if (B && B.to === s && !B.swung) {   // 공이 오는 중: 받을 쪽으로 라켓을 미리 뒤로
+    const k = B.t / B.T, kb = easeIO(clamp((k - 0.3) / 0.5, 0, 1));
+    const fore = (B.spot ?? 0) >= P.myX - 0.08;   // 내 오른쪽(라켓 쪽)으로 오면 포핸드
+    return { T: lerpA(READY, STROKE[fore ? "fore" : "back"][0], kb * 0.85), fast: false, amp: 1 };
+  }
+  return { T: READY, fast: false, amp: 1 };
+}
+export function ppPose(a, P, B, s, dt, t) {
+  const st = a.userData.pp || (a.userData.pp = { cur: READY.slice() }), { T, fast, amp } = strokeTarget(P, B, s);
+  const r = 1 - Math.exp(-dt * (fast ? 32 : 9));   // 휘두를 땐 빠르게, 아니면 부드럽게 따라감
+  st.cur = st.cur.map((x, i) => x + (T[i] - x) * r);
+  const c = st.cur, swing = P.swingT < 0.5 ? Math.sin(Math.min(1, P.swingT / 0.5) * Math.PI) : 0;
+  a.body.rotation.y = c[0] * amp;
+  a.body.rotation.x = 0.24 + swing * 0.1;                                   // 앞으로 숙인 준비 자세, 칠 때 더 숙임
+  a.body.rotation.z = clamp(-P.vx * 0.06, -0.12, 0.12);                     // 옆으로 움직이면 그쪽으로 살짝 기욺
+  a.arm(1, c[1], c[2], c[3]); a.arm(0, c[4], c[5], c[6]);
+  if (a.userData.pad) a.userData.pad.rotation.y = c[7];                    // 라켓 면: 백핸드는 뒤집어 듦
+  a.headG.rotation.set(-0.22, -c[0] * 0.5, 0);                              // 몸을 돌려도 고개는 공 쪽
 }
 // 준비 자세(무릎 살짝 굽히고 앞으로) + 옆걸음(좌우로 움직일 때 다리를 번갈아)
 function stance(av, P, dt, t) {
   const moving = Math.abs(P.vx) > 0.12;
   P.stepPh += moving ? Math.min(1.5, Math.abs(P.vx)) * dt * 14 : 0;
-  const s = Math.sin(P.stepPh);
-  av.leg(0, moving ? Math.max(0, s) * 0.55 : 0.12); av.leg(1, moving ? Math.max(0, -s) * 0.55 : 0.12);
-  av.body.position.y = -0.04 + (moving ? Math.abs(s) * 0.03 : Math.abs(Math.sin(t * 2.2)) * 0.012);
+  const s = Math.sin(P.stepPh), lunge = P.swingT < 0.45 ? Math.sin(P.swingT / 0.45 * Math.PI) : 0;
+  // 다리를 벌리고 무릎을 굽혀 낮게 (발끝으로 통통), 옆걸음은 번갈아 들기, 칠 때 앞발을 내딛음
+  av.legs[0].rotation.set(-(moving ? Math.max(0, s) * 0.5 : 0.1) - lunge * 0.35, 0, -0.17);
+  av.legs[1].rotation.set(-(moving ? Math.max(0, -s) * 0.5 : 0.1), 0, 0.17);
+  av.body.position.y = -0.07 + (moving ? Math.abs(s) * 0.03 : Math.abs(Math.sin(t * 3.2)) * 0.015);
 }
 
 export default {
@@ -209,7 +231,7 @@ export default {
     function makeAvatar(s) {
       const P = M.players[s]; if (!P) return null;
       const a = P.cpu ? randomAvatar(3) : playerAvatar({ color: P.color, name: P.name });
-      a.scale.setScalar(P.cpu ? 1.1 : 1.0); a.hold(1, racket(P.color, true)); W.add(a); return a;
+      a.scale.setScalar(P.cpu ? 1.1 : 1.0); a.userData.pad = a.hold(1, racket(P.color, true)); W.add(a); return a;
     }
     avs[slot] = makeAvatar(slot);
     const pb = sphere(0.035, "#ffffff", { rough: 0.3 }); W.add(pb);
@@ -258,10 +280,7 @@ export default {
         const a = avs[s];
         a.position.set(SIDE(s) * P.myX, 0, SIDE(s) * (TL + 0.75)); a.rotation.y = s === 0 ? Math.PI : 0;
         stance(a, P, dt, t + s);
-        if (!stroke(a, P.swingT, P.swingDir < 0, P.swingHard, P.amp)) {
-          a.body.rotation.y *= 0.8; a.body.rotation.x += (0.15 - a.body.rotation.x) * 0.2;   // 준비 자세: 살짝 앞으로
-          if (!(P.pts && followArms(a, P.pts, Math.min(1, dt * 14)))) { a.arm(1, 0.55, 0.8, 1.0); a.arm(0, 0.35, 0.5, 0.8); }
-        }
+        ppPose(a, P, M.ball, s, dt, t + s);
       }
     }
     return {

@@ -2,9 +2,9 @@
 // 조준 = 내 몸의 좌우 위치(옆으로 걸어서 맞춤), 휘두를 때 손이 옆으로 쏠리면 공이 휘어짐(커브). 굴러가는 공을 카메라가 따라감
 // 던지기 전에 추천 자리(1구: 1·3번 핀 사이, 2구: 남은 핀 쪽)를 점선으로 안내. 안내일 뿐이라 어디서 던져도 됨
 // 2인: 같은 볼링장의 바로 옆 레인에서 상대가 동시에 침(상대 캐릭터·공·핀이 실시간으로 보임). 위쪽 점수표는 두 줄(1P·2P), 프레임마다 이긴 쪽 표시
-import { burst, popup, shake, outlinedText, rr, clamp, FONT } from "../../fx.js?v=74";
-import { sfx } from "../../audio.js?v=74";
-import { stage, THREE, box, ball as sphere, mesh, mat, cyl, avatar, playerAvatar, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=74";
+import { burst, popup, shake, outlinedText, rr, clamp, FONT } from "../../fx.js?v=75";
+import { sfx } from "../../audio.js?v=75";
+import { stage, THREE, box, ball as sphere, mesh, mat, cyl, avatar, playerAvatar, textBoard, bodyMover, moveGuide, moveText } from "./kit3d.js?v=75";
 
 const AUTO = /simauto=1/.test(typeof location !== "undefined" ? location.search : "");   // 점검용: 가상 선수가 저절로 조준하고 던짐
 // 2인 대결: 두 화면이 서로의 상태를 공개(pub)하고, 상대 레인을 그 상태대로 그림. 각자 자기 공·핀은 자기 화면이 계산

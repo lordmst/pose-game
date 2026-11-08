@@ -1,5 +1,5 @@
 // 카메라 · 자세 인식 · 선수별 손 추적
-import { faceDist } from "./face.js?v=74";
+import { faceDist } from "./face.js?v=75";
 // 점검용: ?mpbase=/경로 &posemodel=/경로 로 엔진·모델을 다른 곳(로컬 복사본)에서 받음
 const QS = (() => { try { return new URLSearchParams(location.search); } catch (e) { return new URLSearchParams(); } })();
 const MP_URL = QS.get("mpbase") || "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";

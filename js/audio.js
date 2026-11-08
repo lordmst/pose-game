@@ -29,14 +29,10 @@ for (const ev of ["pointerdown", "touchend", "click", "keydown"]) window.addEven
   if (ev === "click" && ac.state !== "running") revive(); else wake();
 }, { capture: true, passive: true });
 // 눌러도 깨어나지 않는 소리 장치는 새로 만듦 (아이패드에서 드물게 멈춘 채로 남는 경우). 음악이 나오는 중엔 하지 않음
+// 멈춘 소리 장치는 깨우기만 함. (예전엔 두 번 눌러도 안 깨면 새로 만들었는데, 그러면 받아 두던 배경음악 풀기가 끊기고
+//  아이패드는 소리 장치를 몇 개 이상 만들면 소리가 안 나서 뺌)
 let stuck = 0;
-function revive() {
-  wake();
-  if (++stuck < 2 || bgmGain || rGain || pGain || rTimer) return;
-  stuck = 0;
-  try { ac.onstatechange = null; ac.close(); } catch (e) {}
-  ac = null; unlock();
-}
+function revive() { wake(); }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) wake(); });
 export function unlock() {
   try {
@@ -378,3 +374,4 @@ export const rhythm = {
   get song() { return rSong; },
   INTRO,
 };
+export const bgmOn = () => !!timer && !!bgmGain;   // 점검용: 합성 배경음악이 도는 중인지

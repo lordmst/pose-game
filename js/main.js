@@ -1,32 +1,33 @@
 // 화면 흐름: 선수 고르기 → (카메라) 게임 고르기 → 자리 잡기 → 3·2·1 → 게임 → 결과 → 순위
-import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=74";
-import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=74";
-import * as R from "./records.js?v=74";
-import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=74";
-import copy from "./games/copy.js?v=74";
-import math from "./games/math.js?v=74";
-import ice from "./games/ice.js?v=74";
-import star from "./games/star.js?v=74";
-import fruit from "./games/fruit.js?v=74";
-import mole from "./games/mole.js?v=74";
-import wall from "./games/wall.js?v=74";
-import rhythm from "./games/rhythm.js?v=74";
-import goalie from "./games/goalie.js?v=74";
-import { hangul, english } from "./games/word.js?v=74";
-import clockGame from "./games/clock.js?v=74";
-import run from "./games/run.js?v=74";
-import simon from "./games/simon.js?v=74";
-import conductor from "./games/conductor.js?v=74";
-import SPORTS from "./games/sports.js?v=74";
-import LEARN from "./games/learn.js?v=74";
-import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=74";
-import * as FUN from "./fun.js?v=74";
-import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=74";
-import { makeShots, saveShot } from "./photo.js?v=74";
-import { DIFFS, diffOf } from "./difficulty.js?v=74";
-import { startDemo } from "./demo.js?v=74";
-import * as REAL from "./realmusic.js?v=74";
-import * as FACE from "./face.js?v=74";
+import { Camera, Tracker, Assigner, SigSampler, createDetector, createHandShape, SIM } from "./pose.js?v=75";
+import { sfx, bgm, speak, stopSpeak, unlock, wake, audioState, settings, applyVolumes, rhythm as rhythmAudio } from "./audio.js?v=75";
+import * as audioMod from "./audio.js?v=75";
+import * as R from "./records.js?v=75";
+import { popup, burst, starPath, shakeOffset, updateFx, drawFx, clearFx, outlinedText, rr, FONT, P1C, P2C } from "./fx.js?v=75";
+import copy from "./games/copy.js?v=75";
+import math from "./games/math.js?v=75";
+import ice from "./games/ice.js?v=75";
+import star from "./games/star.js?v=75";
+import fruit from "./games/fruit.js?v=75";
+import mole from "./games/mole.js?v=75";
+import wall from "./games/wall.js?v=75";
+import rhythm from "./games/rhythm.js?v=75";
+import goalie from "./games/goalie.js?v=75";
+import { hangul, english } from "./games/word.js?v=75";
+import clockGame from "./games/clock.js?v=75";
+import run from "./games/run.js?v=75";
+import simon from "./games/simon.js?v=75";
+import conductor from "./games/conductor.js?v=75";
+import SPORTS from "./games/sports.js?v=75";
+import LEARN from "./games/learn.js?v=75";
+import { ITEMS, SPECIAL, itemOf, pickItem } from "./items.js?v=75";
+import * as FUN from "./fun.js?v=75";
+import { WEAR, WEAR_SLOTS, wearSlotOf, drawWear } from "./wear.js?v=75";
+import { makeShots, saveShot } from "./photo.js?v=75";
+import { DIFFS, diffOf } from "./difficulty.js?v=75";
+import { startDemo } from "./demo.js?v=75";
+import * as REAL from "./realmusic.js?v=75";
+import * as FACE from "./face.js?v=75";
 
 const GAMES = { copy, math, ice, star, fruit, mole, wall, rhythm, goalie, run, conductor, hangul, english, clock: clockGame, simon };
 const GAME_ORDER = ["copy", "ice", "star", "fruit", "mole", "wall", "rhythm", "conductor", "goalie", "run", "math", "hangul", "english", "clock", "simon"];
@@ -71,13 +72,16 @@ detectorP.then(() => createHandShape()).then(h => { handShape = h; }).catch(e =>
 // 얼굴 확인(선수 인식 보조): 손 모양 다음에 불러옴. 실패해도 옷 색으로만 구분해서 동작
 // 얼굴 엔진은 처음 준비할 때 그래픽을 잠깐 붙잡아서(아이패드에서 1~2초 멈춤), 만세·게임 중이 아닌 조용한 화면에서만 준비함
 const CALM = ["setup", "result", "ranking", "mission", "party"];
-function faceInitWhenCalm() { if (SIM) return; if (CALM.includes(state)) FACE.initFace(); else setTimeout(faceInitWhenCalm, 2000); }
+// v75: 얼굴 인식은 기본으로 끔. 아이패드에서 몸 인식과 함께 그래픽을 써서 만세할 때 버벅이거나 화면이 멈춤. 옷 색·위치로 선수를 구분
+// (?face=1 로 켜서 시험할 수 있음)
+const FACE_ON = /face=1/.test(location.search);
+function faceInitWhenCalm() { if (SIM || !FACE_ON) return; if (CALM.includes(state)) FACE.initFace(); else setTimeout(faceInitWhenCalm, 2000); }
 detectorP.then(() => new Promise(r => setTimeout(r, 1500))).then(faceInitWhenCalm);
 let faceT = 0, faceHold = 0, sampAt = -1e9;
 function faceTick(t) {
   // 얼굴 계산은 그래픽을 많이 써서 몸 인식과 겹치면 화면이 끊김 → 간격을 넉넉히, 만세로 막 인식된 직후 1초는 쉬고, 화면이 버벅이는 중엔 건너뜀
   const gap = state === "play" ? 0.4 : 0.7;
-  if (!assigner || !(SIM || FACE.faceReady()) || FACE.faceBusy() || t - faceT < gap || t < faceHold || lastDt > 0.05) return;
+  if (!assigner || !((SIM && !/noface=1/.test(location.search)) || FACE.faceReady()) || FACE.faceBusy() || t - faceT < gap || t < faceHold || lastDt > 0.05) return;
   const need = assigner.faceNeeds(); if (!need.length) return;
   faceT = t; const n = need[0], a = assigner;
   FACE.describe(SIM ? null : video, n.r).then(d => { if (d && a === assigner) a.setFace(n.tid, d); });
@@ -135,7 +139,7 @@ resize();
 /* ---------- 새 버전 자동 적용 ----------
    아이패드 홈 화면 앱·사파리 탭은 며칠씩 예전 버전을 그대로 띄워 둘 수 있음.
    고르는 화면으로 올 때·앱을 다시 볼 때 version.json을 확인해서, 새 버전이 있으면 그 자리에서 새로 불러옴 (게임 중에는 안 함) */
-const APP_V = 74;
+const APP_V = 75;
 { const el = document.createElement("div"); el.id = "appVer"; el.textContent = "v" + APP_V; document.body.appendChild(el); }
 let verAt = 0;
 async function checkVersion(force = false) {
@@ -1113,11 +1117,15 @@ $("#btnRankBack").onclick = () => {
 };
 
 /* ---------- 메인 루프 ---------- */
-function startLoop() { if (loopOn) return; loopOn = true; lastT = 0; requestAnimationFrame(frame); }
+function startLoop() { if (loopOn) return; loopOn = true; lastT = 0; prevFrameAt = 0; requestAnimationFrame(frame); }
 function stopLoop() { loopOn = false; }
+let detErr = 0, prevFrameAt = 0;
 function frame(now) {
   if (!loopOn) return;
   requestAnimationFrame(frame);
+  // 화면이 한참 멈췄다 돌아오면(아이패드 그래픽이 붙잡힌 경우) 아래 빨간 띠에 알림 → 사진으로 원인 찾기
+  if (prevFrameAt && now - prevFrameAt > 2500 && !document.hidden && ["select", "ready", "countdown", "play"].includes(state)) reportErr(new Error(`화면 ${((now - prevFrameAt) / 1000).toFixed(1)}초 멈춤`));
+  prevFrameAt = now;
   // 한 장면에서 오류가 나도 화면이 멈추지 않게: 계산과 그리기를 따로 감싸고, 오류는 화면 아래에 작게 알림
   try { frameBody(now); } catch (e) { reportErr(e); try { draw(lastT); } catch (e2) {} }
 }
@@ -1134,7 +1142,7 @@ function frameBody(now) {
   wake();   // 소리 장치가 멈췄으면 다시 깨움 (아이패드)
   cam.layout(view.W, view.H);
   let raws = [];
-  if (detector && cam.ready) { try { raws = detector.detect(video, now); } catch (e) { console.warn(e); } }
+  if (detector && cam.ready) { try { raws = detector.detect(video, now); detErr = 0; } catch (e) { console.warn(e); if (++detErr === 30) reportErr(new Error("몸 인식 오류: " + (e && e.message || e))); } }
   if (!visSupported && raws.some(r => r.some(p => p.visibility > 0.01))) visSupported = true;
   const inGame = state === "play" || state === "countdown";
   if (raws.length && now - sampAt > 120) { sampAt = now; sampler.frame(cam.sim ? null : video); }   // 몸통 옷 색: 카메라 화면을 작게 한 장 읽음 (읽기가 무거워서 0.12초마다만)
@@ -1153,6 +1161,14 @@ function frameBody(now) {
   shots.afterDraw();   // 웃긴 순간: 다 그린 화면을 찍음
   if (HAND_UI) handUI(dt);
   drawCursors();
+}
+// 게임 중 합성 배경음악이 나오는데 그사이 실제 음원을 다 받아 두었으면 실제 음원으로 바꿔 틂 (첫 판 등)
+let bgmSwapT = 0;
+function bgmSwap(dt) {
+  if ((bgmSwapT += dt) < 1) return; bgmSwapT = 0;
+  if (state !== "play" || fever || GAMES[gameId].music === false || REAL.bgmPlaying() || !audioMod.bgmOn()) return;
+  const id = REAL.pickBgm(); if (!id) return;
+  bgm.stop(); if (!REAL.bgmPlay(id)) bgm.start();
 }
 function tick(dt) {
   if (state === "demo" && demo) {
@@ -1188,7 +1204,7 @@ function tick(dt) {
     if (goT > 0) { goT -= dt; if (goT <= 0) $("#cd").hidden = true; }
     timeLeft -= dt;
     if (!fever && timeLeft <= FEVER_SEC) enterFever();
-    shots.tick(dt); funTick(dt);
+    shots.tick(dt); funTick(dt); bgmSwap(dt);
     insts.forEach(g => g.update(dt));
     renderHud();
     if (timeLeft <= 0 || (insts.length && insts.every(g => g.done))) endGame();   // 시간이 끝나거나 게임이 다 끝났다고 알리면
@@ -1386,7 +1402,7 @@ function handUI(dt) {
 
 /* ---------- 기기 관련 ---------- */
 async function keepAwake() { try { if (navigator.wakeLock) await navigator.wakeLock.request("screen"); } catch (e) {} }
-document.addEventListener("visibilitychange", () => { if (!document.hidden && loopOn) keepAwake(); });
+document.addEventListener("visibilitychange", () => { prevFrameAt = 0; if (!document.hidden && loopOn) keepAwake(); });
 function goFullscreen() {
   const d = document.documentElement, f = d.requestFullscreen || d.webkitRequestFullscreen;
   try { const r = f && f.call(d); if (r && r.catch) r.catch(() => {}); } catch (e) {}
