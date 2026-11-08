@@ -1,7 +1,9 @@
 // 카메라 · 자세 인식 · 선수별 손 추적
-import { faceDist } from "./face.js?v=73";
-const MP_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
-const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+import { faceDist } from "./face.js?v=74";
+// 점검용: ?mpbase=/경로 &posemodel=/경로 로 엔진·모델을 다른 곳(로컬 복사본)에서 받음
+const QS = (() => { try { return new URLSearchParams(location.search); } catch (e) { return new URLSearchParams(); } })();
+const MP_URL = QS.get("mpbase") || "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+const MODEL = QS.get("posemodel") || "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const VIS = 0.5;                 // 이 값보다 신뢰도가 낮은 관절은 '안 보임'으로 처리
 
 // ?sim=1 / ?sim=2 : 카메라 없이 가상 선수로 동작 (개발·점검용)
@@ -10,7 +12,7 @@ export const SIM = (() => { const m = location.search.match(/sim=(\d)/); return 
 const HAND_MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 let mpP = null;     // 몸 인식·손 인식이 같은 엔진을 함께 씀
 function loadMP() {
-  return mpP || (mpP = import(MP_URL).then(async mod => ({ mod, vision: await mod.FilesetResolver.forVisionTasks(MP_URL + "/wasm") })));
+  return mpP || (mpP = import(MP_URL + (QS.get("mpbase") ? "/vision_bundle.mjs" : "")).then(async mod => ({ mod, vision: await mod.FilesetResolver.forVisionTasks(MP_URL + "/wasm") })));
 }
 
 export async function createDetector() {

@@ -1,6 +1,6 @@
 // 다시 하고 싶게 만드는 장치: 오늘의 미션(도장) · 주간 가족 리그 · 같은 순서를 만드는 난수
-import * as R from "./records.js?v=73";
-import { pickSpecial } from "./items.js?v=73";
+import * as R from "./records.js?v=74";
+import { pickSpecial } from "./items.js?v=74";
 
 // 같은 씨앗이면 같은 순서 (협동에서 두 선수가 같은 벽·같은 카드를 받게)
 export function seeded(seed) {

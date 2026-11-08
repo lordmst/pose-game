@@ -462,3 +462,7 @@ body:not(.live) .overlay { background: var(--y); }
 .readybar .opnote { font-size: clamp(11px, 1.7vmin, 15px); }
 .readybar.compact .tutorial .tut-try { display: block; font-size: clamp(12px, 1.9vmin, 18px); }
 .readybar.compact .tut-note:empty { display: none; }
+
+/* v74: 오류 알림 (화면 아래 작게) — 사진 찍어 보내면 원인 찾기 쉬움 */
+#errBox { position: fixed; left: 50%; bottom: max(8px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 99998; max-width: 94vw; padding: 6px 12px; border-radius: 10px; background: rgba(120, 0, 0, .85); color: #fff; font: 12px/1.35 -apple-system, sans-serif; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#errBox[hidden] { display: none; }

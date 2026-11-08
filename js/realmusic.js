@@ -1,6 +1,6 @@
 // 지휘자 게임용 실제 연주 녹음: 위키미디어 공용(Wikimedia Commons)의 퍼블릭 도메인·CC 녹음을 브라우저가 직접 받아 옴
 // 받아 온 녹음에서 박자(비트) 시각을 찾아(박자 추적) 지휘 화살표를 맞춤. 못 받으면 합성음으로 대신함
-import { audioOut, clock, settings } from "./audio.js?v=73";
+import { audioOut, clock, settings } from "./audio.js?v=74";
 
 // 녹음 목록: 파일 이름, 저장 위치(md5 앞 두 자리), 연주자, 이용 허락, 박자표(한 마디 박 수: 2·3·4)
 export const RECORDINGS = {
@@ -74,14 +74,22 @@ export function load(id) {
           for (let c = 0; c < buffer.numberOfChannels; c++) cut.copyToChannel(buffer.getChannelData(c).subarray(s0), c);
           buffer = cut;
         }
-        const r = { buffer, duration: buffer.duration };   // 박자는 쓸 때 찾음 (ready)
-        done.set(id, r); return r;
+        const r = { buffer, duration: buffer.duration, at: performance.now() };   // 박자는 쓸 때 찾음 (ready)
+        done.set(id, r); trim(id); return r;
       } catch (e) { /* 다음 주소 시도 */ }
     }
     cache.delete(id); return null;   // 다음에 다시 시도할 수 있게
   })();
   cache.set(id, p);
   return p;
+}
+
+// 풀어 둔 녹음은 한 곡에 수십 MB라, 많이 쌓이면 아이패드가 멈추거나 새로 고침됨 → 최근 것만 남기고 버림
+const KEEP = 3;
+function trim(justAdded) {
+  const inUse = new Set([justAdded, curId, bg && bg.id].filter(Boolean));
+  const old = [...done.entries()].filter(([id]) => !inUse.has(id)).sort((a, b) => a[1].at - b[1].at);
+  while (done.size > KEEP && old.length) { const [id] = old.shift(); done.delete(id); cache.delete(id); }
 }
 
 /* ---------- 재생 ---------- */
@@ -210,12 +218,21 @@ export function trackBeats(buffer) {
 /* ---------- 배경음악: 신나는 무료 음원을 게임 내내 반복 ---------- */
 export const BGM_IDS = Object.keys(RECORDINGS).filter(id => RECORDINGS[id].game === "rhythm");
 let bg = null, lastBgm = null;
-// 다음 게임에 쓸 곡을 골라 미리 받아 둠 (자리 잡는 동안). 받은 곡 중 하나를 고르고, 없으면 새로 받기 시작
+// 자리 잡는 화면에서는 새로 받지 않음: 받기·풀기(디코딩)가 무거워서 만세 인식 중에 아이패드가 멈출 수 있음
+// → 이미 받아 둔 곡 중에서 고름(없으면 합성 배경음악). 다음 곡은 조용한 화면(선수 고르기·결과)에서 미리 받음(prefetchBgm)
 export function pickBgm() {
-  const have = BGM_IDS.filter(id => done.has(id) && id !== lastBgm);
-  const id = have.length && Math.random() < 0.6 ? have[Math.floor(Math.random() * have.length)] : BGM_IDS.filter(x => x !== lastBgm)[Math.floor(Math.random() * (BGM_IDS.length - 1))];
-  if (settings.bgm) load(id);
-  return id;
+  const have = BGM_IDS.filter(id => done.has(id));
+  const fresh = have.filter(id => id !== lastBgm);
+  const pool = fresh.length ? fresh : have;
+  return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+}
+let prefetching = false;
+export function prefetchBgm() {
+  if (prefetching || !settings.bgm || !audioOut()) return;
+  const notYet = BGM_IDS.filter(id => !done.has(id) && id !== lastBgm);
+  if (!notYet.length) return;
+  prefetching = true;
+  load(notYet[Math.floor(Math.random() * notYet.length)]).finally(() => { prefetching = false; });
 }
 // 받아 둔 곡이면 틀고 true, 아니면 false (합성 배경음악으로 대신)
 export function bgmPlay(id) {
@@ -225,7 +242,7 @@ export function bgmPlay(id) {
   const g = out.ac.createGain(), s = out.ac.createBufferSource(), t = out.ac.currentTime;
   s.buffer = r.buffer; s.loop = true; s.connect(g); g.connect(out.dest);
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.55, t + 0.6);   // 효과음·목소리가 묻히지 않게 조금 작게
-  s.start(t); bg = { s, g }; lastBgm = id;
+  s.start(t); bg = { s, g, id }; lastBgm = id; r.at = performance.now();
   return true;
 }
 export function bgmStop(now = false) {
@@ -235,3 +252,4 @@ export function bgmStop(now = false) {
 // 피버(막판): 조금 빠르게
 export function bgmRate(x) { if (bg) try { bg.s.playbackRate.setTargetAtTime(x, audioOut().ac.currentTime, 0.3); } catch (e) {} }
 export const bgmPlaying = () => !!bg;
+export const loadedCount = () => done.size;   // 점검용
